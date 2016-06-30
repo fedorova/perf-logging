@@ -12,7 +12,7 @@ for t in 16;
 do
     EXPNAME=${BRANCH}-${EVICT_WORKERS}-EV-${DATE}
     EXPID=${EXPNAME}-${t}T
-    OUTPUT=${OUTPUT_ROOT}/TEST-STATS/${EXPID}
+    OUTPUT=${OUTPUT_ROOT}/${EXPID}
     mkdir ${OUTPUT}
 #
     for i in `seq 1 3`;
@@ -28,8 +28,8 @@ do
     done
 done
 
-grep 'read oper' ${OUTPUT_ROOT}/TEST-STATS/${EXPNAME}*/*/test.stat
-grep 'read oper' ${OUTPUT_ROOT}/TEST-STATS/${EXPNAME}*/*/test.stat | awk '{print $6}'
+grep 'read oper' ${OUTPUT_ROOT}/${EXPNAME}*/*/test.stat
+grep 'read oper' ${OUTPUT_ROOT}/${EXPNAME}*/*/test.stat | awk '{print $6}'
 
 
 
