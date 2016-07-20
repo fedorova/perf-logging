@@ -1,4 +1,4 @@
-WT_HOME=/tmpfs/wt-dev/build_posix
+WT_HOME=$HOME/Work/WiredTiger/wt-dev/build_posix
 
 DB_HOME=/tmpfs/WT_TEST
 
