@@ -1,0 +1,89 @@
+{
+    "function_filters" : {
+            "__evict_thread_run" : {
+            "events" : [
+                "function"
+                ]
+            },
+            "__evict_server" : {
+            "events" : [
+                "function"
+                ]
+            },
+	"__evict_helper" : {
+            "events" : [
+                "function"
+            ]
+	},
+	"__evict_pass" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_yield" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_sleep" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_lru_pages" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_cond_wait" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_update_work" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_lru_walk" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__evict_clear_all_walks" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_lru_pages" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_page" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__evict_walk" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_walk_file" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_get_ref" : {
+            "events" : [
+                "function"
+                ]
+        }
+    }
+}
+
+
+
+
+
