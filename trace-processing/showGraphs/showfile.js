@@ -94,8 +94,11 @@ function handleFileSelect(evt) {
 	// Read in the image file as a data URL.
 	reader.readAsDataURL(f);
     }
-    // Now add another div element for selecting the file.
-    addDiv();
+    /*  Now add another div element for selecting the file, unless we are
+     * replacing the file within a div with another file previously rendered.
+     */
+    if(outputId == numDivs)
+	addDiv();
 }
 
 
