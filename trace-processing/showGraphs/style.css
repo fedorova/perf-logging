@@ -1,11 +1,14 @@
+p {
+    font-family: Arial, Helvetica, sans-serif;
+    text-align: left;
+}
 div {
-    /* These styles are for aesthetics only.*/
     font-size: 18px;
     line-height: 1.3em;
     vertical-align: top;
     margin-bottom: 1em;
     border-radius: 0.5em;
-    padding: 1em;
+    /*padding: 1em;*/
     /* This insures everything up to the border
      * is included in the width */
     box-sizing: border-box;
@@ -19,9 +22,15 @@ div.ib {
     display: inline-block;
 }
 
+div.float-border {
+    border: solid green 1px;
+    margin: 1em;
+    /* Floated for positioning */
+    float: left;
+    padding: 1em;
+}
 
 div.float {
-    border: solid green 1px;
     margin: 1em;
     /* Floated for positioning */
     float: left;
