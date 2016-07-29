@@ -3,12 +3,11 @@ p {
     text-align: left;
 }
 div {
-    font-size: 18px;
+    font-size: 12px;
     line-height: 1.3em;
     vertical-align: top;
     margin-bottom: 1em;
     border-radius: 0.5em;
-    /*padding: 1em;*/
     /* This insures everything up to the border
      * is included in the width */
     box-sizing: border-box;
@@ -36,6 +35,36 @@ div.float {
     float: left;
 }
 
+div.float-right {
+    /* Floated for positioning */
+    float: right;
+    font-size: 0px;
+    line-height: 0em;
+    vertical-align: top;
+    border-radius: 0em;
+}
+
 div.half {
     width: 50%;
+}
+
+.close-icon {
+  display:block;
+  box-sizing:border-box;
+  width:10px;
+  height:10px;
+  border-width:2px;
+  border-style: solid;
+  border-color:red;
+  border-radius:100%;
+  background: -webkit-linear-gradient(-45deg, transparent 0%, transparent 46%, white 46%,  white 56%,transparent 56%, transparent 100%), -webkit-linear-gradient(45deg, transparent 0%, transparent 46%, white 46%,  white 56%,transparent 56%, transparent 100%);
+  background-color:red;
+  box-shadow:0px 0px 5px 2px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+}
+
+input.color-input {
+    margin: 1em;
+    width: 15px;
+    height: 20px;
 }
