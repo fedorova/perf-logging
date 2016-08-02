@@ -2,5 +2,5 @@
 
 for file in "$@"
 do
-    echo "grep $FILTER $file > $file.filtered" | sh
+    echo "grep $FILTER $file > $file.filtered.$FILTER" | sh
 done
