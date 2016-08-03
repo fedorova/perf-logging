@@ -4,13 +4,12 @@ import sys
 import argparse
 
 maxStretchLength = 0;
-numFiles = 0;
 timeKeyedRecords = {};
-numFilesForFilter = {};
+runLengthForFilter = {};
 
 def parse_file(fname):
 
-    global numFilesForFilter;
+    global runLengthForFilter;
     global timeKeyedRecords;
     print "Parsing file " + fname;
 
@@ -22,12 +21,12 @@ def parse_file(fname):
 
     if filter_name not in timeKeyedRecords:
         timeKeyedRecords[filter_name] = {}
-        numFilesForFilter[filter_name] = 0;
+        runLengthForFilter[filter_name] = 0;
         print "Created dictionary for filter name: " + filter_name;
 
     try:
         logFile = open(fname, "r");
-        numFilesForFilter[filter_name] = numFilesForFilter[filter_name] + 1;
+        runLengthForFilter[filter_name] = runLengthForFilter[filter_name] + 1;
     except:
         print "Could not open file " + fname;
         return;
@@ -50,14 +49,24 @@ def parse_file(fname):
 def find_overlapping_intervals():
 
     global maxStretchLength;
-    global numFilesForFilter;
+    global runLengthForFilter;
     global timeKeyedRecords;
     stretch = [];
 
+    # Check if there are environment variables overriding the
+    # default setting for the acceptable run length for each filter.
+    # The default is the number of files matching that filter
+    for filter_name, dictionary in timeKeyedRecords.keys():
+        if(os.environ[filter_name] not None):
+            runLengthForFilter[filter_name] = int(os.environ[filter_name]);
+            print("Detected run lenght " + str(runLengthForFilter[filter_name])
+                  + " for filter " + filter_name);
+
     # Find all stretches of records where we have a sequence
     # of function enter records (marked with -->) of length
-    # numFiles without an intervening function exit record.
+    # runLength without an intervening function exit record.
     # Every such a sequence is an overlapping interval.
+    #
     for filter_name, dictionary in timeKeyedRecords.items():
         print("Processing dictionary " +
               filter_name + " of " + str(len(dictionary)) + " items.");
@@ -69,7 +78,7 @@ def find_overlapping_intervals():
             if(words[0] == "-->"):
                 stretch.append(record);
             else:
-                if(len(stretch) == numFilesForFilter[filter_name]):
+                if(len(stretch) == runLengthForFilter[filter_name]):
                     print("--------------");
                     for i in range(len(stretch)) :
                         print(stretch[i]);
