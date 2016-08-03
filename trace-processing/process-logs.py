@@ -3,6 +3,8 @@
 import sys
 import argparse
 import matplotlib.pyplot as plt
+import plotly.plotly as py
+import plotly.graph_objs as go
 
 #
 # LogRecord contains all the fields we expect in the log record.
@@ -50,9 +52,10 @@ class PerfData:
 
     def printSelf(self):
         print("\t Num calls: " + str(self.numCalls));
-        print("\t Total running time: " + str(self.totalRunningTime) + " ns.");
+        print("\t Total running time: " + '{:,}'.format(self.totalRunningTime)
+              + " ns.");
         print("\t Average running time: "
-              + str(long(self.getAverage())) + " ns.");
+              + '{:,}'.format(long(self.getAverage())) + " ns.");
 
     def showHistogram(self):
         plt.figure();
@@ -276,6 +279,25 @@ def do_lock_processing(locksDictionary, logRec, runningTime,
         sys.exit(-1);
 
 #
+# Generate a summary pie chart for the file, showing where we spend the time
+#
+def generateSummaryPieChart(fileName, fileDataDictionary):
+
+    labels = [];
+    values = [];
+
+    for funcName, funcData in fileDataDictionary.iteritems():
+        labels.append(funcName);
+        values.append(funcData.totalRunningTime);
+
+    trace=go.Pie(labels=labels,values=values)
+    data = [trace]
+    layout = go.Layout(title=fileName, width=800, height=640)
+    fig = go.Figure(data=data, layout=layout)
+
+    py.image.save_as(fig, filename=fileName+".png")
+
+#
 # A per-file dictionary of functions that we encounter in the log file.
 # Each function will have a corresponding list of PerfData objects,
 # one for each file it parses.
@@ -378,6 +400,9 @@ def parse_file(fname):
 
 def main():
 
+    py.sign_in(username='fedorova_post.harvard.edu',
+                                      api_key='gbpph0oske')
+
     parser = argparse.ArgumentParser(description=
                                      'Process performance log files');
     parser.add_argument('files', type=str, nargs='+',
@@ -397,6 +422,8 @@ def main():
     for key, perFileDict in perFile.iteritems():
         print(" SUMMARY FOR FILE " + key + ":");
         print("------------------------------");
+
+        generateSummaryPieChart(key, perFileDict);
 
         for fkey, pdr in perFileDict.iteritems():
             print(fkey + ":");
