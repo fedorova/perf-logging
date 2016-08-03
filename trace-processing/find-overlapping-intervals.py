@@ -2,10 +2,25 @@
 
 import sys
 import argparse
+import os
 
-maxStretchLength = 0;
 timeKeyedRecords = {};
 runLengthForFilter = {};
+
+#
+# This is a convenience function, so we can print a record with a nicely
+# formatted timestamp.
+#
+def printRecord(record, minTimestamp):
+
+    words = record.split(" ");
+
+    if(len(words) < 4):
+        print("Invalid record " + record);
+        return;
+
+    print(words[1] + " " + words[2] + " " +
+          '{:,}'.format(int(words[3]) - minTimestamp));
 
 def parse_file(fname):
 
@@ -48,50 +63,79 @@ def parse_file(fname):
 
 def find_overlapping_intervals():
 
-    global maxStretchLength;
+    mergedIntervals = {};
     global runLengthForFilter;
     global timeKeyedRecords;
-    stretch = [];
+    interval = [];
 
     # Check if there are environment variables overriding the
     # default setting for the acceptable run length for each filter.
     # The default is the number of files matching that filter
-    for filter_name, dictionary in timeKeyedRecords.keys():
-        if(os.environ[filter_name] not None):
-            runLengthForFilter[filter_name] = int(os.environ[filter_name]);
-            print("Detected run lenght " + str(runLengthForFilter[filter_name])
-                  + " for filter " + filter_name);
+    for filter_name in timeKeyedRecords.keys():
+        if(os.environ.get(filter_name) is not None):
+            try:
+                runLengthForFilter[filter_name] = int(os.environ[filter_name]);
+                print("Using run length " + str(runLengthForFilter[filter_name])
+                      + " for filter " + filter_name);
+            except:
+                print("Invalid run length specified in variable [" + filter_name
+                      + "]: " + os.environ[filter_name]
+                      + ". Defaulting to " +
+                      + str(runLengthForFilter[filter_name]) + ".");
 
-    # Find all stretches of records where we have a sequence
+    # Find all intervales of records where we have a sequence
     # of function enter records (marked with -->) of length
     # runLength without an intervening function exit record.
     # Every such a sequence is an overlapping interval.
     #
-    for filter_name, dictionary in timeKeyedRecords.items():
+    # When we find such an interval for a given filter name,
+    # add it to the mergedIntervals dictionary, which will contain the
+    # intervals for all the filters, keyed by the timestamp marking when
+    # the interval begins. At the end we will print this dictionary.
+    #
+    for filter_name, dictionary in timeKeyedRecords.iteritems():
         print("Processing dictionary " +
               filter_name + " of " + str(len(dictionary)) + " items.");
+
+        intervalStartTime = 0;
 
         for key, record in sorted(dictionary.items()):
 
             words = record.split(" ");
 
             if(words[0] == "-->"):
-                stretch.append(record);
+                # If we have no records in the interval, we are
+                # just starting the new interval, so let's remember the time
+                # when the interval has begun. It will be used as the key
+                # when we add the interval begins.
+                if(len(interval) == 0):
+                    try:
+                        intervalStartTime = int(words[3]);
+                    except:
+                        print("Could not parse time stamp in this record: " +
+                              record);
+                        continue;
+
+                interval.append(record);
+
+            elif(words[0] == "<--"):   # Possibly the end of the interval
+                if(len(interval) == runLengthForFilter[filter_name]):
+                    mergedIntervals[intervalStartTime] = interval;
+
+                interval = [];
             else:
-                if(len(stretch) == runLengthForFilter[filter_name]):
-                    print("--------------");
-                    for i in range(len(stretch)) :
-                        print(stretch[i]);
+                print("Unexpected record type: " + record);
 
-                if(len(stretch) > maxStretchLength):
-                    maxStretchLength = len(stretch);
-
-                stretch = [];
-
+    # Print the mergedIntervals dictionary.
+    minTimestamp = min(mergedIntervals, key=int);
+    for timestamp, interval in sorted(mergedIntervals.items()):
+        print('{:,}'.format(timestamp - minTimestamp)
+              + " ------------------------------");
+        for record in interval:
+            printRecord(record, minTimestamp);
+        print("------------------------------------------------");
 
 def main():
-
-    global maxStretchLength;
 
     parser = argparse.ArgumentParser(description=
                                      'Process performance log files');
@@ -105,7 +149,6 @@ def main():
         parse_file(fname);
 
     find_overlapping_intervals();
-    print("Maximium overlapping intervals was " + str(maxStretchLength));
 
 if __name__ == '__main__':
     main()
