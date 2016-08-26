@@ -79,21 +79,6 @@
             "events" : [
                 "function"
                 ]
-        },
-	"__wt_spin_lock" : {
-            "events" : [
-                "function"
-                ]
-        },
-	"__wt_spin_unlock" : {
-            "events" : [
-                "function"
-                ]
-        },
-	"__wt_spin_trylock" : {
-            "events" : [
-                "function"
-                ]
         }
     }
 }

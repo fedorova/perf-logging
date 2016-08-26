@@ -1,11 +1,11 @@
 #!/bin/sh
-BRANCH=wt-dev
+BRANCH=wt-dev-din
 WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 DB_HOME=/tmpfs/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%m-%d`
-EVICT_WORKERS=4
+EVICT_WORKERS=2
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 
 #for t in 8 16 48 64 96;
