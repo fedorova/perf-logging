@@ -16,7 +16,7 @@ do
     OUTPUT=${OUTPUT_ROOT}/${EXPID}
     mkdir ${OUTPUT}
 #
-    for i in `seq 1 4`;
+    for i in `seq 1 1`;
     do
 	mkdir ${OUTPUT}/${i}
 	DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/evict-btree-run.wtperf -o threads=\(\(count=${t},reads=1\)\) -o conn_config=\"cache_size=50M,statistics=\(fast,clear\),statistics_log=\(wait=10\),eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=${EVICT_WORKERS}\)\"

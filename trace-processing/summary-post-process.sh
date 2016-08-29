@@ -1,0 +1,1 @@
+grep __wt_spin_lock -A 2 summary.txt | grep Total | awk '{print $4}' | sed '/[0-9]\,/s/\,//g' | awk '{ sum+=$1} END {print sum}'
