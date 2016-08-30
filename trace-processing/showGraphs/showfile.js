@@ -129,8 +129,12 @@ function handleFileSelect(evt) {
 
 	    // Render image
 	    var span = document.createElement('span');
-	    span.innerHTML = ['<p><img width="450px" src="', e.target.result,
-			      '" title="', escape(theFile.name), '"/>'].join('');
+	    /* The image size is the function of the file size */
+	    imgSize = theFile.size / 300;
+	    span.innerHTML = ['<p><img width="', imgSize, 'px" src="',
+			      e.target.result,
+			      '" title="', escape(theFile.name),
+			      '"/>'].join('');
 	    outputPane.insertBefore(span, null);
         };
     })(f);
