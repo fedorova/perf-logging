@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 BRANCH=wt-dev-din
 if [ "$OSTYPE" == 'darwin' ]; then
