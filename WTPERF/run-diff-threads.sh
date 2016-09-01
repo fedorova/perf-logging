@@ -1,6 +1,7 @@
 #!/bin/sh
 BRANCH=wt-dev-din
-WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
+#WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
+WT_HOME=/tmpfs/${BRANCH}/build_posix
 DB_HOME=/tmpfs/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
