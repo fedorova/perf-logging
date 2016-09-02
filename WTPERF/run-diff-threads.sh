@@ -9,7 +9,7 @@ DB_HOME=/tmpfs/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%m-%d`
-EVICT_WORKERS=4
+EVICT_WORKERS=1
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 
 #for t in 8 16 48 64 96;
@@ -22,7 +22,7 @@ do
     # Grab the map files in case we are using a DINAMITE compilation
     cp ${WT_HOME}/map_* ${OUTPUT}
 #
-    for i in `seq 1 3`;
+    for i in `seq 1 1`;
     do
 	mkdir ${OUTPUT}/${i}
 if [ "$OSTYPE" == 'darwin' ]; then

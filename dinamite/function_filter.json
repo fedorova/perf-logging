@@ -83,17 +83,20 @@
 	"__wt_spin_lock" : {
             "events" : [
                 "function"
-                ]
+            ],
+	    "arguments" : [ 1 ]
         },
 	"__wt_spin_unlock" : {
             "events" : [
                 "function"
-                ]
+            ],
+	    "arguments" : [ 1 ]
         },
 	"__wt_spin_trylock" : {
             "events" : [
                 "function"
-                ]
+            ],
+	    "arguments" : [ 1 ]
         }
     }
 }
