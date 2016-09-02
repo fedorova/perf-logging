@@ -3,18 +3,24 @@
 import sys
 import argparse
 import matplotlib.pyplot as plt
-import plotly.plotly as py
-import plotly.graph_objs as go
+#import plotly.plotly as py
+#import plotly.graph_objs as go
+
+verbose = False;
+multipleAcquireWithoutRelease = 0;
+tryLockWarning = 0;
+noMatchingAcquireOnRelease = 0;
 
 #
 # LogRecord contains all the fields we expect in the log record.
 
 class LogRecord:
 
-    def __init__(self, func, thread, time):
+    def __init__(self, func, thread, time, otherInfo):
         self.func = func;
         self.thread = thread;
         self.time = long(time);
+        self.otherInfo = otherInfo;
 
     def printLogRecord(self):
         print(self.func + " " + str(self.thread) + " " + str(self.time));
@@ -124,13 +130,13 @@ class LockData:
         print("\t Num trylock: " + str(self.numTryLock));
         print("\t Num release: " + str(self.numRelease));
         print("\t Average time in acquire: "
-              + str(long(self.getAverageAcquire())) + "ns.");
+              + str(long(self.getAverageAcquire())) + " ns.");
         print("\t Average time in trylock: "
-              + str(long(self.getAverageTryLock())) + "ns.");
+              + str(long(self.getAverageTryLock())) + " ns.");
         print("\t Average time in release: "
-              + str(long(self.getAverageRelease())) + "ns.");
+              + str(long(self.getAverageRelease())) + " ns.");
         print("\t Average time the lock was held: "
-              + str(long(self.getAverageTimeHeld())) + "ns.");
+              + str(long(self.getAverageTimeHeld())) + " ns.");
 
 #
 # The following data structures and functions help us decide what
@@ -193,13 +199,18 @@ perFileLocks = {}
 
 def do_lock_processing(locksDictionary, logRec, runningTime,
                        nameWords):
+    global verbose;
+    global multipleAcquireWithoutRelease;
+    global tryLockWarning;
+    global noMatchingAcquireOnRelease;
 
     lockName = "";
     func = logRec.func
 
     # Reconstruct the lock name
     for word in nameWords:
-        lockName = lockName + word + " ";
+        lockName = lockName + word.strip() + " ";
+    lockName.strip();
 
     if(not locksDictionary.has_key(lockName)):
         lockData = LockData(lockName);
@@ -222,12 +233,15 @@ def do_lock_processing(locksDictionary, logRec, runningTime,
 
         if(looks_like_acquire(func)):
             if(lastAcquireRecord is not None):
-                print("That's weird. Another acquire record seen on acquire. "
-                      " for lock " + lockName);
-                print("Current lock record:");
-                lockRec.printLockRecord();
-                print("Existing acquire record:");
-                lastAcquireRecord.printLockRecord();
+                if(verbose):
+                    print("Another acquire record seen on acquire. "
+                          " for lock " + lockName);
+                    print("Current lock record:");
+                    lockRec.printLockRecord();
+                    print("Existing acquire record:");
+                    lastAcquireRecord.printLockRecord();
+                multipleAcquireWithoutRelease = multipleAcquireWithoutRelease \
+                                                + 1;
             else:
                 lockData.lastAcquireRecord = lockRec;
 
@@ -236,12 +250,14 @@ def do_lock_processing(locksDictionary, logRec, runningTime,
         elif(looks_like_trylock(func)):
             if(lastAcquireRecord is not None):
                 if(lastAcquireRecord.funcName != func):
-                    print("Warning: A trylock record seen, but not in the "
-                          "same function as ours!");
-                    print("Current lock record:");
-                    lockRec.printLockRecord();
-                    print("Existing acquire record:");
-                    lastAcquireRecord.printLockRecord();
+                    if(verbose):
+                        print("Warning: A trylock record seen, but not in the "
+                              "same function as ours!");
+                        print("Current lock record:");
+                        lockRec.printLockRecord();
+                        print("Existing acquire record:");
+                        lastAcquireRecord.printLockRecord();
+                    tryLockWarning = tryLockWarning + 1;
                 else:
                     # If there is already an acquire record with the same func
                     # name as ours, this means that the lock was not acquired in
@@ -260,9 +276,11 @@ def do_lock_processing(locksDictionary, logRec, runningTime,
     elif(looks_like_release(func)):
 
         if(lastAcquireRecord is None):
-            print("Could not find a matching acquire for: ")
-            logRec.printLogRecord();
-            print("Lock name: " + lockName);
+            if(verbose):
+                print("Could not find a matching acquire for: ")
+                logRec.printLogRecord();
+                print("Lock name: " + lockName);
+            noMatchingAcquireOnRelease = noMatchingAcquireOnRelease + 1;
         else:
             lockHeldTime = logRec.time - lastAcquireRecord.timeAcquired;
             lockData.timeHeld = lockData.timeHeld + lockHeldTime;
@@ -281,6 +299,7 @@ def do_lock_processing(locksDictionary, logRec, runningTime,
 #
 # Generate a summary pie chart for the file, showing where we spend the time
 #
+'''
 def generateSummaryPieChart(fileName, fileDataDictionary):
 
     labels = [];
@@ -296,6 +315,7 @@ def generateSummaryPieChart(fileName, fileDataDictionary):
     fig = go.Figure(data=data, layout=layout)
 
     py.image.save_as(fig, filename=fileName+".png")
+'''
 
 #
 # A per-file dictionary of functions that we encounter in the log file.
@@ -305,18 +325,29 @@ def generateSummaryPieChart(fileName, fileDataDictionary):
 perFile = {}
 
 
-def parse_file(fname):
+def parse_file(fname, prefix):
 
     stack = [];
     lockStack = [];
+    outputFile = None;
 
-    print "Parsing file " + fname;
-
-    try:
-        logFile = open(fname, "r");
-    except:
-        print "Could not open file " + fname;
-        return;
+    if(fname is not None):
+        try:
+            logFile = open(fname, "r");
+            print "Parsing file " + fname;
+        except:
+            print "Could not open file " + fname;
+            return;
+    elif (prefix is not None):
+        print "Reading from stdin";
+        logFile = sys.stdin;
+        fname = prefix;
+        try:
+            outputFile = open(prefix+".txt", "w");
+            print("Output file is " + prefix + ".txt");
+        except:
+            print("Could not open output file with prefix " + prefix);
+            return;
 
     perFile[fname] = {}
     perFileLocks[fname] = {}
@@ -327,6 +358,7 @@ def parse_file(fname):
         thread = 0;
         time = 0;
         func = "";
+        otherInfo = None;
 
         if(len(words) < 4):
            continue;
@@ -335,7 +367,9 @@ def parse_file(fname):
             func = words[1];
             thread = int(words[2]);
             time = long(words[3]);
-            rec = LogRecord(func, thread, time)
+            if(len(words) > 4):
+                otherInfo = words[4:len(words)];
+            rec = LogRecord(func, thread, time, otherInfo)
         except ValueError:
             print "Could not parse: " + line;
             continue;
@@ -345,7 +379,22 @@ def parse_file(fname):
             # Push each entry record onto the stack.
             stack.append(rec);
 
+            # If we are told to write the records to the output
+            # file, do so.
+            if(outputFile is not None):
+                outputFile.write(line);
+
         elif(words[0] == "<--"):
+            if(outputFile is not None):
+                # If this is a function exit record, we may need to add
+                # the name of the lock to the end of the line, if this
+                # happens to be a lock function. So for now we write the
+                # line without the newline character at the end. Later we
+                # will either add the lock name with the newline character
+                # (if this happens to be a lock function, or just the
+                # newline character otherwise.
+                outputFile.write(line.rstrip());
+
             found = False;
 
             # Timestamp for function exit. Find its
@@ -384,46 +433,74 @@ def parse_file(fname):
                     found = True
 
                     # If this is a lock-related function, do lock-related
-                    # processing
-                    if(len(words) > 4 and looks_like_lock(func)):
+                    # processing. stackRec.otherInfo variable would contain
+                    # the name of the lock, since only the function enter
+                    # record has this information, not the exit record.
+                    if(stackRec.otherInfo is not None
+                       and looks_like_lock(func)):
                         do_lock_processing(perFileLocks[fname], rec,
                                            runningTime,
-                                           words[4:len(words)]);
-
+                                           stackRec.otherInfo);
+                        if(outputFile is not None):
+                            for lockNamePart in stackRec.otherInfo:
+                                outputFile.write(" " + lockNamePart.strip());
                     break;
             if(not found):
                 print("Could not find matching function entrance for line: \n"
                       + line);
 
+            if(outputFile is not None):
+                outputFile.write("\n");
+
     print("\n");
+    if(outputFile is not None):
+        outputFile.close();
 
 
 def main():
 
-    py.sign_in(username='fedorova_post.harvard.edu',
-                                      api_key='gbpph0oske')
+#    py.sign_in(username='fedorova_post.harvard.edu',
+#                                      api_key='gbpph0oske')
+    global verbose;
+    global multipleAcquireWithoutRelease;
+    global tryLockWarning;
+    global noMatchingAcquireOnRelease;
 
     parser = argparse.ArgumentParser(description=
                                      'Process performance log files');
-    parser.add_argument('files', type=str, nargs='+',
+    parser.add_argument('files', type=str, nargs='*',
                         help='log files to process');
 
     parser.add_argument('--generate-histograms',
                         dest='histogram', action='store_true');
     parser.set_defaults(histogram=False);
 
-    args = parser.parse_args();
-    print args.files;
+    parser.add_argument('--prefix', dest='prefix', type=str);
 
-    for fname in args.files:
-        parse_file(fname);
+    parser.add_argument('--verbose', dest='verbose', action='store_true');
+    args = parser.parse_args();
+
+    if(args.verbose):
+        verbose = True;
+
+    if(len(args.files) > 0):
+        for fname in args.files:
+            parse_file(fname, None);
+    else: # We are reading from stdin
+        if(args.prefix is None):
+            print("I am told to read from stdin (no files are provided), "),
+            print("but there is no prefix for the output file. "),
+            print("Please use --prefix to provide it.");
+            sys.exit();
+        else:
+            parse_file(None, args.prefix);
 
     # Let's print the data!
     for key, perFileDict in perFile.iteritems():
         print(" SUMMARY FOR FILE " + key + ":");
         print("------------------------------");
 
-        generateSummaryPieChart(key, perFileDict);
+#        generateSummaryPieChart(key, perFileDict);
 
         for fkey, pdr in perFileDict.iteritems():
             print(fkey + ":");
@@ -439,6 +516,12 @@ def main():
             lockData.printSelf();
             if (args.histogram):
                 lockData.showHistogram();
+
+        print("No matching acquire on release: " +
+              str(noMatchingAcquireOnRelease));
+        print("Trylock warning: " + str(tryLockWarning));
+        print("Multiple acquire without release: " +
+              str(multipleAcquireWithoutRelease));
 
         print("------------------------------");
 
