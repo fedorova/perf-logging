@@ -15,6 +15,8 @@ for file in "$@";
 do
     echo Working on file ${file}
     ${HOME}/Work/DINAMITE/bintrace-toolkit/trace_parser -p print -a ac_short -m ${BUILD_DIR} ${file} | ${SCRIPTS_HOME}/process-logs.py --prefix ${file} > ${file}.summary.txt
-#    ${SCRIPTS_HOME}/timing_to_synoptic.py ${file}.txt
-#    ${SCRIPTS_HOME}/run-synoptic.sh ${file}.txt.synoptic
+    ${SCRIPTS_HOME}/timing_to_synoptic.py ${file}.txt
+    ${SCRIPTS_HOME}/run-synoptic.sh ${file}.txt.synoptic
 done
+
+rm *.synoptic.condensed*
