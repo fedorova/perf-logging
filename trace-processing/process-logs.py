@@ -508,6 +508,8 @@ def main():
             if (args.histogram):
                 pdr.showHistogram();
 
+        print("------------------------------");
+
         lockDataDict = perFileLocks[key];
 
         print("\nLOCKS SUMMARY");
