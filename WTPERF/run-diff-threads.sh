@@ -22,7 +22,7 @@ do
     # Grab the map files in case we are using a DINAMITE compilation
     cp ${WT_HOME}/map_* ${OUTPUT}
 #
-    for i in `seq 1 1`;
+    for i in `seq 1 4`;
     do
 	mkdir ${OUTPUT}/${i}
 if [ "$OSTYPE" == 'darwin' ]; then
