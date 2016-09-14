@@ -57,7 +57,8 @@ class PerfData:
         return (float(self.totalRunningTime) / float(self.numCalls));
 
     def printSelf(self):
-        print("\t Num calls: " + str(self.numCalls));
+        print(str(self.numCalls) + "\t" + str(self.totalRunningTime) + "\t"
+              + str(self.getAverage()));
         print("\t Total running time: " + '{:,}'.format(self.totalRunningTime)
               + " ns.");
         print("\t Average running time: "
@@ -323,10 +324,11 @@ def generateSummaryPieChart(fileName, fileDataDictionary):
 # one for each file it parses.
 
 perFile = {}
-
+startTime = 0;
 
 def parse_file(fname, prefix):
 
+    global startTime, endTime;
     stack = [];
     lockStack = [];
     outputFile = None;
@@ -373,6 +375,11 @@ def parse_file(fname, prefix):
         except ValueError:
             print "Could not parse: " + line;
             continue;
+
+        if(startTime == 0):
+            startTime = time;
+        else:
+            endTime = time;
 
         if(words[0] == "-->"):
             # Timestamp for function entrance
@@ -465,6 +472,7 @@ def main():
     global multipleAcquireWithoutRelease;
     global tryLockWarning;
     global noMatchingAcquireOnRelease;
+    global startTime, endTime;
 
     parser = argparse.ArgumentParser(description=
                                      'Process performance log files');
@@ -500,10 +508,11 @@ def main():
         print(" SUMMARY FOR FILE " + key + ":");
         print("------------------------------");
 
-#        generateSummaryPieChart(key, perFileDict);
+        print("Total trace time: " + str(endTime - startTime));
+        print("Function \t Num calls \t Runtime (tot) \t Runtime (avg)");
 
         for fkey, pdr in perFileDict.iteritems():
-            print(fkey + ":");
+            print("*** " + fkey + "\t"),
             pdr.printSelf();
             if (args.histogram):
                 pdr.showHistogram();
