@@ -14,9 +14,12 @@ fi
 for file in "$@";
 do
     echo Working on file ${file}
-    ${HOME}/Work/DINAMITE/bintrace-toolkit/trace_parser -p print -a ac_short -m ${BUILD_DIR} ${file} | ${SCRIPTS_HOME}/process-logs.py --prefix ${file} > ${file}.txt.summary
-    ${SCRIPTS_HOME}/timing_to_synoptic.py ${file}.txt
-    ${SCRIPTS_HOME}/run-synoptic.sh ${file}.txt.synoptic
+#    ${HOME}/Work/DINAMITE/bintrace-toolkit/trace_parser -p print -a ac_short -m ${BUILD_DIR} ${file} | ${SCRIPTS_HOME}/process-logs.py --prefix ${file} > ${file}.txt.summary
+#    ${SCRIPTS_HOME}/timing_to_synoptic.py ${file}.txt
+    #    ${SCRIPTS_HOME}/run-synoptic.sh ${file}.txt.synoptic
+    ${SCRIPTS_HOME}/process-logs.py ${file} > ${file}.summary
+    ${SCRIPTS_HOME}/prettify-dotfiles.py ${file}
+    dot -Tpng ${file}.synoptic-enhanced.dot > ${file}.png
 done
 
 rm *.synoptic.condensed*
