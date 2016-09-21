@@ -1,100 +1,100 @@
 {
     "function_filters" : {
-            "__evict_thread_run" : {
+        "__evict_thread_run" : {
             "events" : [
-                "function"
-                ]
-            },
-            "__evict_server" : {
+                "function", "access"
+            ]
+        },
+        "__evict_server" : {
             "events" : [
-                "function"
-                ]
-            },
+                "function", "access"
+            ]
+        },
 	"__evict_helper" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
 	},
 	"__evict_pass" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__wt_yield" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__wt_sleep" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_lru_pages" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__wt_cond_wait" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_update_work" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_lru_walk" : {
             "events" : [
-                "function"
+                "function", "access"
                 ]
         },
 	"__evict_clear_all_walks" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_lru_pages" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_page" : {
             "events" : [
-                "function"
+                "function", "access"
                 ]
         },
 	"__evict_walk" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_walk_file" : {
             "events" : [
-                "function"
+                "function", "access"
             ]
         },
 	"__evict_get_ref" : {
             "events" : [
-                "function"
+                "function", "access"
                 ]
         },
 	"__wt_spin_lock" : {
             "events" : [
-                "function"
+                "function", "access"
             ],
 	    "arguments" : [ 1 ]
         },
 	"__wt_spin_unlock" : {
             "events" : [
-                "function"
+                "function", "access"
             ],
 	    "arguments" : [ 1 ]
         },
 	"__wt_spin_trylock" : {
             "events" : [
-                "function"
+                "function", "access"
             ],
 	    "arguments" : [ 1 ]
         }
