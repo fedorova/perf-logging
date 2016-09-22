@@ -1,0 +1,2 @@
+-r (?<thread>.+), (?<TYPE>.+), .+
+-m \\k<thread>
