@@ -8,7 +8,7 @@ fi
 DB_HOME=/tmp/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
-DATE=`date +%Y-%m-%d`
+DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=4
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 WORKLOAD="evict-btree-stress"
@@ -38,6 +38,8 @@ do
 #
 	mv ${DB_HOME}/test.stat ${OUTPUT}/${i}/.
 	mv ${DB_HOME}/CONFIG.wtperf ${OUTPUT}/${i}/.
+	mv ${DB_HOME}/latency.* ${OUTPUT}/${i}/.
+	mv ${DB_HOME}/monitor ${OUTPUT}/${i}/.
 	mv ${DB_HOME}/WiredTigerStat* ${OUTPUT}/${i}/.
 	python ${WT_HOME}/../tools/wtstats/wtstats.py --clear ${OUTPUT}/${i}/WiredTigerStat*
 	mv wtstats.html ${OUTPUT}/${i}/.
