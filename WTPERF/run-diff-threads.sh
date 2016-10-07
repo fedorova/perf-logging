@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=wt-dev
+BRANCH=wt-2898
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
@@ -9,7 +9,7 @@ DB_HOME=/tmp/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%b-%d-%H:%M`
-EVICT_WORKERS=4
+EVICT_WORKERS=20
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 WORKLOAD="evict-btree-stress"
 
