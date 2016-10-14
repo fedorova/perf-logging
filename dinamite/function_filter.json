@@ -1,102 +1,128 @@
 {
     "function_filters" : {
+	"__wt_btcur_search" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_btcur_update" : {
+            "events" : [
+                "function"
+            ]
+        },
         "__evict_thread_run" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
         "__evict_server" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
-	"__evict_helper" : {
-            "events" : [
-                "function", "access"
-            ]
-	},
 	"__evict_pass" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__wt_yield" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__wt_sleep" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_lru_pages" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__wt_cond_wait" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_update_work" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_lru_walk" : {
             "events" : [
-                "function", "access"
+                "function"
                 ]
         },
 	"__evict_clear_all_walks" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_lru_pages" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_page" : {
             "events" : [
-                "function", "access"
+                "function"
                 ]
         },
+	"__evict_tune_workers" : {
+            "events" : [
+                "function"
+                ]
+        },
+
 	"__evict_walk" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_walk_file" : {
             "events" : [
-                "function", "access"
+                "function"
             ]
         },
 	"__evict_get_ref" : {
             "events" : [
-                "function", "access"
+                "function"
+                ]
+        },
+	"__wt_evict" : {
+            "events" : [
+                "function"
                 ]
         },
 	"__wt_spin_lock" : {
             "events" : [
-                "function", "access"
+                "function"
             ],
 	    "arguments" : [ 1 ]
         },
 	"__wt_spin_unlock" : {
             "events" : [
-                "function", "access"
+                "function"
             ],
 	    "arguments" : [ 1 ]
         },
 	"__wt_spin_trylock" : {
             "events" : [
-                "function", "access"
+                "function"
             ],
 	    "arguments" : [ 1 ]
+        },
+	"__wt_thread_group_start_one" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__wt_thread_group_stop_one" : {
+            "events" : [
+                "function"
+            ]
         }
     }
 }

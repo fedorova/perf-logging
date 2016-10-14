@@ -6,4 +6,4 @@
 SYNOPTIC=$HOME/Work/Perfume/synoptic
 
 echo "Classpath prefix is $SYNOPTIC"
-java -Xmx16g -XX:+UseConcMarkSweepGC -ea -cp $SYNOPTIC/lib/*:$SYNOPTIC/synoptic/bin/:$SYNOPTIC/daikonizer/bin/ synoptic.main.SynopticMain $*
+java -Xmx32g -XX:+UseG1GC -ea -cp $SYNOPTIC/lib/*:$SYNOPTIC/synoptic/bin/:$SYNOPTIC/daikonizer/bin/ synoptic.main.SynopticMain $*

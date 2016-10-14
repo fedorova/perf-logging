@@ -3,7 +3,7 @@ conn_config="cache_size=50M,statistics=(fast,clear),statistics_log=(wait=10),evi
 table_config="type=file"
 icount=10000000
 report_interval=5
-run_time=60
+run_time=180
 create=false
 threads=((count=20,reads=1))
 # Add throughput/latency monitoring
