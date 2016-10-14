@@ -52,6 +52,8 @@ class PerfData:
         self.numCalls = 0;
         self.totalRunningTime = long(0);
         self.runningTimes = [];
+        self.maxRunningTime = 0;
+        self.maxRunningTimeTimestamp = 0;
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -63,6 +65,8 @@ class PerfData:
               + " ns.");
         print("\t Average running time: "
               + '{:,}'.format(long(self.getAverage())) + " ns.");
+        print("\t Largest running time: " + '{:,}'.format(self.maxRunningTime)
+	      + " ns.");
 
     def showHistogram(self):
         plt.figure();
@@ -437,6 +441,9 @@ def parse_file(fname, prefix):
                     pdr.totalRunningTime = pdr.totalRunningTime + runningTime;
                     pdr.numCalls = pdr.numCalls + 1;
                     pdr.runningTimes.append(runningTime);
+                    if (runningTime > pdr.maxRunningTime):
+                        pdr.maxRunningTime = runningTime;
+                        pdr.maxRunningTimeTimeStamp = stackRec.time;
                     found = True
 
                     # If this is a lock-related function, do lock-related

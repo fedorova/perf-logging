@@ -12,8 +12,9 @@ def looks_like_lock(str):
             return True;
     return False;
 
-def parse_file(fname):
+def parse_file(fname_root):
 
+    fname = fname_root + ".txt";
     print "Parsing file " + fname;
 
     try:
@@ -23,7 +24,7 @@ def parse_file(fname):
         return;
 
     try:
-        out_fname = fname + ".synoptic"
+        out_fname = fname_root + ".synoptic"
         outputFile = open(out_fname, "w");
     except:
         print "Could not open file " + out_fname;
