@@ -3,7 +3,10 @@
 import sys
 import argparse
 import networkx as nx
-import matplotlib.pyplot as plt
+import operator
+import colorsys
+#import pygraphviz as pgv
+#import matplotlib.pyplot as plt
 #import plotly.plotly as py
 #import plotly.graph_objs as go
 
@@ -11,6 +14,21 @@ verbose = False;
 multipleAcquireWithoutRelease = 0;
 tryLockWarning = 0;
 noMatchingAcquireOnRelease = 0;
+
+# A per-file dictionary of performance data records. Each performance data
+# record summarizes the execution of the function that appeared in that
+# trace file.
+#
+perFile = {};
+
+# State transition graphs. One per file. Each function entry/exit point is
+# a node. Edges show the number of transitions in the trace.
+#
+perFileGraphs = {};
+
+# Global statistics about each file trace.
+#
+perFileTraceStats = {};
 
 #
 # LogRecord contains all the fields we expect in the log record.
@@ -41,9 +59,32 @@ class LockRecord:
         print(self.name + ": [" + str(self.thread) + "] " +
               str(self.timeAcquired) + "\n");
 
+
+#
+# TraceStats class holds attributes pertaining to the performance
+# trace.
+
+class TraceStats:
+
+    def __init__(self, name):
+        self.name = name;
+        self.startTime = 0;
+        self.endTime = 0;
+
+    def setStartTime(self, startTime):
+        self.startTime = startTime;
+
+    def setEndTime(self, endTime):
+        self.endTime = endTime;
+
+    def getTotalTime(self):
+        if (self.startTime == 0 or self.endTime == 0):
+            print("Warning: start or end time not set for trace " +
+                   self.name);
+        return self.endTime - self.startTime;
 #
 # PerfData class contains informtation about the function running
-# times. For now it is simple.
+# times.
 
 class PerfData:
 
@@ -55,24 +96,25 @@ class PerfData:
         self.runningTimes = [];
         self.maxRunningTime = 0;
         self.maxRunningTimeTimestamp = 0;
-        self.callees = {};
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
 
-    def printSelf(self):
-        print(str(self.numCalls) + "\t" + str(self.totalRunningTime) + "\t"
-              + str(self.getAverage()));
-        print("\t Total running time: " + '{:,}'.format(self.totalRunningTime)
-              + " ns.");
-        print("\t Average running time: "
-              + '{:,}'.format(long(self.getAverage())) + " ns.");
-        print("\t Largest running time: " + '{:,}'.format(self.maxRunningTime)
-	      + " ns.");
-        if(len(self.callees) > 0):
-            print("\t CALLEES: ");
-            for callee, numCalls in self.callees.iteritems():
-                print("\t " + callee + ": " + str(numCalls));
+    def printSelf(self, file):
+        if(file is None):
+            file = sys.stdout;
+
+        file.write("*** " + self.name + "\t" +
+                   str(self.numCalls) + "\t" + str(self.totalRunningTime) + "\t"
+                   + str(self.getAverage()) + "\n");
+        file.write("\t Total running time: " +
+                   '{:,}'.format(self.totalRunningTime) +
+                   " ns.\n");
+        file.write("\t Average running time: "
+              + '{:,}'.format(long(self.getAverage())) + " ns.\n");
+        file.write("\t Largest running time: " +
+                   '{:,}'.format(self.maxRunningTime) +
+	           " ns.\n");
 
     def showHistogram(self):
         plt.figure();
@@ -136,18 +178,22 @@ class LockData:
         filename = "lock-" + self.name + ".png";
         plt.savefig(filename);
 
-    def printSelf(self):
-        print("\t Num acquire: " + str(self.numAcquire));
-        print("\t Num trylock: " + str(self.numTryLock));
-        print("\t Num release: " + str(self.numRelease));
-        print("\t Average time in acquire: "
-              + str(long(self.getAverageAcquire())) + " ns.");
-        print("\t Average time in trylock: "
-              + str(long(self.getAverageTryLock())) + " ns.");
-        print("\t Average time in release: "
-              + str(long(self.getAverageRelease())) + " ns.");
-        print("\t Average time the lock was held: "
-              + str(long(self.getAverageTimeHeld())) + " ns.");
+    def printSelf(self, file):
+        if (file is None):
+            file = sys.stdout;
+
+        file.write("Lock \"" + self.name + "\":\n");
+        file.write("\t Num acquire: " + str(self.numAcquire) + "\n");
+        file.write("\t Num trylock: " + str(self.numTryLock) + "\n");
+        file.write("\t Num release: " + str(self.numRelease) + "\n");
+        file.write("\t Average time in acquire: "
+              + str(long(self.getAverageAcquire())) + " ns.\n");
+        file.write("\t Average time in trylock: "
+              + str(long(self.getAverageTryLock())) + " ns.\n");
+        file.write("\t Average time in release: "
+              + str(long(self.getAverageRelease())) + " ns.\n");
+        file.write("\t Average time the lock was held: "
+              + str(long(self.getAverageTimeHeld())) + " ns.\n");
 
 #
 # The following data structures and functions help us decide what
@@ -328,22 +374,176 @@ def generateSummaryPieChart(fileName, fileDataDictionary):
     py.image.save_as(fig, filename=fileName+".png")
 '''
 
-#
-# A per-file dictionary of functions that we encounter in the log file.
-# Each function will have a corresponding list of PerfData objects,
-# one for each file it parses.
+class HSL:
+    def __init__(self, h, s, l):
+        self.h = h;
+        self.s = s;
+        self.l = l;
 
-perFile = {};
-perFileGraphs = {};
-startTime = 0;
+    #
+    # Code borrowed from http://www.rapidtables.com/convert/color/hsl-to-rgb.htm
+    #
+    def toRGB(self):
+        h = float(self.h);
+        s = self.s;
+        l = self.l;
+
+        if(h < 0 or h > 360):
+            return -1, -1, -1;
+        if(s < 0 or s > 1):
+            return -1, -1, -1;
+        if(l < 0 or l > 1):
+            return -1, -1, -1;
+
+        C = (1 - abs(2*l - 1)) * s;
+        X = C * (1 - abs(h / 60 % 2 -1));
+        m = l - C/2;
+
+        if(h >= 0 and h < 60):
+            r = C;
+            g = X;
+            b = 0;
+        elif(h >= 60 and h < 120):
+            r = X;
+            g = C;
+            b = 0;
+        elif(h >= 120 and h < 180):
+            r = 0;
+            g = C;
+            b = 0;
+        elif(h >= 180 and h < 240):
+            r = 0;
+            g = X;
+            b = C;
+        elif(h >= 240 and h < 300):
+            r = X;
+            g = 0;
+            b = C;
+        elif(h >= 300 and h <= 360):
+            r = C;
+            g = 0;
+            b = X;
+
+        r = int(round((r + m) * 255));
+        g = int(round((g + m) * 255));
+        b = int(round((b + m) * 255));
+
+        return r, g, b;
+
+    def toHex(self):
+        r, g, b = self.toRGB();
+
+        hexString = "#" + "%0.2X" % int(r) + "%0.2X" % int(g) + "%0.2X" % int(b)
+        return hexString;
+
+def isInt(s):
+    try:
+        int(s);
+        return True;
+    except ValueError:
+        return False;
+
+def buildColorList():
+
+    colorRange = [];
+    baseHue = 360;
+    saturation = 0.70;
+    lightness = 0.56;
+    lightInc = 0.02;
+
+    for i in range(0, 14):
+        hslColor = HSL(baseHue - i * 20, saturation, lightness + lightInc * i,);
+        hexColor = hslColor.toHex();
+        colorRange.append(hexColor);
+
+    return colorRange;
+
+
+#
+# Figure out the percent execution time for each function relative to the total.
+# Compute the colour based on the percent. Set the node colour accordingly.
+# Update the node label with the percent value.
+#
+def augment_graph(prefix):
+
+    graph = perFileGraphs[prefix];
+
+    # This dictionary is the mapping between function names and
+    # their percent of execution time.
+    #
+    percentDict = {};
+
+    # This is the dictionary of function names with colour codes
+    # based on their contribution to the total runtime.
+    #
+    funcWithColorCode = {};
+
+    # Generate a progression of colours from bright red to pale green
+    #
+    rgbArray = buildColorList();
+
+    # Generate a dictionary keyed by function name, where the value is
+    # the percent runtime contributed to total by this function.
+    #
+    traceRuntime = perFileTraceStats[prefix].getTotalTime();
+    for func, pdr in perFile[prefix].iteritems():
+        percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
+        percentDict[func] = percent;
+
+    # Sort the dictionary by percent. We get back a list of tuples.
+    #
+    sortedByPercentRuntime = sorted(percentDict.items(),
+                                    key=operator.itemgetter(1));
+
+    # Look up the colour for each function based on its contribution
+    # to the total runtime. Greater contribution --> more intense color.
+    #
+    for funcPercentTuple in reversed(sortedByPercentRuntime):
+        func = funcPercentTuple[0];
+        percent = funcPercentTuple[1];
+        percentStr = str(round(percent));
+
+        # Let's find the color for this percent value.
+        #
+        idx = int(round((100.0 - percent) / 7.5));
+        funcWithColorCode[func] = [rgbArray[idx], percentStr];
+
+    for func, attrs in funcWithColorCode.iteritems():
+
+        enterNodeName = "enter " + func;
+        exitNodeName  = "exit " + func;
+
+        allNames = [enterNodeName, exitNodeName];
+
+        for nodeName in allNames:
+            graph.node[nodeName]['label'] = nodeName + "\n" + \
+                                             attrs[1];
+            graph.node[nodeName]['style'] = "filled";
+            graph.node[nodeName]['fillcolor'] = attrs[0];
+
+def update_graph(graph, nodeName, prevNodeName):
+
+    if (not graph.has_node(nodeName)):
+            graph.add_node(nodeName, fontname="Helvetica");
+
+    if (not graph.has_edge(prevNodeName, nodeName)):
+        graph.add_edge(prevNodeName, nodeName, label = " 1 ",
+                       fontname="Helvetica");
+    else:
+        graph[prevNodeName][nodeName]['label'] = \
+            " " + str(int(graph[prevNodeName][nodeName]['label']) + 1) + " ";
+
+    if(prevNodeName == "START"):
+        graph[prevNodeName][nodeName]['label'] = "";
+
 
 def parse_file(fname, prefix):
 
-    global startTime, endTime;
+    startTime = 0;
+    endTime = 0;
     stack = [];
     lockStack = [];
     outputFile = None;
-    prevNodeName = None;
 
     if(fname is not None):
         try:
@@ -352,21 +552,26 @@ def parse_file(fname, prefix):
         except:
             print "Could not open file " + fname;
             return;
-    elif (prefix is not None):
+    else:
         print "Reading from stdin";
         logFile = sys.stdin;
-        fname = prefix;
+
         try:
             outputFile = open(prefix+".txt", "w");
             print("Output file is " + prefix + ".txt");
         except:
             print("Could not open output file with prefix " + prefix);
-            return;
+            outputFile = sys.stdout;
 
-    perFile[fname] = {}
-    perFileLocks[fname] = {}
-    perFileGraphs[fname] = nx.DiGraph();
-    graph = perFileGraphs[fname];
+    perFile[prefix] = {}
+    perFileLocks[prefix] = {}
+    perFileTraceStats[prefix] = TraceStats(prefix);
+    perFileGraphs[prefix] = nx.DiGraph();
+    graph = perFileGraphs[prefix];
+
+    graph.add_node("START", fontname="Helvetica");
+    graph.node["START"]['shape']='box'
+    prevNodeName = "START";
 
     for line in logFile:
 
@@ -404,16 +609,7 @@ def parse_file(fname, prefix):
         else:
             continue;
         nodeName = namePrefix + func;
-
-        if (not graph.has_node(nodeName)):
-            graph.add_node(nodeName);
-
-        if (prevNodeName is not None):
-            if (not graph.has_edge(prevNodeName, nodeName)):
-                graph.add_edge(prevNodeName, nodeName, label = 1);
-            else:
-                graph[prevNodeName][nodeName]['label'] = \
-                                graph[prevNodeName][nodeName]['label'] + 1;
+        update_graph(graph, nodeName, prevNodeName);
         prevNodeName = nodeName;
 
         if(words[0] == "-->"):
@@ -462,7 +658,7 @@ def parse_file(fname, prefix):
                     # the file's dictionary for this function.
 
                     runningTime = long(rec.time) - long(stackRec.time);
-                    thisFileDict = perFile[fname];
+                    thisFileDict = perFile[prefix];
 
                     if(not thisFileDict.has_key(stackRec.func)):
                         newPDR = PerfData(stackRec.func, thread);
@@ -477,37 +673,13 @@ def parse_file(fname, prefix):
                         pdr.maxRunningTimeTimeStamp = stackRec.time;
                     found = True
 
-                    # Let's peek at the top of the stack and find the
-                    # parent of this function. We will add the current
-                    # function to the list of callees.
-                    #
-                    if(len(stack) > 0):
-                        parent = stack[len(stack)-1];
-
-                        if (not thisFileDict.has_key(parent.func)):
-                            parentPDR = PerfData(parent.func, thread);
-                            thisFileDict[parent.func] = parentPDR;
-
-                        parentPDR = thisFileDict[parent.func];
-
-                        # If this function is already in the parent's list
-                        # of callees, just increment the number of occurrences,
-                        # otherwise, add it to the callee dictionary and set
-                        # the count to 1.
-                        #
-                        if (not parentPDR.callees.has_key(rec.func)):
-                            parentPDR.callees[rec.func] = 1;
-                        else:
-                            parentPDR.callees[rec.func] = \
-                                            parentPDR.callees[rec.func] + 1;
-
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
                     # the name of the lock, since only the function enter
                     # record has this information, not the exit record.
                     if(stackRec.otherInfo is not None
                        and looks_like_lock(func)):
-                        do_lock_processing(perFileLocks[fname], rec,
+                        do_lock_processing(perFileLocks[prefix], rec,
                                            runningTime,
                                            stackRec.otherInfo);
                         if(outputFile is not None):
@@ -521,10 +693,26 @@ def parse_file(fname, prefix):
             if(outputFile is not None):
                 outputFile.write("\n");
 
-    print("\n");
+    graph.add_node("END", fontname="Helvetica");
+    graph.add_edge(prevNodeName, "END");
+    graph.node["END"]['shape']='diamond';
+
+    perFileTraceStats[prefix].setStartTime(startTime);
+    perFileTraceStats[prefix].setEndTime(endTime);
+
+    # Augment graph attributes to reflect performance characteristics
+    augment_graph(prefix);
+
     if(outputFile is not None):
         outputFile.close();
 
+def getPrefix(fname):
+
+    words = fname.split(".txt");
+    if (len(words) > 0):
+        return words[0];
+    else:
+        return fname;
 
 def main():
 
@@ -534,7 +722,7 @@ def main():
     global multipleAcquireWithoutRelease;
     global tryLockWarning;
     global noMatchingAcquireOnRelease;
-    global startTime, endTime;
+    global firstNodeName, lastNodeName;
 
     parser = argparse.ArgumentParser(description=
                                      'Process performance log files');
@@ -555,7 +743,13 @@ def main():
 
     if(len(args.files) > 0):
         for fname in args.files:
-            parse_file(fname, None);
+            # Figure out the prefix for the output files
+            if (args.prefix is None):
+                prefix = getPrefix(fname);
+            else:
+                prefix = args.prefix;
+            print("Prefix is " + prefix);
+            parse_file(fname, prefix);
     else: # We are reading from stdin
         if(args.prefix is None):
             print("I am told to read from stdin (no files are provided), "),
@@ -567,42 +761,53 @@ def main():
 
     # Let's print the data!
     for key, perFileDict in perFile.iteritems():
-        print(" SUMMARY FOR FILE " + key + ":");
-        print("------------------------------");
+        try:
+            summaryFileName = key + ".summary";
+            summaryFile = open(summaryFileName, "w");
+            print("Summary file is " + summaryFileName);
+        except:
+            print("Could not create summary file " + summaryFileName);
+            summaryFile = sys.stdout;
 
-        print("Total trace time: " + str(endTime - startTime));
-        print("Function \t Num calls \t Runtime (tot) \t Runtime (avg)");
+        summaryFile.write(" SUMMARY FOR FILE " + key + ":\n");
+        summaryFile.write("------------------------------\n");
+
+        summaryFile.write("Total trace time: "
+                          + str(perFileTraceStats[key].getTotalTime()) + "\n");
+        summaryFile.write(
+            "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
 
         for fkey, pdr in perFileDict.iteritems():
-            print("*** " + fkey + "\t"),
-            pdr.printSelf();
+            pdr.printSelf(summaryFile);
             if (args.histogram):
                 pdr.showHistogram();
 
-        print("------------------------------");
+        summaryFile.write("------------------------------\n");
 
         lockDataDict = perFileLocks[key];
 
-        print("\nLOCKS SUMMARY");
+        summaryFile.write("\nLOCKS SUMMARY\n");
         for lockKey, lockData in lockDataDict.iteritems():
-            print("Lock \"" + lockKey + "\":");
-            lockData.printSelf();
+            lockData.printSelf(summaryFile);
             if (args.histogram):
                 lockData.showHistogram();
 
-        print("No matching acquire on release: " +
-              str(noMatchingAcquireOnRelease));
-        print("Trylock warning: " + str(tryLockWarning));
-        print("Multiple acquire without release: " +
-              str(multipleAcquireWithoutRelease));
+        summaryFile.write("No matching acquire on release: " +
+                          str(noMatchingAcquireOnRelease) + "\n");
+        summaryFile.write("Trylock warning: "
+                          + str(tryLockWarning) + "\n");
+        summaryFile.write("Multiple acquire without release: " +
+                          str(multipleAcquireWithoutRelease) + "\n");
 
-        print("------------------------------");
+        summaryFile.write("------------------------------\n");
 
     # Print the graph.
     for fname, graph in perFileGraphs.iteritems():
-        print(graph.nodes(data=True))
-        print(graph.edges(data=True))
-        nx.drawing.nx_pydot.write_dot(graph, fname + ".dot");
+        aGraph = nx.drawing.nx_agraph.to_agraph(graph);
+        aGraph.add_subgraph("START", rank = "source");
+        aGraph.add_subgraph("END", rank = "sink");
+        aGraph.draw(fname + ".png", prog = 'dot');
+
 
 if __name__ == '__main__':
     main()
