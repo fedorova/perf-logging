@@ -1,7 +1,8 @@
-#!/usr/bin/python -tt
+#!/usr/local/bin/python -tt
 
 import sys
 import argparse
+import networkx as nx
 import matplotlib.pyplot as plt
 #import plotly.plotly as py
 #import plotly.graph_objs as go
@@ -54,6 +55,7 @@ class PerfData:
         self.runningTimes = [];
         self.maxRunningTime = 0;
         self.maxRunningTimeTimestamp = 0;
+        self.callees = {};
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -67,6 +69,10 @@ class PerfData:
               + '{:,}'.format(long(self.getAverage())) + " ns.");
         print("\t Largest running time: " + '{:,}'.format(self.maxRunningTime)
 	      + " ns.");
+        if(len(self.callees) > 0):
+            print("\t CALLEES: ");
+            for callee, numCalls in self.callees.iteritems():
+                print("\t " + callee + ": " + str(numCalls));
 
     def showHistogram(self):
         plt.figure();
@@ -327,7 +333,8 @@ def generateSummaryPieChart(fileName, fileDataDictionary):
 # Each function will have a corresponding list of PerfData objects,
 # one for each file it parses.
 
-perFile = {}
+perFile = {};
+perFileGraphs = {};
 startTime = 0;
 
 def parse_file(fname, prefix):
@@ -336,6 +343,7 @@ def parse_file(fname, prefix):
     stack = [];
     lockStack = [];
     outputFile = None;
+    prevNodeName = None;
 
     if(fname is not None):
         try:
@@ -357,6 +365,8 @@ def parse_file(fname, prefix):
 
     perFile[fname] = {}
     perFileLocks[fname] = {}
+    perFileGraphs[fname] = nx.DiGraph();
+    graph = perFileGraphs[fname];
 
     for line in logFile:
 
@@ -384,6 +394,27 @@ def parse_file(fname, prefix):
             startTime = time;
         else:
             endTime = time;
+
+        # Update the graph as necessary
+        #
+        if(words[0] == "-->"):
+            namePrefix = "enter ";
+        elif(words[0] == "<--"):
+            namePrefix = "exit ";
+        else:
+            continue;
+        nodeName = namePrefix + func;
+
+        if (not graph.has_node(nodeName)):
+            graph.add_node(nodeName);
+
+        if (prevNodeName is not None):
+            if (not graph.has_edge(prevNodeName, nodeName)):
+                graph.add_edge(prevNodeName, nodeName, label = 1);
+            else:
+                graph[prevNodeName][nodeName]['label'] = \
+                                graph[prevNodeName][nodeName]['label'] + 1;
+        prevNodeName = nodeName;
 
         if(words[0] == "-->"):
             # Timestamp for function entrance
@@ -445,6 +476,30 @@ def parse_file(fname, prefix):
                         pdr.maxRunningTime = runningTime;
                         pdr.maxRunningTimeTimeStamp = stackRec.time;
                     found = True
+
+                    # Let's peek at the top of the stack and find the
+                    # parent of this function. We will add the current
+                    # function to the list of callees.
+                    #
+                    if(len(stack) > 0):
+                        parent = stack[len(stack)-1];
+
+                        if (not thisFileDict.has_key(parent.func)):
+                            parentPDR = PerfData(parent.func, thread);
+                            thisFileDict[parent.func] = parentPDR;
+
+                        parentPDR = thisFileDict[parent.func];
+
+                        # If this function is already in the parent's list
+                        # of callees, just increment the number of occurrences,
+                        # otherwise, add it to the callee dictionary and set
+                        # the count to 1.
+                        #
+                        if (not parentPDR.callees.has_key(rec.func)):
+                            parentPDR.callees[rec.func] = 1;
+                        else:
+                            parentPDR.callees[rec.func] = \
+                                            parentPDR.callees[rec.func] + 1;
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -542,6 +597,12 @@ def main():
               str(multipleAcquireWithoutRelease));
 
         print("------------------------------");
+
+    # Print the graph.
+    for fname, graph in perFileGraphs.iteritems():
+        print(graph.nodes(data=True))
+        print(graph.edges(data=True))
+        nx.drawing.nx_pydot.write_dot(graph, fname + ".dot");
 
 if __name__ == '__main__':
     main()
