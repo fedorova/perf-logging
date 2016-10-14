@@ -501,7 +501,7 @@ def augment_graph(prefix):
     for funcPercentTuple in reversed(sortedByPercentRuntime):
         func = funcPercentTuple[0];
         percent = funcPercentTuple[1];
-        percentStr = str(round(percent));
+        percentStr = str(round(percent)) + "\%";
 
         # Let's find the color for this percent value.
         #
