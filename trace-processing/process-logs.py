@@ -83,6 +83,7 @@ class PerfData:
         self.runningTimes = [];
         self.maxRunningTime = 0;
         self.maxRunningTimeTimestamp = 0;
+        self.filtered = False;
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -458,6 +459,8 @@ def augment_graph(graph, funcSummaryData, traceStats):
     #
     traceRuntime = traceStats.getTotalTime();
     for func, pdr in funcSummaryData.iteritems():
+        if(pdr.filtered):
+            continue;
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
         percentDict[func] = percent;
 
@@ -472,7 +475,7 @@ def augment_graph(graph, funcSummaryData, traceStats):
     for funcPercentTuple in reversed(sortedByPercentRuntime):
         func = funcPercentTuple[0];
         percent = funcPercentTuple[1];
-        percentStr = str(round(percent)) + "\%";
+        percentStr = str(round(percent)) + "%%";
 
         # Let's find the color for this percent value.
         #
@@ -507,6 +510,48 @@ def update_graph(graph, nodeName, prevNodeName):
     if(prevNodeName == "START"):
         graph[prevNodeName][nodeName]['label'] = "";
 
+def generate_graph(logRecords):
+
+    graph = nx.DiGraph();
+
+    graph.add_node("START", fontname="Helvetica");
+    graph.node["START"]['shape']='box'
+    prevNodeName = "START";
+
+    for logRec in logRecords:
+        nodeName = logRec.op + " " + logRec.func;
+        update_graph(graph, nodeName, prevNodeName);
+        prevNodeName = nodeName;
+
+    graph.add_node("END", fontname="Helvetica");
+    graph.add_edge(prevNodeName, "END");
+    graph.node["END"]['shape']='diamond';
+
+    return graph;
+
+#
+# When we compute the execution flow graph, we will not include any functions
+# whose percent execution time is below that value.
+#
+percentThreshold = 1.0;
+
+def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
+
+    filteredRecords = [];
+    traceRuntime = traceStats.getTotalTime();
+
+    for rec in logRecords:
+
+        pdr = funcSummaryRecords[rec.func];
+        percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
+
+        if (percent <= percentThreshold):
+            pdr.filtered = True;
+            continue;
+        else:
+            filteredRecords.append(rec);
+
+    return filteredRecords;
 
 def parse_file(fname, prefix):
 
@@ -537,6 +582,7 @@ def parse_file(fname, prefix):
     funcSummaryRecords = {}
     locksSummaryRecords = {}
     traceStats = TraceStats(prefix);
+    logRecords = [];
     graph = nx.DiGraph();
 
     graph.add_node("START", fontname="Helvetica");
@@ -561,37 +607,26 @@ def parse_file(fname, prefix):
             if (len(words) > 4):
                 otherInfo = words[4:len(words)];
 
-            if (words[0] == "-->"):
-                op = "enter ";
-            elif (words[0] == "<--"):
-                op = "exit ";
-            else:
-                continue;
-
-            rec = LogRecord(func, op, thread, time, otherInfo)
-
         except ValueError:
             print "Could not parse: " + line;
             continue;
+
+        if (words[0] == "-->"):
+            op = "enter";
+        elif (words[0] == "<--"):
+            op = "exit";
+        else:
+            continue;
+
+        rec = LogRecord(func, op, thread, time, otherInfo);
+        logRecords.append(rec);
 
         if(startTime == 0):
             startTime = time;
         else:
             endTime = time;
 
-        # Update the graph as necessary
-        #
-        if(words[0] == "-->"):
-            namePrefix = "enter ";
-        elif(words[0] == "<--"):
-            namePrefix = "exit ";
-        else:
-            continue;
-        nodeName = namePrefix + func;
-        update_graph(graph, nodeName, prevNodeName);
-        prevNodeName = nodeName;
-
-        if(words[0] == "-->"):
+        if(op == "enter"):
             # Timestamp for function entrance
             # Push each entry record onto the stack.
             stack.append(rec);
@@ -601,7 +636,7 @@ def parse_file(fname, prefix):
             if(outputFile is not None):
                 outputFile.write(line);
 
-        elif(words[0] == "<--"):
+        else:
             if(outputFile is not None):
                 # If this is a function exit record, we may need to add
                 # the name of the lock to the end of the line, if this
@@ -671,14 +706,15 @@ def parse_file(fname, prefix):
             if(outputFile is not None):
                 outputFile.write("\n");
 
-    graph.add_node("END", fontname="Helvetica");
-    graph.add_edge(prevNodeName, "END");
-    graph.node["END"]['shape']='diamond';
-
     traceStats.setStartTime(startTime);
     traceStats.setEndTime(endTime);
 
+    # Filter the log records according to criteria on their attributes
+    filteredLogRecords = filterLogRecords(logRecords, funcSummaryRecords,
+                                          traceStats);
+
     # Augment graph attributes to reflect performance characteristics
+    graph = generate_graph(filteredLogRecords);
     augment_graph(graph, funcSummaryRecords, traceStats);
 
     # Print the graph
