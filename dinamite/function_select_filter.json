@@ -1,0 +1,133 @@
+{
+    "function_filters" : {
+	"__wt_btcur_search" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_btcur_update" : {
+            "events" : [
+                "function"
+            ]
+        },
+        "__evict_thread_run" : {
+            "events" : [
+                "function"
+            ]
+        },
+        "__evict_server" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_pass" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_yield" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_sleep" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_lru_pages" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__wt_cond_wait" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_update_work" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_lru_walk" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__evict_clear_all_walks" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_lru_pages" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_page" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__evict_tune_workers" : {
+            "events" : [
+                "function"
+                ]
+        },
+
+	"__evict_walk" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_walk_file" : {
+            "events" : [
+                "function"
+            ]
+        },
+	"__evict_get_ref" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__wt_evict" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__wt_spin_lock" : {
+            "events" : [
+                "function"
+            ],
+	    "arguments" : [ 1 ]
+        },
+	"__wt_spin_unlock" : {
+            "events" : [
+                "function"
+            ],
+	    "arguments" : [ 1 ]
+        },
+	"__wt_spin_trylock" : {
+            "events" : [
+                "function"
+            ],
+	    "arguments" : [ 1 ]
+        },
+	"__wt_thread_group_start_one" : {
+            "events" : [
+                "function"
+                ]
+        },
+	"__wt_thread_group_stop_one" : {
+            "events" : [
+                "function"
+            ]
+        }
+    }
+}
+
+
+
+
+
