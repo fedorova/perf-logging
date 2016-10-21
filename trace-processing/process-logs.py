@@ -10,6 +10,32 @@ import colorsys
 #import plotly.plotly as py
 #import plotly.graph_objs as go
 
+
+parser = argparse.ArgumentParser(description=
+                                 'Process performance log files');
+parser.add_argument('files', type=str, nargs='*',
+                    help='log files to process');
+
+parser.add_argument('--generate-histograms',
+                    dest='histogram', action='store_true');
+parser.set_defaults(histogram=False);
+
+parser.add_argument('--prefix', dest='prefix', type=str);
+
+parser.add_argument('--verbose', dest='verbose', action='store_true');
+
+parser.add_argument('-g', '--graphtype', dest='graphtype', default='enter_exit',
+                    help='Default=enter_exit; Possible values: enter_exit, func_only')
+parser.add_argument('-p', '--percent-threshold', dest='percentThreshold', type=float, default = 0.0,
+                    help='Default=0.0; \
+                          When we compute the execution flow graph, we will not include any functions.\
+                          whose percent execution time is equal or below that value.')
+parser.add_argument('--graph-file-postfix', dest='graphFilePostfix', default='png')
+parser.add_argument('-s', '--sep', dest='sep', default=' ')
+
+args = parser.parse_args();
+
+
 verbose = False;
 multipleAcquireWithoutRelease = 0;
 tryLockWarning = 0;
@@ -489,6 +515,9 @@ def augment_graph(graph, funcSummaryData, traceStats):
 
         allNames = [enterNodeName, exitNodeName];
 
+        if args.graphtype == 'func_only':
+            allNames = [func]
+
         for nodeName in allNames:
             graph.node[nodeName]['label'] = nodeName + "\n" + \
                                              attrs[1];
@@ -509,6 +538,20 @@ def update_graph(graph, nodeName, prevNodeName):
 
     if(prevNodeName == "START"):
         graph[prevNodeName][nodeName]['label'] = "";
+        if args.graphtype == 'func_only':
+            graph[prevNodeName][nodeName]['label'] = " 1 "
+
+def generate_func_only_graph(graph, logRecords, prevNodeName):
+    funcStack = [prevNodeName]
+    lastFuncName = prevNodeName
+    for logRec in logRecords:
+        if logRec.op == 'enter':
+            update_graph(graph, logRec.func, funcStack[-1])
+            funcStack.append(logRec.func)
+        elif logRec.op == 'exit':
+            if funcStack[-1] == logRec.func:
+                lastFuncName = funcStack.pop()
+    return lastFuncName
 
 def generate_graph(logRecords):
 
@@ -518,10 +561,13 @@ def generate_graph(logRecords):
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
 
-    for logRec in logRecords:
-        nodeName = logRec.op + " " + logRec.func;
-        update_graph(graph, nodeName, prevNodeName);
-        prevNodeName = nodeName;
+    if args.graphtype == 'func_only':
+        prevNodeName = generate_func_only_graph(graph, logRecords, prevNodeName)
+    else:
+        for logRec in logRecords:
+            nodeName = logRec.op + " " + logRec.func;
+            update_graph(graph, nodeName, prevNodeName);
+            prevNodeName = nodeName;
 
     graph.add_node("END", fontname="Helvetica");
     graph.add_edge(prevNodeName, "END");
@@ -529,23 +575,28 @@ def generate_graph(logRecords):
 
     return graph;
 
-#
-# When we compute the execution flow graph, we will not include any functions
-# whose percent execution time is below that value.
-#
-percentThreshold = 1.0;
 
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
+
+    print "Filter functions that are equal or below {} percent of running time"\
+          .format(args.percentThreshold)
 
     filteredRecords = [];
     traceRuntime = traceStats.getTotalTime();
 
     for rec in logRecords:
 
+        # To prevent key errors, if the record doesn't have a matched exit/enter
+        if not funcSummaryRecords.has_key(rec.func):
+            print "function \"{}\" doesn't have summary record.".format(rec.func)
+            if args.graphtype != 'func_only':
+                filteredRecords.append(rec);
+            continue
+
         pdr = funcSummaryRecords[rec.func];
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
-        if (percent <= percentThreshold):
+        if (percent <= args.percentThreshold):
             pdr.filtered = True;
             continue;
         else:
@@ -591,7 +642,7 @@ def parse_file(fname, prefix):
 
     for line in logFile:
 
-        words = line.split(" ");
+        words = line.split(args.sep);
         thread = 0;
         time = 0;
         func = "";
@@ -721,7 +772,9 @@ def parse_file(fname, prefix):
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
     aGraph.add_subgraph("START", rank = "source");
     aGraph.add_subgraph("END", rank = "sink");
-    aGraph.draw(prefix + ".png", prog = 'dot');
+    graphFileName = "{}.{}.percent({}).{}".format(prefix, args.graphtype, args.percentThreshold, args.graphFilePostfix)
+    aGraph.draw(graphFileName, prog = 'dot');
+    print("Graph file is {}".format(graphFileName))
 
     if(outputFile is not None):
         outputFile.close();
@@ -775,20 +828,6 @@ def main():
     global tryLockWarning;
     global noMatchingAcquireOnRelease;
     global firstNodeName, lastNodeName;
-
-    parser = argparse.ArgumentParser(description=
-                                     'Process performance log files');
-    parser.add_argument('files', type=str, nargs='*',
-                        help='log files to process');
-
-    parser.add_argument('--generate-histograms',
-                        dest='histogram', action='store_true');
-    parser.set_defaults(histogram=False);
-
-    parser.add_argument('--prefix', dest='prefix', type=str);
-
-    parser.add_argument('--verbose', dest='verbose', action='store_true');
-    args = parser.parse_args();
 
     if(args.verbose):
         verbose = True;
