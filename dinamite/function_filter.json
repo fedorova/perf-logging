@@ -1,5 +1,12 @@
 {
     "whitelist": {
-	"file_filters" : [ "evict_lru.c" ]
+	"file_filters" : [ "evict_lru.c" ],
+	"function_filters" : {
+            "*" : {
+		"events" : [
+                    "function"
+                ]
+            }
+	}
     }
 }

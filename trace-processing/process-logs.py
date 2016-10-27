@@ -455,7 +455,7 @@ def augment_graph(graph, funcSummaryData, traceStats):
     for funcPercentTuple in reversed(sortedByPercentRuntime):
         func = funcPercentTuple[0];
         percent = funcPercentTuple[1];
-        percentStr = str(round(percent)) + "%%";
+        percentStr = str(round(percent)) + "%";
 
         # Let's find the color for this percent value.
         #
@@ -525,6 +525,12 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
     traceRuntime = traceStats.getTotalTime();
 
     for rec in logRecords:
+
+        # A log may have no corresponding function record if we stopped
+        # logging before the function exit record was generated, as can
+        # be with functions that start threads.
+        if not funcSummaryRecords.has_key(rec.func):
+            continue;
 
         pdr = funcSummaryRecords[rec.func];
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
