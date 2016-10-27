@@ -5,15 +5,14 @@ import argparse
 import networkx as nx
 import operator
 import colorsys
-#import pygraphviz as pgv
-#import matplotlib.pyplot as plt
-#import plotly.plotly as py
-#import plotly.graph_objs as go
 
-verbose = False;
+graphFilePostfix = None;
+graphType = None;
 multipleAcquireWithoutRelease = 0;
-tryLockWarning = 0;
 noMatchingAcquireOnRelease = 0;
+separator = " ";
+tryLockWarning = 0;
+verbose = False;
 
 #
 # LogRecord contains all the fields we expect in the log record.
@@ -104,15 +103,6 @@ class PerfData:
                    '{:,}'.format(self.maxRunningTime) +
 	           " ns.\n");
 
-    def showHistogram(self):
-        plt.figure();
-        plt.hist(self.runningTimes, bins=50, log=True);
-        plt.title("Thread " + str(self.threadID) + ": " + self.name)
-        plt.xlabel("Running time (nanoseconds)")
-        plt.ylabel("Frequency")
-        filename = "t" + str(self.threadID) + "." + self.name + ".png";
-        plt.savefig(filename);
-
 #
 # LockData class contains information about lock-related functions
 
@@ -153,18 +143,6 @@ class LockData:
             return (float(self.timeHeld) / float(self.numRelease));
         else:
             return 0;
-
-    def showHistogram(self):
-        if(len(self.lockHeldTimes) < 1):
-            return;
-
-        plt.figure();
-        plt.hist(self.lockHeldTimes, bins=50, log=True);
-        plt.title("Lock " + self.name)
-        plt.xlabel("Lock held time (nanoseconds)")
-        plt.ylabel("Frequency")
-        filename = "lock-" + self.name + ".png";
-        plt.savefig(filename);
 
     def printSelf(self, file):
         if (file is None):
@@ -464,10 +442,12 @@ def augment_graph(graph, funcSummaryData, traceStats):
 
     for func, attrs in funcWithColorCode.iteritems():
 
-        enterNodeName = "enter " + func;
-        exitNodeName  = "exit " + func;
-
-        allNames = [enterNodeName, exitNodeName];
+        if graphType == 'func_only':
+            allNames = [func];
+        else:
+            enterNodeName = "enter " + func;
+            exitNodeName  = "exit " + func;
+            allNames = [enterNodeName, exitNodeName];
 
         for nodeName in allNames:
             graph.node[nodeName]['label'] = nodeName + "\n" + \
@@ -489,6 +469,23 @@ def update_graph(graph, nodeName, prevNodeName):
 
     if(prevNodeName == "START"):
         graph[prevNodeName][nodeName]['label'] = "";
+        if (graphType == 'func_only'):
+            graph[prevNodeName][nodeName]['label'] = " 1 "
+
+def generate_func_only_graph(graph, logRecords, prevNodeName):
+
+    funcStack = [prevNodeName];
+    lastFuncName = prevNodeName;
+
+    for logRec in logRecords:
+        if logRec.op == 'enter':
+            update_graph(graph, logRec.func, lastFuncName)
+            funcStack.append(logRec.func)
+        elif logRec.op == 'exit':
+            if funcStack[-1] == logRec.func:
+                lastFuncName = funcStack.pop()
+
+    return lastFuncName;
 
 def generate_graph(logRecords):
 
@@ -498,10 +495,13 @@ def generate_graph(logRecords):
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
 
-    for logRec in logRecords:
-        nodeName = logRec.op + " " + logRec.func;
-        update_graph(graph, nodeName, prevNodeName);
-        prevNodeName = nodeName;
+    if graphType == 'func_only':
+        prevNodeName = generate_func_only_graph(graph, logRecords, prevNodeName)
+    else:
+        for logRec in logRecords:
+            nodeName = logRec.op + " " + logRec.func;
+            update_graph(graph, nodeName, prevNodeName);
+            prevNodeName = nodeName;
 
     graph.add_node("END", fontname="Helvetica");
     graph.add_edge(prevNodeName, "END");
@@ -513,8 +513,7 @@ def generate_graph(logRecords):
 # When we compute the execution flow graph, we will not include any functions
 # whose percent execution time is below that value.
 #
-usePercentFilter = True;
-percentThreshold = 5.0;
+percentThreshold = 0.0;
 
 useMaxRuntimeFilter = False;
 maxRuntimeThreshold = 3300000; # in clock cycles
@@ -529,13 +528,16 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
         # A log may have no corresponding function record if we stopped
         # logging before the function exit record was generated, as can
         # be with functions that start threads.
+        #
         if not funcSummaryRecords.has_key(rec.func):
+            print("Warning: no performance record for function " +
+                  rec.func);
             continue;
 
         pdr = funcSummaryRecords[rec.func];
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
-        if (usePercentFilter and percent <= percentThreshold):
+        if (percent <= percentThreshold):
             pdr.filtered = True;
             continue;
         elif (useMaxRuntimeFilter and pdr.maxRunningTime < maxRuntimeThreshold):
@@ -584,7 +586,7 @@ def parse_file(fname, prefix):
 
     for line in logFile:
 
-        words = line.split(" ");
+        words = line.split(separator);
         thread = 0;
         time = 0;
         func = "";
@@ -714,7 +716,11 @@ def parse_file(fname, prefix):
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
     aGraph.add_subgraph("START", rank = "source");
     aGraph.add_subgraph("END", rank = "sink");
-    aGraph.draw(prefix + ".png", prog = 'dot');
+    graphFileName = prefix + "." + graphType + "."  \
+                    + str(percentThreshold) + "%." + graphFilePostfix;
+
+    aGraph.draw(graphFileName, prog = 'dot');
+    print("Graph is saved to: " + graphFileName);
 
     if(outputFile is not None):
         outputFile.close();
@@ -761,30 +767,51 @@ def getPrefix(fname):
 
 def main():
 
-#    py.sign_in(username='fedorova_post.harvard.edu',
-#                                      api_key='gbpph0oske')
-    global verbose;
+    global firstNodeName;
+    global graphFilePostfix;
+    global graphType;
+    global lastNodeName;
     global multipleAcquireWithoutRelease;
-    global tryLockWarning;
     global noMatchingAcquireOnRelease;
-    global firstNodeName, lastNodeName;
+    global percentThreshold;
+    global separator;
+    global tryLockWarning;
+    global verbose;
 
     parser = argparse.ArgumentParser(description=
-                                     'Process performance log files');
+                                 'Process performance log files');
     parser.add_argument('files', type=str, nargs='*',
-                        help='log files to process');
-
-    parser.add_argument('--generate-histograms',
-                        dest='histogram', action='store_true');
-    parser.set_defaults(histogram=False);
+                    help='log files to process');
 
     parser.add_argument('--prefix', dest='prefix', type=str);
 
     parser.add_argument('--verbose', dest='verbose', action='store_true');
+
+    parser.add_argument('-g', '--graphtype', dest='graphtype',
+                        default='enter_exit',
+                        help='Default=enter_exit; \
+                        Possible values: enter_exit, func_only');
+
+    parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
+                        type=float, default = 0.0,
+                        help='Default=0.0; \
+                        When we compute the execution flow graph, we will not \
+                        include any functions, whose percent execution time   \
+                        is smaller that value.')
+
+    parser.add_argument('--graph-file-postfix', dest='graphFilePostfix',
+                        default='png');
+    parser.add_argument('-s', '--separator', dest='separator', default=' ');
+
     args = parser.parse_args();
 
     if(args.verbose):
         verbose = True;
+
+    graphType = args.graphtype;
+    graphFilePostfix = args.graphFilePostfix;
+    percentThreshold = args.percentThreshold;
+    separator = args.separator;
 
     if(len(args.files) > 0):
         for fname in args.files:
