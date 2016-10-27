@@ -328,26 +328,6 @@ def do_lock_processing(locksDictionary, logRec, runningTime,
         print("PANIC! Unrecognized lock function: " + func);
         sys.exit(-1);
 
-#
-# Generate a summary pie chart for the file, showing where we spend the time
-#
-'''
-def generateSummaryPieChart(fileName, fileDataDictionary):
-
-    labels = [];
-    values = [];
-
-    for funcName, funcData in fileDataDictionary.iteritems():
-        labels.append(funcName);
-        values.append(funcData.totalRunningTime);
-
-    trace=go.Pie(labels=labels,values=values)
-    data = [trace]
-    layout = go.Layout(title=fileName, width=800, height=640)
-    fig = go.Figure(data=data, layout=layout)
-
-    py.image.save_as(fig, filename=fileName+".png")
-'''
 
 class HSL:
     def __init__(self, h, s, l):
@@ -533,7 +513,11 @@ def generate_graph(logRecords):
 # When we compute the execution flow graph, we will not include any functions
 # whose percent execution time is below that value.
 #
-percentThreshold = 1.0;
+usePercentFilter = True;
+percentThreshold = 5.0;
+
+useMaxRuntimeFilter = False;
+maxRuntimeThreshold = 3300000; # in clock cycles
 
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
@@ -545,7 +529,10 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
         pdr = funcSummaryRecords[rec.func];
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
-        if (percent <= percentThreshold):
+        if (usePercentFilter and percent <= percentThreshold):
+            pdr.filtered = True;
+            continue;
+        elif (useMaxRuntimeFilter and pdr.maxRunningTime < maxRuntimeThreshold):
             pdr.filtered = True;
             continue;
         else:
