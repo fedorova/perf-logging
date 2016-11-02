@@ -11,7 +11,7 @@ DB_HOME=/mnt/fast/sasha/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%b-%d-%H:%M`
-EVICT_WORKERS=40
+EVICT_WORKERS=50
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="evict-btree-stress-multi.wtperf"
 WORKLOAD="500m-btree-populate.wtperf"
@@ -57,6 +57,7 @@ done
 
 grep 'read oper' ${OUTPUT_ROOT}/${EXPNAME}*/*/test.stat
 grep 'read oper' ${OUTPUT_ROOT}/${EXPNAME}*/*/test.stat | awk '{print $6}'
+grep 'ops/sec' ${OUTPUT_ROOT}/${EXPNAME}*/*/test.stat
 
 
 
