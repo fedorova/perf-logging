@@ -24,6 +24,7 @@ do
     EXPID=${EXPNAME}-${t}T
     OUTPUT=${OUTPUT_ROOT}/${EXPID}
     mkdir ${OUTPUT}
+    echo Output directory: ${OUTPUT}
     # Grab the map files in case we are using a DINAMITE compilation
     cp ${WT_HOME}/map_* ${OUTPUT}
 #
@@ -40,7 +41,7 @@ do
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
 	elif [ "$WORKLOAD" == '500m-btree-populate.wtperf' ]; then
 	    pushd ${WT_HOME}/bench/wtperf
-	    ./wtperf -h ${DB_HOME} -O ${WT_HOME}/../bench/wtperf/runners/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
+	    ./wtperf -h ${DB_HOME} -O ${WT_HOME}/../bench/wtperf/runners/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\),statistics_log=\(wait=30\)\"
 	    popd
 	fi
 #
