@@ -1,0 +1,10 @@
+{
+   "function_filters" : {
+           "*" : {
+               "events" : [
+                       "function"
+                   ]
+           }
+      }
+}
+
