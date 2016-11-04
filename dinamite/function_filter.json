@@ -1,12 +1,14 @@
 {
     "whitelist": {
-	"file_filters" : [ "evict_lru.c" ],
 	"function_filters" : {
-            "*" : {
+            "__wt_btcur_next" : {
 		"events" : [
-                    "function"
+                    "function", "access"
                 ]
             }
+	    "wiredtiger_open" : {
+	    "events" : [ "alloc" ]
+	    }
 	}
     }
 }
