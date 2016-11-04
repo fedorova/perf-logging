@@ -1,0 +1,14 @@
+{
+    "whitelist": {
+	"function_filters" : {
+            "__wt_btcur_next" : {
+		"events" : [
+                    "function", "access"
+                ]
+            }
+	    "wiredtiger_open" : {
+	    "events" : [ "alloc" ]
+	    }
+	}
+    }
+}
