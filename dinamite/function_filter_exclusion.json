@@ -1,0 +1,16 @@
+{
+    "minimum_function_size" : 100,
+    "function_size_metric" : "LOC",
+    "blacklist" : {
+        "function_filters" : ["", "another_one"],
+    },
+    "whitelist": {
+        "function_filters" : {
+            "*" : {
+                "events" : [
+                    "function"
+                ]
+            }
+        }
+    }
+}

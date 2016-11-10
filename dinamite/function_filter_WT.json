@@ -1,7 +1,6 @@
 {
     "minimum_function_size" : 40,
-    "check_small_function_loops" : false,
-    "function_size_metric" : "LOC_PATH",
+    "function_size_metric" : "LOC",
     "whitelist": {
 	"function_filters" : {
             "*" : {

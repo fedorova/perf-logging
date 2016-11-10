@@ -1,8 +1,6 @@
 {
-    "minimum_function_size" : 40,
-    "check_small_function_loops" : false,
-    "function_size_metric" : "LOC_PATH",
     "whitelist": {
+	"file_filters" : [ "evict_lru.c" ],
 	"function_filters" : {
             "*" : {
 		"events" : [

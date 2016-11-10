@@ -1,0 +1,111 @@
+{
+    "function_filters" : {
+        "__evict_thread_run" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+        "__evict_server" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+
+
+
+
+	"__evict_helper" : {
+            "events" : [
+                "function", "access"
+            ]
+	},
+	"__evict_pass" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__wt_yield" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__wt_sleep" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_lru_pages" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__wt_cond_wait" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_update_work" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_lru_walk" : {
+            "events" : [
+                "function", "access"
+                ]
+        },
+	"__evict_clear_all_walks" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_lru_pages" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_page" : {
+            "events" : [
+                "function", "access"
+                ]
+        },
+	"__evict_walk" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_walk_file" : {
+            "events" : [
+                "function", "access"
+            ]
+        },
+	"__evict_get_ref" : {
+            "events" : [
+                "function", "access"
+                ]
+        },
+	"__wt_spin_lock" : {
+            "events" : [
+                "function", "access"
+            ],
+	    "arguments" : [ 1 ]
+        },
+	"__wt_spin_unlock" : {
+            "events" : [
+                "function", "access"
+            ],
+	    "arguments" : [ 1 ]
+        },
+	"__wt_spin_trylock" : {
+            "events" : [
+                "function", "access"
+            ],
+	    "arguments" : [ 1 ]
+        }
+    }
+}
+
+
+
+
+
