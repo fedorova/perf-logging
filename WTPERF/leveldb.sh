@@ -31,7 +31,6 @@ echo "Running " ${BENCHMARK}
 
 DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} \
 		     DYLD_LIBRARY_PATH=${INST_LIB}:${WT_HOME}/.libs:${WT_HOME}/ext/compressors/snappy/.libs/ \
-		     DINAMITE_EXCLUDE_TID="1" \
 		     ${BENCHMARK_HOME}/db_bench_wiredtiger  --cache_size=134217728 --use_lsm=1 \
 		     --use_existing_db=${USE_EXISTING_DB} --db=${DB_HOME} --benchmarks=${BENCHMARK} \
 		     --threads=${THREADS} --reads=200000
