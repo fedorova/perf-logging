@@ -21,6 +21,7 @@ WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="500m-btree-50r50u.wtperf"
 #WORKLOAD="500m-btree-populate.wtperf"
 DINAMITE_TRACE_DIR="/tmp"
+EXCLUDE_TID="1"
 
 #for t in 8 16 48 64 96;
 for t in 4;
@@ -38,12 +39,12 @@ do
 	mkdir ${OUTPUT}/${i}
 	if [ "$WORKLOAD" == 'evict-btree-run.wtperf' ] || [ "$WORKLOAD" == 'evict-lsm.wtperf' ] ; then
 	    if [ "$OSTYPE" == 'darwin' ]; then
-		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o threads=\(\(count=${t},reads=1\)\) -o conn_config=\"cache_size=50M,statistics=\(fast,clear\),statistics_log=\(wait=5\),eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
+		DINAMITE_EXCLUDE_TID=${EXCLUDE_TID} DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o threads=\(\(count=${t},reads=1\)\) -o conn_config=\"cache_size=50M,statistics=\(fast,clear\),statistics_log=\(wait=5\),eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
 	    else
-		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/evict-btree-run.wtperf -o threads=\(\(count=${t},reads=1\)\) -o conn_config=\"cache_size=50M,statistics=\(fast,clear\),statistics_log=\(wait=5\),eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
+		DINAMITE_EXCLUDE_TID=${EXCLUDE_TID} DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/evict-btree-run.wtperf -o threads=\(\(count=${t},reads=1\)\) -o conn_config=\"cache_size=50M,statistics=\(fast,clear\),statistics_log=\(wait=5\),eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
 	    fi
 	elif [[ "$WORKLOAD" == evict-btree-stress* ]]; then
-	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
+	    DINAMITE_EXCLUDE_TID=${EXCLUDE_TID} DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
 	elif [[ "$WORKLOAD" == 500m-btree* ]]; then
 	    pushd ${WT_HOME}/bench/wtperf
 	    ./wtperf -h ${DB_HOME} -O ${WT_HOME}/../bench/wtperf/runners/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\),statistics_log=\(wait=30,json=false\)\"
