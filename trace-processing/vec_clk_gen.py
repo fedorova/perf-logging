@@ -349,8 +349,6 @@ def getEventName( event ):
 	# of 4 or greater.
     assert(len(event) >= 4)
 
-    print event;
-
     direction = event[0]
 	# Determine if the thread was entering a function.
 
@@ -807,7 +805,10 @@ class SharedVariable:
 		self.name = varname
 		self.vc_lastwriter = (nthreads+2)*[0]
 
-def generate_vector_timestamps(eventsForAllThreads, outputFile):
+def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
+
+    curRecordIdx = 0;
+    started = False;
 
     # First, let's sort the list by timestamp
     print("Sorting events list...");
@@ -816,6 +817,8 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile):
     # The first line in vec_clk.txt needs to be a regular expression which
     # ShiViz uses to parse through the representation.
     print("Generating vector timestamps...");
+
+    reg_expr = "(?<timestamp>(\\d*)) (?<event>.*)\\n(?<host>\\w*) (?<clock>.*)"
     outputFile.write(reg_expr)
     outputFile.write("\n\n")
 
@@ -823,6 +826,26 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile):
     # output file
     #
     for traceRecord in eventsForAllThreads:
+
+        # Check for starting and stopping conditions if we are
+        # not parsing the entire trace.
+        #
+        curRecordIdx = curRecordIdx + 1;
+        if (curRecordIdx - 1 < start):
+            continue;
+        if (curRecordIdx > start + num):
+            print("Stopping processing at record " + str(curRecordIdx));
+            break;
+
+        # Be nice and show to the user some progress indicators.
+        #
+        if (not started):
+            print("Beginning to process with record ID " + str(curRecordIdx));
+            started = True;
+
+        if ((curRecordIdx - start) % 10000 == 0):
+            print(str(curRecordIdx - start) + " out of " + str(num) + "...");
+
         event = traceRecord.split(" ");
         try:
             t_index = int(event[2]);
@@ -988,6 +1011,10 @@ def main():
                                          'vector clock logs');
     parser.add_argument('files', type=str, nargs='*',
                             help='log files to process');
+    parser.add_argument('-s', '--start', dest='starting_point',
+                            default='BEGINNING');
+    parser.add_argument('-n', '--numevents', dest='num_events',
+                            default='ALL');
 
     args = parser.parse_args();
 
@@ -995,15 +1022,39 @@ def main():
     # timestamp
     if(len(args.files) > 0):
         for fname in args.files:
-            print("Parsing file " + fname);
             parse_file(fname);
 
     print("Parsed " + str(len(eventsForAllThreads)) + " events");
     print("Identified " + str(len(threadIDs)) + " threads.");
     nthreads = len(threadIDs);
 
-    outputFile = open("vector_timestamps.vec", "w");
-    generate_vector_timestamps(eventsForAllThreads, outputFile);
+    # Let's figure out where to begin generating events and
+    # how many to generate
+    if (args.starting_point == 'BEGINNING'):
+        start = 0;
+    elif (args.starting_point == 'MIDDLE'):
+        start = len(eventsForAllThreads) / 2;
+    else:
+        try:
+            start = int(args.starting_point);
+        except:
+            print ("Could not convert " + args.starting_point +
+                       " to an integer value for --start argument");
+            return;
+
+    if (args.num_events == "ALL"):
+        num = len(eventsForAllThreads);
+    else:
+        try:
+            num = int(args.num_events);
+        except:
+            print ("Could not convert " + args.num_events +
+                       " to an integer value for --num_events argument");
+            return;
+
+    outputFile = open("vector_timestamps." + str(start) + "-" + str(num) +
+                          ".vec", "w");
+    generate_vector_timestamps(eventsForAllThreads, outputFile, start, num);
     outputFile.close()
 
 if __name__ == '__main__':
