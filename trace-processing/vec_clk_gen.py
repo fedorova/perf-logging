@@ -48,7 +48,11 @@ nthreads = 0;
 # system.  The lock objects are all placed in the locks array.
 locks = []
 
-variables = []
+variables = {};
+
+def getVarPtr(event):
+    assert(len(event) > 4);
+    return event[4];
 
 def getVarName( event ):
     assert(len(event) > 6);
@@ -64,6 +68,16 @@ def getVarValue( event ):
     if (len(event) > 7):
         return event[7]
     return "Unknown";
+
+def var_get( ptr ):
+
+    if (ptr not in variables):
+        var = SharedVariable(ptr);
+        variables[ptr] = var;
+    else:
+        var = variables[ptr];
+
+    return var;
 
 # getLockName
 #
@@ -85,13 +99,7 @@ def getLockName( event ):
 	# Return lockname as the name of the lock.
 	return lockname
 
-def var_get( varname ):
-	for i in range(0, len(variables)):
 
-		if variables[i].name == varname:
-			return variables[i]
-
-	return False
 
 # lock_get
 #
@@ -108,11 +116,6 @@ def lock_get( lockname ):
 	# If none of the lock objects in the locks array have the name
 	# 'lockname', return False.
 	return False
-
-def var_add( varname ):
-	var_obj = SharedVariable(varname)
-	variables.append(var_obj)
-	return var_obj
 
 # lock_add
 #
@@ -360,9 +363,11 @@ def getEventName( event ):
 
     elif direction == "@" and event[1] == "r":
         direction = "Read"
+        prop = " from "
 
     elif direction == "@" and event[1] == "w":
         direction = "Write"
+        prop = " to "
     else:
         print "Invalid event in getEventName():";
         print direction;
@@ -374,13 +379,10 @@ def getEventName( event ):
 		# the direction, lockname, and function combined into a string.
         event_name  = direction + " " +  getLockName(event) + "_" + event[1]
 
-    elif isReadingVar(event):
-        event_name = direction + " " + getVarValue(event) + " from " \
-          + getVarName(event) + " of type " + getVarType(event)
-
-    elif isWritingVar(event):
-        event_name = direction + " " + getVarValue(event) + " to " \
-          + getVarName(event) + " of type " + getVarType(event)
+    elif isMemoryAccess(event):
+        event_name = direction + " " + getVarValue(event) + prop \
+          + getVarName(event) + " of type " + getVarType(event)  \
+          + " (ptr=" + format(int(getVarPtr(event), 16), '02x') + ")";
 
     else:
         # Otherwise, the event name is the direction and function
@@ -512,11 +514,8 @@ class Thread:
 
     def read_var(self, event):
 
-        varname = getVarName(event)
-        var_obj = var_get(varname)
-
-        if var_obj == False:
-            var_obj = var_add(varname)
+        varPtr = getVarPtr(event);
+        var_obj = var_get(varPtr)
 
         local_clk = self.vc[self.t_id] + 1
 
@@ -540,11 +539,8 @@ class Thread:
 
     def write_var(self, event):
 
-        varname = getVarName(event)
-        var_obj = var_get(varname)
-
-        if var_obj == False:
-            var_obj = var_add(varname)
+        varPtr = getVarPtr(event)
+        var_obj = var_get(varPtr)
 
         self.vc[self.t_id]+=1
 
@@ -801,8 +797,8 @@ class Lock:
 		self.vc_lastowner = nthreads*[0]
 
 class SharedVariable:
-	def __init__(self, varname):
-		self.name = varname
+	def __init__(self, varPtr):
+		self.name = varPtr
 		self.vc_lastwriter = (nthreads+2)*[0]
 
 def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
@@ -856,15 +852,10 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
             continue;
 
         if (isMemoryAccess(event)):
-            varname = getVarName(event)
-            var_obj = var_get(varname)
-
-            if var_obj == False:
-                var_add(varname)
 
             if (isReadingVar(event)):
                 threads[t_index].read_var(event)
-            elif isWritingVar(event):
+            elif (isWritingVar(event)):
                 threads[t_index].write_var(event)
 
         elif isEnteringLock(event):
