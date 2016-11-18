@@ -13,6 +13,7 @@ noMatchingAcquireOnRelease = 0;
 separator = " ";
 tryLockWarning = 0;
 verbose = False;
+shortenFuncName = True;
 
 #
 # LogRecord contains all the fields we expect in the log record.
@@ -548,6 +549,46 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     return filteredRecords;
 
+
+def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
+    if transformMode == 'multiple lines':
+        lineLength = 50
+        lines = []
+        i = 0
+        while len(name) > lineLength:
+            if i == 0:
+                lines.append(name[0:lineLength])
+            else:
+                lines.append(name[0:lineLength])
+            name = name[lineLength:]
+            i += 1
+        lines.append(name)
+        return '\n'.join(lines)
+    elif transformMode == 'replace with *':
+        stack = []
+        chars = []
+        for c in name:
+            if c == CHAR_OPEN:
+                if len(stack) == 0:
+                    chars.append(c)
+                stack.append(c)
+            elif c == CHAR_CLOSE:
+                if len(stack) == 0: # miss the matched '<'
+                    chars.append(c)
+                else:
+                    stack.pop()
+                    if len(stack) == 0:
+                        chars.append('*')
+                        chars.append(CHAR_CLOSE)
+            else:
+                if len(stack) == 0:
+                    chars.append(c)
+
+        return ''.join(chars)
+    else:
+        return name
+
+
 def parse_file(fname, prefix):
 
     startTime = 0;
@@ -597,6 +638,9 @@ def parse_file(fname, prefix):
 
         try:
             func = words[1];
+            if shortenFuncName:
+                func = transform_name(func, 'replace with *', '<', '>')
+                func = transform_name(func, 'replace with *', '(', ')')
             thread = int(words[2]);
             time = long(words[3]);
             if (len(words) > 4):
@@ -777,6 +821,7 @@ def main():
     global separator;
     global tryLockWarning;
     global verbose;
+    global shortenFuncName;
 
     parser = argparse.ArgumentParser(description=
                                  'Process performance log files');
@@ -802,6 +847,7 @@ def main():
     parser.add_argument('--graph-file-postfix', dest='graphFilePostfix',
                         default='png');
     parser.add_argument('-s', '--separator', dest='separator', default=' ');
+    parser.add_argument('--shorten_func_name', dest='shortenFuncName', type=bool, default=True);
 
     args = parser.parse_args();
 
@@ -812,6 +858,7 @@ def main():
     graphFilePostfix = args.graphFilePostfix;
     percentThreshold = args.percentThreshold;
     separator = args.separator;
+    shortenFuncName = args.shortenFuncName
 
     if(len(args.files) > 0):
         for fname in args.files:
