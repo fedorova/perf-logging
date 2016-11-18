@@ -1,5 +1,5 @@
 WT_HOME=$HOME/Work/WiredTiger/wt-dev/build_posix
-DB_HOME=/tmpfs/WT_TEST
+DB_HOME=./WT_TEST
 SCRIPTS_HOME=$HOME/Work/WiredTiger/perf-logging/WTPERF
 
 mkdir ${DB_HOME}

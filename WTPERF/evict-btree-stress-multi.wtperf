@@ -1,9 +1,9 @@
-conn_config="cache_size=1G,eviction=(threads_max=4),session_max=2000,statistics=(fast),statistics_log=(wait=10)"
+conn_config="cache_size=1G,eviction=(threads_max=4),session_max=2000,statistics=(fast),statistics_log=(wait=5)"
 table_config="type=file"
 table_count=100
 icount=100000000
 report_interval=5
-run_time=600
+run_time=300
 populate_threads=1
 threads=((count=100,updates=1,reads=4,ops_per_txn=30))
 # Warn if a latency over a quarter second is seen
