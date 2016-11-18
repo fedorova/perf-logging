@@ -104,6 +104,14 @@ class PerfData:
                    '{:,}'.format(self.maxRunningTime) +
 	           " ns.\n");
 
+    def printSelfCSVLine(self, file):
+        if(file is None):
+            file = sys.stdout
+
+        file.write("{}, {}, {}, {}, {}\n"
+                   .format(self.name, self.numCalls, self.totalRunningTime,
+                           self.getAverage(), self.maxRunningTime))
+
 #
 # LockData class contains information about lock-related functions
 
@@ -763,20 +771,32 @@ def parse_file(fname, prefix):
     graphFileName = prefix + "." + graphType + "."  \
                     + str(percentThreshold) + "%." + graphFilePostfix;
 
-    aGraph.draw(graphFileName, prog = 'dot');
-    print("Graph is saved to: " + graphFileName);
+    # aGraph.draw(graphFileName, prog = 'dot');
+    # print("Graph is saved to: " + graphFileName);
 
     if(outputFile is not None):
         outputFile.close();
 
+    generateSummaryFile('', prefix, traceStats, funcSummaryRecords, locksSummaryRecords)
+    generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords, locksSummaryRecords)
+
+
+def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords, locksSummaryRecords):
     # Write the summary to the output file.
     try:
-        summaryFileName = prefix + ".summary";
+        summaryFileName = prefix + ".summary" + fileType;
         summaryFile = open(summaryFileName, "w");
         print("Summary file is " + summaryFileName);
     except:
         print("Could not create summary file " + summaryFileName);
         summaryFile = sys.stdout;
+
+    if fileType == '.csv':
+        summaryFile.write("Function, Num calls, Total Runtime (ns), Averge Runtime (ns), Largest Runtime (ns)\n");
+        for fkey, pdr in funcSummaryRecords.iteritems():
+            pdr.printSelfCSVLine(summaryFile)
+        summaryFile.close();
+        return;
 
     summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
     summaryFile.write("------------------------------\n");
@@ -858,7 +878,7 @@ def main():
     graphFilePostfix = args.graphFilePostfix;
     percentThreshold = args.percentThreshold;
     separator = args.separator;
-    shortenFuncName = args.shortenFuncName
+    shortenFuncName = args.shortenFuncName;
 
     if(len(args.files) > 0):
         for fname in args.files:
