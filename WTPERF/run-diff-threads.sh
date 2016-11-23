@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=wt-2898
+BRANCH=wt-dev
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
@@ -9,17 +9,19 @@ fi
 DB_HOME=/tmp/WT_TEST/
 #DB_HOME=/mnt/fast/sasha/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
+#SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=20
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="evict-btree-stress-multi.wtperf"
-WORKLOAD="evict-btree-stress-multi-run.wtperf"
+#WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="500m-btree-populate.wtperf"
 #WORKLOAD="evict-btree-run.wtperf"
 #WORKLOAD="500m-btree-80r20u.wtperf"
 #WORKLOAD="500m-btree-50r50u.wtperf"
 #WORKLOAD="500m-btree-populate.wtperf"
+WORKLOAD="medium-btree.wtperf"
 DINAMITE_TRACE_DIR="/tmp"
 EXCLUDE_TID="1"
 
@@ -49,6 +51,8 @@ do
 	    pushd ${WT_HOME}/bench/wtperf
 	    ./wtperf -h ${DB_HOME} -O ${WT_HOME}/../bench/wtperf/runners/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\),statistics_log=\(wait=30,json=false\)\"
 	    popd
+	elif [ "$WORKLOAD" == 'medium-btree.wtperf' ]; then
+	    ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
 	fi
 #
 	mv ${DB_HOME}/test.stat ${OUTPUT}/${i}/.
