@@ -771,8 +771,8 @@ def parse_file(fname, prefix):
     graphFileName = prefix + "." + graphType + "."  \
                     + str(percentThreshold) + "%." + graphFilePostfix;
 
-    # aGraph.draw(graphFileName, prog = 'dot');
-    # print("Graph is saved to: " + graphFileName);
+    aGraph.draw(graphFileName, prog = 'dot');
+    print("Graph is saved to: " + graphFileName);
 
     if(outputFile is not None):
         outputFile.close();
