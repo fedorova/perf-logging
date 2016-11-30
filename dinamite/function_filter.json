@@ -1,14 +1,16 @@
 {
-    "minimum_function_size" : 50,
-    "check_small_function_loops" : true,
-    "function_size_metric" : "LOC_PATH",
     "whitelist": {
-	"function_filters" : {
-            "*" : {
-		"events" : [
-                    "function"
+    	"function_filters" : {
+	    "__wt_btcur_next" : {
+		"events": [
+                    "function", "access"
                 ]
-            }
+            },
+	    "*" : {
+	    	"events" : [ 
+	    	     "alloc" 
+		]
+	    }
 	}
     }
 }
