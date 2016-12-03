@@ -1,16 +1,74 @@
 {
+    "minimum_function_size" : 50,
+    "check_small_function_loops" : true,
+    "function_size_metric" : "LOC_PATH",
     "whitelist": {
-    	"function_filters" : {
-	    "__wt_btcur_next" : {
-		"events": [
-                    "function", "access"
+	"function_filters" : {
+            "*" : {
+		"events" : [
+                    "function"
                 ]
             },
-	    "*" : {
-	    	"events" : [ 
-	    	     "alloc" 
-		]
-	    }
+	    "__wt_spin_lock" : {
+             "events" : [
+                 "function"
+             ],
+             "arguments" : [ 1 ]
+            },
+            "__wt_spin_unlock" : {
+             "events" : [
+                 "function"
+             ],
+             "arguments" : [ 1 ]
+            },
+            "__wt_spin_trylock" : {
+            "events" : [
+                "function"
+            ],
+            "arguments" : [ 1 ]
+            },
+	    "__wt_try_readlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_readlock_spin" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_readlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_readunlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_try_writelock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_writelock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_writeunlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            }
 	}
     }
 }

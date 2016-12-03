@@ -43,6 +43,7 @@ directory = "."
 # thread object.  All thread objects are placed in the threads array.
 threads = {}
 nthreads = 0;
+maxTID = 0;
 
 # The script creates a lock object for each lock used in the multi-threaded
 # system.  The lock objects are all placed in the locks array.
@@ -86,20 +87,22 @@ def var_get( ptr ):
 #
 # The input is expected to be a space-delimited array, not a string.
 def getLockName( event ):
-	# If there is a lock name, the format of the line will be
-	# (-->|<--) $function $thread_number $timestamp $lockname.
-	# Therefore, a line transformed into a space-delimited array will have a
-	# length of 5 or higher.  If $function did not involve acquiring or
-	# releasing locks, the length would only  be 4.
-	assert(len(event) > 4)
+    # If there is a lock name, the format of the line will be
+    # (-->|<--) $function $thread_number $timestamp $lockname.
+    # Therefore, a line transformed into a space-delimited array will have a
+    # length of 5 or higher.  If $function did not involve acquiring or
+    # releasing locks, the length would only  be 4.
+    #
+    if (len(event) < 5):
+        print("Warning: lock event has fewer than five tokens");
+        print(event);
+        return None;
 
-	# Create the string lockname.
-	lockname = "_".join(event[4:len(event)])
+    # Create the string lockname.
+    lockname = "_".join(event[4:len(event)])
 
-	# Return lockname as the name of the lock.
-	return lockname
-
-
+    # Return lockname as the name of the lock.
+    return lockname
 
 # lock_get
 #
@@ -140,8 +143,14 @@ def isLockEvent( event ):
 	# greater than 1.
 	assert(len(event) > 1)
 
+        # Lock events must have at least 5 tokens, because they include the
+        # lock's name
+        if (len(event) < 5):
+            return False;
+
 	# Obtain the function being executed.
 	function = event[1]
+
 	# Determine if the function interacts with a lock.
 	isLock = re.search(r'lock', function)
 
@@ -373,10 +382,10 @@ def getEventName( event ):
         print direction;
         print event;
 
-    if isLockEvent(event):
+    if (isLockEvent(event) and (getLockName(event) is not None)):
 
-		# If the thread was interacting with a lock, the event name is
-		# the direction, lockname, and function combined into a string.
+	# If the thread was interacting with a lock, the event name is
+	# the direction, lockname, and function combined into a string.
         event_name  = direction + " " +  getLockName(event) + "_" + event[1]
 
     elif isMemoryAccess(event):
@@ -424,22 +433,25 @@ def create_vc_header(event):
 #
 # This function has two inputs: host and vectorclock.  The host refers to the
 # thread executing the event and vectorclock is the thread's vector clock.
+#
 def format_vectorclock(host, vectorclock):
-	# Check that the length of vectorclock is equal to nthreads.
-	assert(len(vectorclock) == nthreads+2)
-	vc_entries = []
+    # Check that the length of vectorclock is equal to the largest seen
+    # thread ID.
+    #
+    assert(len(vectorclock) == maxTID+2);
+    vc_entries = [];
 
-	# Create the JSON formatted vector clock.
-	for i in range(0, len(vectorclock)):
-		if vectorclock[i] > 0:
-			vc_entry = "\"thread" + str(i) + "\":" + str(vectorclock[i])
-			vc_entries.append(vc_entry)
+    # Create the JSON formatted vector clock.
+    for i in range(0, len(vectorclock)):
+        if (vectorclock[i] > 0):
+            vc_entry = "\"thread" + str(i) + "\":" + str(vectorclock[i])
+            vc_entries.append(vc_entry)
 
-	formatted_vc = ", ".join(vc_entries)
-	formatted_vc = host + " {" + formatted_vc + "}"
+    formatted_vc = ", ".join(vc_entries)
+    formatted_vc = host + " {" + formatted_vc + "}"
 
-	# Return the formatted vector clock.
-	return formatted_vc
+    # Return the formatted vector clock.
+    return formatted_vc
 
 # vc_max
 #
@@ -448,8 +460,9 @@ def format_vectorclock(host, vectorclock):
 def vc_max(vc1, vc2):
 	# Check that the two input vector clocks have the same length.
 	assert(len(vc1) == len(vc2))
+
 	# Check that the length of the vector clocks is nthreads.
-	assert(len(vc1) == nthreads+2)
+	assert(len(vc1) == maxTID+2)
 
 	ret = len(vc1)*[0]
 
@@ -465,6 +478,8 @@ def vc_max(vc1, vc2):
 class Thread:
 
     def __init__(self, t_id, file):
+        global maxTID;
+
         # isTryingLock is a flag indicating if the thread is trying to
         # acquiring a lock.
         self.isTryingLock = False;
@@ -474,7 +489,8 @@ class Thread:
         self.buffered_event= [0];
 
         # vc tracks the thread's most recent vector clock.
-        self.vc = (nthreads+2)*[0];
+        self.vc = (maxTID+2)*[0];
+        print("Vector clock length is " + str(len(self.vc)));
 
         # t_id holds the thread number.  The thread number can be found
         # in each line of the thread log.
@@ -483,30 +499,30 @@ class Thread:
         # The output file of vector clock events for this thread.
         self.outfile = file;
 
-	# The class method "executed_localevent" is invoked if the thread
-	# executed a local event (aka any event which does not involve
-	# communication between two threads).
-	#
-	# The input to this method is a line from a thread log transformed into
-	# a self-delimited array.
+    # The class method "executed_localevent" is invoked if the thread
+    # executed a local event (aka any event which does not involve
+    # communication between two threads).
+    #
+    # The input to this method is a line from a thread log transformed into
+    # a self-delimited array.
     #
     def executed_localevent(self, event):
-		# For this method to work properly, the input must have a length
-		# of 4 or greater.
+	# For this method to work properly, the input must have a length
+	# of 4 or greater.
         assert(len(event) >= 4)
 
-		# Increment the thread's local clock.
+	# Increment the thread's local clock.
         self.vc[self.t_id]+=1
         host = "thread" + str(self.t_id)
 
-		# Obtain the vc header.
+	# Obtain the vc header.
         vc_header = create_vc_header(event)
 
-		# Obtain the (JSON) formatted vector clock.
+	# Obtain the (JSON) formatted vector clock.
         formatted_vc = format_vectorclock(host, self.vc)
 
-		# Write the vc header and the formatted vector clock to the
-		# thread's output log.
+	# Write the vc header and the formatted vector clock to the
+	# thread's output log.
         self.outfile.write(vc_header)
         self.outfile.write("\n")
         self.outfile.write(formatted_vc)
@@ -561,21 +577,29 @@ class Thread:
 
         var_obj.vc_lastwriter = list(self.vc)
 
-	# The class method "acquired_lock" is invoked when a thread acquired a
-	# lock.
-	#
-	# The input to this method is a line from a thread log transformed into
-	# a space-delimited array.
+    # The class method "acquired_lock" is invoked when a thread acquired a
+    # lock.
+    #
+    # The input to this method is a line from a thread log transformed into
+    # a space-delimited array.
+    #
     def acquired_lock(self, event):
-		# For this method to work properly, the input must have a length
-		# of 5 or greater.
-        assert(len(event) >= 5)
+	# For this method to work properly, the input must have a length
+	# of 5 or greater.
+        if (len(event) < 5):
+            print("Acquired lock event: expecting length of at least 5");
+            print event;
 
-		# Obtain the name of the lock
-        lockname = getLockName(event)
-		# Retrieve from the locks array the lock object containing the
-		# lock name.
+	# Obtain the name of the lock
+        lockname = getLockName(event);
+        if (lockname is None):
+            return;
+
+        # Retrieve from the locks array the lock object containing the
+	# lock name.
         lock_obj = lock_get(lockname)
+        if (lock_obj is None):
+            return;
 
         if lock_obj == False:
             print("Could not find lock %s" %lockname)
@@ -584,49 +608,49 @@ class Thread:
 			# to the locks array.
             lock_obj = lock_add(lockname)
 
-		# Increment the thread's local clock.
+	# Increment the thread's local clock.
         local_clk = self.vc[self.t_id] + 1
 
-		# A "communication" occurs between a thread which released a
-		# lock and another thread acquiring the same lock.  Therefore,
-		# the thread's new vector clock is a maximum of the thread's
-		# vector clock and the vector clock of the thread which
-		# previously owned the lock.
+	# A "communication" occurs between a thread which released a
+	# lock and another thread acquiring the same lock.  Therefore,
+	# the thread's new vector clock is a maximum of the thread's
+	# vector clock and the vector clock of the thread which
+	# previously owned the lock.
         self.vc = vc_max(self.vc, lock_obj.vc_lastowner)
 
-		# The thread's local clock is set to local_clk.
+	# The thread's local clock is set to local_clk.
         self.vc[self.t_id] = local_clk
 
         host = "thread" + str(self.t_id)
 
-		# Obtain the vc header.
+	# Obtain the vc header.
         vc_header = create_vc_header(event)
 
-		# Obtain the (JSON) formatted vector clock.
+	# Obtain the (JSON) formatted vector clock.
         formatted_vc = format_vectorclock(host, self.vc)
 
-		# Write the vc header and the formatted vector clock to the
-		# thread's output log.
+	# Write the vc header and the formatted vector clock to the
+	# thread's output log.
         self.outfile.write(vc_header)
         self.outfile.write("\n")
         self.outfile.write(formatted_vc)
         self.outfile.write("\n")
 
-	# The method "tryinglock" is invoked if the thread was trying to acquire
-	# a lock (aka exiting a trylock function).  The input to this method is
-	# a line from the thread log transformed into a space-delimited array.
-	#
-	# Typically, a thread entering a lock function will only exit that lock
-	# function if it has successfully acquired the lock.  However, if the
-	# thread enters a trylock function, it can exit the trylock function
-	# without successfully acquiring the lock.
-	#
-	# When the script calls the "tryinglock" method, it does not yet know if
-	# the thread has acquired the lock.  In other words, the script does not
-	# yet know if the thread executed a local event (failed to acquire the
-	# lock) or if the thread communicated with another thread (acquired the
-	# lock).  So the "tryinglock" method temporarily buffers the input
-	# "event" and sets the isTryingLock flag to True.
+    # The method "tryinglock" is invoked if the thread was trying to acquire
+    # a lock (aka exiting a trylock function).  The input to this method is
+    # a line from the thread log transformed into a space-delimited array.
+    #
+    # Typically, a thread entering a lock function will only exit that lock
+    # function if it has successfully acquired the lock.  However, if the
+    # thread enters a trylock function, it can exit the trylock function
+    # without successfully acquiring the lock.
+    #
+    # When the script calls the "tryinglock" method, it does not yet know if
+    # the thread has acquired the lock.  In other words, the script does not
+    # yet know if the thread executed a local event (failed to acquire the
+    # lock) or if the thread communicated with another thread (acquired the
+    # lock).  So the "tryinglock" method temporarily buffers the input
+    # "event" and sets the isTryingLock flag to True.
     def tryinglock(self, event):
         assert(len(event) >= 5)
 
@@ -634,172 +658,186 @@ class Thread:
         self.isTryingLock = True
 
 
-	# The method "failed_trylock" is invoked when the script determines that
-	# a thread exited a trylock function without acquiring the lock.  A thread
-	# which exits a trylock function without acquiring the lock will yield
-	# to other threads.
-	#
-	# If the thread exits a trylock function without acquiring the
-	# lock, then exiting a trylock function is a local event executed by the
-	# thread.  The event of exiting a trylock function is buffered in
-	# self.buffered_event by the tryingLock method.
-	#
-	# The input to the failed_trylock" method is the line in the thread log
-	# transformed into a space-delimited array.  The input should be the
-	# yield event which occured right after the thread exited the trylock
-	# function.
+    # The method "failed_trylock" is invoked when the script determines that
+    # a thread exited a trylock function without acquiring the lock.  A thread
+    # which exits a trylock function without acquiring the lock will yield
+    # to other threads.
+    #
+    # If the thread exits a trylock function without acquiring the
+    # lock, then exiting a trylock function is a local event executed by the
+    # thread.  The event of exiting a trylock function is buffered in
+    # self.buffered_event by the tryingLock method.
+    #
+    # The input to the failed_trylock" method is the line in the thread log
+    # transformed into a space-delimited array.  The input should be the
+    # yield event which occured right after the thread exited the trylock
+    # function.
     def failed_trylock(self, event):
-		# Check that the length of the input is 5 or greater.
+	# Check that the length of the input is 5 or greater.
         assert(len(event) >= 5)
-		# Check that the thread was previously trying to acquire a lock
-		# (aka exiting a trylock function).
+
+	# Check that the thread was previously trying to acquire a lock
+	# (aka exiting a trylock function).
         assert(self.isTryingLock == True)
-		# Check that the length of the buffered event is 5 or greater.
+
+        # Check that the length of the buffered event is 5 or greater.
         assert(len(self.buffered_event) >= 5)
 
-		# Set the isTryingLock flag to False.
+	# Set the isTryingLock flag to False.
         self.isTryingLock = False
 
-		# Because the thread failed to acquire the lock, exiting a
-		# trylock function is a local event.  Therefore, the script only
-		# needs to increment the thread's local clock.
+	# Because the thread failed to acquire the lock, exiting a
+	# trylock function is a local event.  Therefore, the script only
+	# needs to increment the thread's local clock.
         self.vc[self.t_id]+=1
 
         host = "thread" + str(self.t_id)
 
-		# Create a vc header from the buffered event.  The buffered
-		# event is the one which shows that the thread was exiting a
-		# trylock function.
+	# Create a vc header from the buffered event.  The buffered
+	# event is the one which shows that the thread was exiting a
+	# trylock function.
         vc_header = create_vc_header(self.buffered_event)
 
-		# Create the (JSON) formatted vector clock.
+	# Create the (JSON) formatted vector clock.
         formatted_vc = format_vectorclock(host, self.vc)
 
-		# Write the vc header and the formatted vector clock to the
-		# thread's output log.
+	# Write the vc header and the formatted vector clock to the
+	# thread's output log.
         self.outfile.write(vc_header)
         self.outfile.write("\n")
         self.outfile.write(formatted_vc)
         self.outfile.write("\n")
 
-		# After the thread exited the trylock function, it yielded to
-		# other threads.  The yield is a local event so only the
-		# thread's local clock is incremented.
+	# After the thread exited the trylock function, it yielded to
+	# other threads.  The yield is a local event so only the
+	# thread's local clock is incremented.
         self.vc[self.t_id]+=1
 
-		# Create a vc header from event.
+	# Create a vc header from event.
         vc_header = create_vc_header(event)
 
-		# Create the (JSON) formatted vector clock.
+	# Create the (JSON) formatted vector clock.
         formatted_vc = format_vectorclock(host, self.vc)
 
-		# Write the vc header and the formatted vector clock to the
-		# thread's output log.
+	# Write the vc header and the formatted vector clock to the
+	# thread's output log.
         self.outfile.write(vc_header)
         self.outfile.write("\n")
         self.outfile.write(formatted_vc)
         self.outfile.write("\n")
 
-	# The class method "acquired_trylock" is invoked when the script
-	# determines that the thread exited a trylock function and succesfully
-	# acquired the lock.  The event of exiting a trylock function was
-	# buffered in self.buffered_event by the tryingLock method.
+    # The class method "acquired_trylock" is invoked when the script
+    # determines that the thread exited a trylock function and succesfully
+    # acquired the lock.  The event of exiting a trylock function was
+    # buffered in self.buffered_event by the tryingLock method.
+    #
     def acquired_trylock(self):
-		# Check that the length of the buffered event is 5 or greater.
+	# Check that the length of the buffered event is 5 or greater.
         assert(len(self.buffered_event) >= 5)
-		# Check that the thread was trying to acquire a lock.
+
+	# Check that the thread was trying to acquire a lock.
         assert(self.isTryingLock == True)
 
-		# Set the isTryingLock flag to False.
+	# Set the isTryingLock flag to False.
         self.isTryingLock = False
 
-		# Get the lock name from the buffered event.
+	# Get the lock name from the buffered event.
         lockname = getLockName(self.buffered_event)
-		# Obtain from the locks array the lock object containing the
-		# name "lockname".
+        if (lockname is None):
+            return;
+
+	# Obtain from the locks array the lock object containing the
+	# name "lockname".
         lock_obj = lock_get(lockname)
 
         if lock_obj == False:
             print("Could not find lock %s" %lockname)
-			# If none of the lock objects in the locks array have
-			# the name "lockname", then add a new lock object to the
-			# locks array.
+
+	    # If none of the lock objects in the locks array have
+	    # the name "lockname", then add a new lock object to the
+	    # locks array.
+            #
             lock_obj = lock_add(lockname)
 
-		# The thread successfully acquired the lock so it "communicated"
-		# with the thread which previously held the lock.
+	# The thread successfully acquired the lock so it "communicated"
+	# with the thread which previously held the lock.
         local_clk = self.vc[self.t_id] + 1
         self.vc = vc_max(self.vc, lock_obj.vc_lastowner)
         self.vc[self.t_id] = local_clk
 
         host = "thread" + str(self.t_id)
 
-		# Create a vc header from the buffered event.
+	# Create a vc header from the buffered event.
         vc_header = create_vc_header(self.buffered_event)
 
-		# Create the (JSON) formatted vector clock
+	# Create the (JSON) formatted vector clock
         formatted_vc = format_vectorclock(host, self.vc)
 
-		# Write the vc header and formatted vector clock to the thread's
-		# output log.
+	# Write the vc header and formatted vector clock to the thread's
+	# output log.
         self.outfile.write(vc_header)
         self.outfile.write("\n")
         self.outfile.write(formatted_vc)
         self.outfile.write("\n")
 
-	# The class method "releasing_lock" is invoked when the thread was
-	# entering into a function releasing a lock.  The input to this method
-	# is a line from a thread log transformed into a space-delimited array.
+    # The class method "releasing_lock" is invoked when the thread was
+    # entering into a function releasing a lock.  The input to this method
+    # is a line from a thread log transformed into a space-delimited array.
+    #
     def releasing_lock(self, event):
-		# Check that the length of the input is 5 or greater.
+	# Check that the length of the input is 5 or greater.
         assert(len(event) >= 5)
 
-		# Obtain the lock name
+	# Obtain the lock name
         lockname = getLockName(event)
-		# Retrieve from the locks array to the lock object containining
-		# the name "lockname".
+        if (lockname is None):
+            return;
+
+	# Retrieve from the locks array to the lock object containining
+	# the name "lockname".
         lock_obj = lock_get(lockname)
 
         if lock_obj == False:
             print("Could not find lock %s" %lockname)
-			# If none of the lock objects in the locks array contain
-			# the name "lockname", then add a new lock object to the
-			# locks array.
+
+            # If none of the lock objects in the locks array contain
+	    # the name "lockname", then add a new lock object to the
+	    # locks array.
             lock_obj = lock_add(lockname)
 
-		# Releasing the lock is a local event.  So the thread's vector
-		# clock is updated by incrementing the local clock.
+	# Releasing the lock is a local event.  So the thread's vector
+	# clock is updated by incrementing the local clock.
         self.vc[self.t_id]+=1
 
         host = "thread" + str(self.t_id)
 
-		# Create the vc header.
+	# Create the vc header.
         vc_header = create_vc_header(event)
 
-		# Create the (JSON) formatted vector clock.
+	# Create the (JSON) formatted vector clock.
         formatted_vc = format_vectorclock(host, self.vc)
 
-		# Write the vc header and the formatted vector clock to the
-		# thread's output file.
+	# Write the vc header and the formatted vector clock to the
+	# thread's output file.
         self.outfile.write(vc_header)
         self.outfile.write("\n")
         self.outfile.write(formatted_vc)
         self.outfile.write("\n")
 
-		# Each lock object has a "vc_lastowner" field containing the
-		# vector clock of the thread which previously owned the lock.
-		# This field needs to be updated.
+	# Each lock object has a "vc_lastowner" field containing the
+	# vector clock of the thread which previously owned the lock.
+	# This field needs to be updated.
         lock_obj.vc_lastowner = list(self.vc)
 
 class Lock:
 	def __init__(self, lockname):
 		self.name = lockname
-		self.vc_lastowner = nthreads*[0]
+		self.vc_lastowner = (maxTID+2)*[0]
 
 class SharedVariable:
 	def __init__(self, varPtr):
 		self.name = varPtr
-		self.vc_lastwriter = (nthreads+2)*[0]
+		self.vc_lastwriter = (maxTID+2)*[0]
 
 def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
 
@@ -858,7 +896,7 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
             elif (isWritingVar(event)):
                 threads[t_index].write_var(event)
 
-        elif isEnteringLock(event):
+        elif isEnteringLock(event) and (getLockName(event) is not None):
             assert(len(event) >= 4)
 
             # If the thread entered into a function
@@ -945,6 +983,7 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
             # The thread executed a local event.  Obtain the
             # thread object and call the class method
             # "executed_localevent".
+            print(event);
             threads[t_index].executed_localevent(event)
 
 
@@ -955,6 +994,7 @@ def parse_file(fname):
 
     global eventsForAllThreads;
     global threadIDs;
+    global maxTID;
 
     if(fname is not None):
         try:
@@ -977,6 +1017,8 @@ def parse_file(fname):
 
             try:
                 threadID = int(words[2]);
+                if (maxTID < threadID):
+                    maxTID = threadID;
             except:
                 print("Dropping invalid record:" + line);
                 continue;
@@ -996,6 +1038,7 @@ def main():
 
     global eventsForAllThreads;
     global nthreads;
+    global maxTID;
 
     parser = argparse.ArgumentParser(description=
                                     'Convert text traces to TSViz '
@@ -1015,9 +1058,11 @@ def main():
         for fname in args.files:
             parse_file(fname);
 
-    print("Parsed " + str(len(eventsForAllThreads)) + " events");
-    print("Identified " + str(len(threadIDs)) + " threads.");
     nthreads = len(threadIDs);
+    print("Parsed " + str(len(eventsForAllThreads)) + " events");
+    print("Identified " + str(nthreads) + " threads.");
+    print("Maximum thread ID is " + str(maxTID));
+
 
     # Let's figure out where to begin generating events and
     # how many to generate
