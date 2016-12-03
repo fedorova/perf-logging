@@ -982,7 +982,6 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
             # The thread executed a local event.  Obtain the
             # thread object and call the class method
             # "executed_localevent".
-            print(event);
             threads[t_index].executed_localevent(event)
 
 
