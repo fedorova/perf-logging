@@ -139,28 +139,27 @@ def lock_add( lockname ):
 #
 # The input is expected to be a space-delimited array, not a string.
 def isLockEvent( event ):
-	# For this function to work properly, the input must have a length
-	# greater than 1.
-	assert(len(event) > 1)
+    # For this function to work properly, the input must have a length
+    # greater than 1.
+    assert(len(event) > 1)
 
-        # Lock events must have at least 5 tokens, because they include the
-        # lock's name
-        if (len(event) < 5):
-            return False;
+    # Lock events must have at least 5 tokens, because they include the
+    # lock's name
+    if (len(event) < 5):
+        return False;
 
-	# Obtain the function being executed.
-	function = event[1]
+    # Obtain the function being executed.
+    function = event[1]
 
-	# Determine if the function interacts with a lock.
-	isLock = re.search(r'lock', function)
+    # Determine if the function interacts with a lock.
+    isLock = re.search(r'lock', function)
 
-	# Return True if the function interacts with a lock.  Otherwise, return
-	# False.
-	if isLock:
-		return True
-
-	else:
-		return False
+    # Return True if the function interacts with a lock.  Otherwise, return
+    # False.
+    if isLock:
+        return True;
+    else:
+        return False;
 
 def isMemoryAccess(event):
     if (event[0] == "@"):
