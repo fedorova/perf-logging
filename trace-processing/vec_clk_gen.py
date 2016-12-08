@@ -34,13 +34,9 @@ import os
 # where $lockname is the name of the lock being acquired or released by the
 # thread.
 
-# The 'directory' variable holds the directory where the thread logs are
-# located.
-#directory = input("Enter directory where thread logs are located: ")
-directory = "."
-
 # For each thread in the the multi-threaded system, the script generates a
 # thread object.  All thread objects are placed in the threads array.
+
 threads = {}
 nthreads = 0;
 
@@ -136,22 +132,24 @@ def lock_add( lockname ):
 #
 # The input is expected to be a space-delimited array, not a string.
 def isLockEvent( event ):
-	# For this function to work properly, the input must have a length
-	# greater than 1.
-	assert(len(event) > 1)
 
-	# Obtain the function being executed.
-	function = event[1]
-	# Determine if the function interacts with a lock.
-	isLock = re.search(r'lock', function)
+    # For this function to work properly, the input must have a length
+    # greater than 1.
+    assert(len(event) > 1)
 
-	# Return True if the function interacts with a lock.  Otherwise, return
-	# False.
-	if isLock:
-		return True
+    if(len(event) < 5):
+        return False;
 
-	else:
-		return False
+    # Obtain the function being executed.
+    function = event[1]
+
+    # Determine if the function interacts with a lock.
+    isLock = re.search(r'lock', function)
+
+    if isLock:
+        return True
+    else:
+        return False
 
 def isMemoryAccess(event):
     if (event[0] == "@"):
@@ -801,17 +799,27 @@ class SharedVariable:
 		self.name = varPtr
 		self.vc_lastwriter = (nthreads+2)*[0]
 
+# If this variable is set to True, the script will output thread activity
+# in the sliding window of size windowSize;
+
+showWindow = False;
+windowSize = 7000;
+
 def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
 
+    global showWindow;
+    global windowSize;
+
     curRecordIdx = 0;
+    threadsInWindow = {};
     started = False;
 
-    # First, let's sort the list by timestamp
+	# First, let's sort the list by timestamp
     print("Sorting events list...");
     eventsForAllThreads.sort(key=lambda ts: long(ts.split()[3]));
 
-    # The first line in vec_clk.txt needs to be a regular expression which
-    # ShiViz uses to parse through the representation.
+	# The first line in vec_clk.txt needs to be a regular expression which
+	# ShiViz uses to parse through the representation.
     print("Generating vector timestamps...");
 
     reg_expr = "(?<timestamp>(\\d*)) (?<event>.*)\\n(?<host>\\w*) (?<clock>.*)"
@@ -833,8 +841,8 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
             print("Stopping processing at record " + str(curRecordIdx));
             break;
 
-        # Be nice and show to the user some progress indicators.
-        #
+		# Be nice and show to the user some progress indicators.
+		#
         if (not started):
             print("Beginning to process with record ID " + str(curRecordIdx));
             started = True;
@@ -850,6 +858,38 @@ def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
         except:
             print("Dropping invalid record:" + line);
             continue;
+
+        if (showWindow):
+            # Maintain an abstraction of the sliding window of events. Count the
+            # number of threads that appear inside this window. Eventually we
+            # want to be able to select windows with as many threads as
+            # possible.
+            #
+            windowBottom = curRecordIdx;
+            windowTop = max(1, curRecordIdx - windowSize);
+
+            # If the window top has moved past the first record, we must adjust
+            # the thread membership dictionary.
+            #
+            if (windowTop > 1):
+                eventAtWindowTop = eventsForAllThreads[windowTop];
+                tIndexTopEvent = int((eventAtWindowTop.split(" "))[2]);
+                if (threadsInWindow.has_key(tIndexTopEvent)):
+                    threadsInWindow[tIndexTopEvent] = \
+                      threadsInWindow[tIndexTopEvent] - 1;
+
+            # Add the thread in the current record to the membership window.
+            #
+            if (not threadsInWindow.has_key(t_index)):
+                threadsInWindow[t_index] = 0;
+            threadsInWindow[t_index] = 	threadsInWindow[t_index] + 1;
+
+            # Report the size of thread membership window every so often
+            #
+            if (windowBottom % 1000 == 0):
+                print("At window top " + str(windowTop));
+                print(threadsInWindow);
+                print("------------------------------");
 
         if (isMemoryAccess(event)):
 
@@ -996,18 +1036,23 @@ def main():
 
     global eventsForAllThreads;
     global nthreads;
+    global showWindow;
 
     parser = argparse.ArgumentParser(description=
                                     'Convert text traces to TSViz '
                                          'vector clock logs');
     parser.add_argument('files', type=str, nargs='*',
                             help='log files to process');
-    parser.add_argument('-s', '--start', dest='starting_point',
-                            default='BEGINNING');
     parser.add_argument('-n', '--numevents', dest='num_events',
                             default='ALL');
+    parser.add_argument('-s', '--start', dest='starting_point',
+                            default='BEGINNING');
+    parser.add_argument('-w', '--window', dest='window', action='store_true');
 
     args = parser.parse_args();
+
+    if (args.window == True):
+        showWindow = True;
 
     # Create a dictionary of events in all files, keyed by the
     # timestamp
