@@ -8,6 +8,66 @@
 		"events" : [
                     "function"
                 ]
+            },
+	    "__wt_spin_lock" : {
+             "events" : [
+                 "function"
+             ],
+             "arguments" : [ 1 ]
+            },
+            "__wt_spin_unlock" : {
+             "events" : [
+                 "function"
+             ],
+             "arguments" : [ 1 ]
+            },
+            "__wt_spin_trylock" : {
+            "events" : [
+                "function"
+            ],
+            "arguments" : [ 1 ]
+            },
+	    "__wt_try_readlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_readlock_spin" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_readlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_readunlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_try_writelock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_writelock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_writeunlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
             }
 	}
     }
