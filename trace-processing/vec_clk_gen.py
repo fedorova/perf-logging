@@ -1139,12 +1139,12 @@ def main():
         # a file in case we ever want to reuse them later.
         #
         with open(preProcessedTrace, 'wb') as handle:
+            print("Saving pre-processed trace to " + preProcessedTrace);
             pickle.dump(nthreads, handle, protocol=pickle.HIGHEST_PROTOCOL);
             pickle.dump(maxTID, handle, protocol=pickle.HIGHEST_PROTOCOL);
             pickle.dump(eventsForAllThreads, handle,
                             protocol=pickle.HIGHEST_PROTOCOL);
             handle.close();
-            print("Saved pre-processed trace to " + preProcessedTrace);
 
     print("Identified " + str(nthreads) + " threads.");
     print("Maximum thread ID is " + str(maxTID));
