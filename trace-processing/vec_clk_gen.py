@@ -37,19 +37,20 @@ import os
 
 # For each thread in the the multi-threaded system, the script generates a
 # thread object.  All thread objects are placed in the threads array.
-
-threads = {}
-nthreads = 0;
-maxTID = 0;
-
+#
 # The script creates a lock object for each lock used in the multi-threaded
 # system.  The lock objects are all placed in the locks array.
-locks = []
-
+#
+eventsForAllThreads = [];
+locks = [];
+maxTID = 0;
+nthreads = 0;
+totalFileSize = 0;
+threadIDs = {};
+threads = {}
 variables = {};
 
 def getVarPtr(event):
-    assert(len(event) > 4);
     return event[4];
 
 def getVarName( event ):
@@ -99,7 +100,7 @@ def getLockName( event ):
     lockname = "_".join(event[4:len(event)])
 
     # Return lockname as the name of the lock.
-    return lockname
+    return lockname;
 
 # lock_get
 #
@@ -137,15 +138,11 @@ def lock_add( lockname ):
 # The input is expected to be a space-delimited array, not a string.
 def isLockEvent( event ):
 
-    # For this function to work properly, the input must have a length
-    # greater than 1.
-    assert(len(event) > 1)
-
     if(len(event) < 5):
         return False;
 
     # Obtain the function being executed.
-    function = event[1]
+    function = event[1];
 
     # Determine if the function interacts with a lock.
     isLock = re.search(r'lock', function)
@@ -162,7 +159,6 @@ def isMemoryAccess(event):
         return False;
 
 def isReadingVar( event ):
-	assert(len(event) > 1)
 
 	if event[0] == "@" and event[1] == "r":
 		return True
@@ -184,10 +180,6 @@ def isWritingVar( event ):
 #
 # The input is expected to be a space-delimited array, not a string.
 def isEnteringLock( event ):
-	# For this function to work properly, the input must have a length
-	# greater than 1.
-    #
-    assert(len(event) > 1);
 
     if (len(event) < 5):
         return False;
@@ -224,16 +216,12 @@ def isEnteringLock( event ):
 # The input is expected to be a space-delimited array, not a string.
 #
 def isExitingLock( event ):
-    # For this function to work properly, the input must have a length
-    # greater than 1.
-    #
-    assert(len(event) > 1)
 
     if (len(event) < 5):
         return False;
 
-    direction = event[0]
     # Determine if the thread is exiting a function.
+    direction = event[0];
     isExiting = re.match(r'<--', direction)
 
     if isExiting:
@@ -264,10 +252,6 @@ def isExitingLock( event ):
 # The input is expected to be a space-delimited array, not a string.
 #
 def isTryLockEvent(event):
-    # For this function to work properly, the length of the input must be
-    # greater than 1.
-    #
-    assert(len(event) > 1);
 
     if (len(event) < 5):
         return False;
@@ -289,10 +273,8 @@ def isTryLockEvent(event):
 # the other threads.
 #
 # The input is expected to be a space-delimited array, not a string.
+#
 def isYielding( event ):
-	# For this function to work properly, the length of the input must be
-	# greater than 1.
-	assert(len(event) > 1)
 
 	if event[0] == "@":
 		return False
@@ -323,10 +305,6 @@ def isYielding( event ):
 #
 # The input is expected to be a space-delimited event, not a string.
 def isUnlocking( event ):
-    # For this function to work properly, the length of the input must be
-    # greater than 1.
-    #
-    assert(len(event) > 1);
 
     if (len(event) < 5):
         return False;
@@ -365,10 +343,6 @@ def isUnlocking( event ):
 # The input is expected to be a space-delimited array, not a string.
 #
 def getEventName( event ):
-	# For this function to work properly, the input must have a length
-	# of 4 or greater.
-    #
-    assert(len(event) >= 4)
 
     direction = event[0]
 	# Determine if the thread was entering a function.
@@ -421,10 +395,6 @@ def getEventName( event ):
 # The input is expected to be a space-delimited array, not a string.
 #
 def create_vc_header(event):
-	# For this function to work properly, the input must have a length of 4
-	# or greater.
-    #
-	assert(len(event) >= 4)
 
 	# Obtain the timestamp.
 	timestamp = event[3]
@@ -852,239 +822,335 @@ class SharedVariable:
 # If this variable is set to True, the script will output thread activity
 # in the sliding window of size windowSize;
 
+curRecordIdx = 0;
 showWindow = False;
+started = False;
+threadsInWindow = {};
+windowBottom = 0;
+windowFile = None;
+windowFileOpen = False;
 windowSize = 7000;
+windowTop = 0;
 
-def generate_vector_timestamps(eventsForAllThreads, outputFile, start, num):
+def generate_vector_timestamps(event, outputFile, start, num):
 
+    global curRecordIdx;
     global showWindow;
+    global started;
+    global threadsInWindow;
+    global windowBottom;
     global windowFile;
     global windowSize;
+    global windowTop;
 
-    curRecordIdx = 0;
-    threadsInWindow = {};
-    started = False;
-    windowFileOpen = False;
+    if (showWindow):
+        eventsForAllThreads.append(event);
 
-    print("Generating vector timestamps...");
-
-    # The first line in vec_clk.txt needs to be a regular expression which
-	# ShiViz uses to parse through the representation.
-    reg_expr = "(?<timestamp>(\\d*)) (?<event>.*)\\n(?<host>\\w*) (?<clock>.*)"
-    outputFile.write(reg_expr)
-    outputFile.write("\n\n")
-
-    # Process events, generate vector timestamps, write into the
-    # output file
+    # Check for starting and stopping conditions if we are
+    # not parsing the entire trace.
     #
-    for traceRecord in eventsForAllThreads:
+    curRecordIdx = curRecordIdx + 1;
+    if (curRecordIdx < start):
+        return False;
 
-        # Check for starting and stopping conditions if we are
-        # not parsing the entire trace.
+    if ((num > 0) and (curRecordIdx > start + num)):
+        print("Stopping processing at record " + str(curRecordIdx));
+        return True;
+
+    if (not started):
+        print("Beginning to process with record ID " + str(curRecordIdx));
+        started = True;
+
+    t_index = int(event[2]);
+    if (not threads.has_key(t_index)):
+        threads[t_index] = Thread(t_index, outputFile);
+
+    if (showWindow):
+        # Maintain an abstraction of the sliding window of events. Count the
+        # number of threads that appear inside this window. Eventually we
+        # want to be able to select windows with as many threads as
+        # possible.
         #
-        curRecordIdx = curRecordIdx + 1;
-        if (curRecordIdx < start):
-            continue;
-        if (curRecordIdx > start + num):
-            print("Stopping processing at record " + str(curRecordIdx));
-            break;
+        if (not windowFileOpen):
+            windowFile = open("thread-interaction-windows.txt", "w");
+            windowFileOpen = True;
 
-		# Be nice and show to the user some progress indicators.
-		#
-        if (not started):
-            print("Beginning to process with record ID " + str(curRecordIdx));
-            started = True;
+        windowBottom = curRecordIdx;
+        windowTop = max(1, curRecordIdx - windowSize);
 
-        if ((curRecordIdx - start) % 1000000 == 0):
-            print(str(curRecordIdx - start) + " out of " + str(num) + "...");
+        # If the window top has moved past the first record, we must adjust
+        # the thread membership dictionary.
+        #
+        if (windowTop > 1):
+            eventAtWindowTop = eventsForAllThreads[windowTop];
+            tIndexTopEvent = eventAtWindowTop[2];
+            if (threadsInWindow.has_key(tIndexTopEvent)):
+                threadsInWindow[tIndexTopEvent] = \
+                  threadsInWindow[tIndexTopEvent] - 1;
 
-        event = traceRecord.split(" ");
-        try:
-            t_index = int(event[2]);
-            if (not threads.has_key(t_index)):
-                threads[t_index] = Thread(t_index, outputFile);
-        except:
-            print("Dropping invalid record:" + line);
-            continue;
+        # Add the thread in the current record to the membership window.
+        #
+        if (not threadsInWindow.has_key(t_index)):
+            threadsInWindow[t_index] = 0;
+        threadsInWindow[t_index] = 	threadsInWindow[t_index] + 1;
 
-        if (showWindow):
-            # Maintain an abstraction of the sliding window of events. Count the
-            # number of threads that appear inside this window. Eventually we
-            # want to be able to select windows with as many threads as
-            # possible.
-            #
-            if (not windowFileOpen):
-                windowFile = open("thread-interaction-windows.txt", "w");
-                windowFileOpen = True;
-            windowBottom = curRecordIdx;
-            windowTop = max(1, curRecordIdx - windowSize);
+        # Report the size of thread membership window every so often
+        #
+        if (windowBottom % 1000 == 0):
+            windowFile.write("At window top " + str(windowTop) + ":\n" +
+                                 str(threadsInWindow) + "\n");
+            windowFile.write("------------------------------\n");
 
-            # If the window top has moved past the first record, we must adjust
-            # the thread membership dictionary.
-            #
-            if (windowTop > 1):
-                eventAtWindowTop = eventsForAllThreads[windowTop];
-                tIndexTopEvent = int((eventAtWindowTop.split(" "))[2]);
-                if (threadsInWindow.has_key(tIndexTopEvent)):
-                    threadsInWindow[tIndexTopEvent] = \
-                      threadsInWindow[tIndexTopEvent] - 1;
+    if (isMemoryAccess(event)):
 
-            # Add the thread in the current record to the membership window.
-            #
-            if (not threadsInWindow.has_key(t_index)):
-                threadsInWindow[t_index] = 0;
-            threadsInWindow[t_index] = 	threadsInWindow[t_index] + 1;
+        if (isReadingVar(event)):
+            threads[t_index].read_var(event)
+        elif (isWritingVar(event)):
+            threads[t_index].write_var(event)
 
-            # Report the size of thread membership window every so often
-            #
-            if (windowBottom % 1000 == 0):
-                windowFile.write("At window top " + str(windowTop) + ":\n" +
-                                     str(threadsInWindow) + "\n");
-                windowFile.write("------------------------------\n");
+    elif isEnteringLock(event) and (getLockName(event) is not None):
 
-        if (isMemoryAccess(event)):
+        # If the thread entered into a function
+        # acquiring a lock, determine what lock it was
+        # acquiring.
+        lockname = getLockName(event);
 
-            if (isReadingVar(event)):
-                threads[t_index].read_var(event)
-            elif (isWritingVar(event)):
-                threads[t_index].write_var(event)
+        # Check if there is already a lock object
+        # containing the lock name.  If no such lock
+        # object exists, create it.
+        lock_obj = lock_get(lockname);
 
-        elif isEnteringLock(event) and (getLockName(event) is not None):
-            assert(len(event) >= 4)
+        if lock_obj == False:
+            lock_add(lockname)
 
-            # If the thread entered into a function
-            # acquiring a lock, determine what lock it was
-            # acquiring.
-            lockname = getLockName(event)
+        # Obtain the thread object and call the class
+        # method "executed_localevent".
+        threads[t_index].executed_localevent(event)
 
-            # Check if there is already a lock object
-            # containing the lock name.  If no such lock
-            # object exists, create it.
-            lock_obj = lock_get(lockname)
+    elif isExitingLock(event):
 
-            if lock_obj == False:
-                lock_add(lockname)
-
-            # Obtain the thread object and call the class
-            # method "executed_localevent".
-            threads[t_index].executed_localevent(event)
-
-        elif isExitingLock(event):
-            assert(len(event) >= 4)
-
-            if isTryLockEvent(event):
-                # If the thread exited a function which
-                # was trying to acquire a lock, obtain
-                # the thread object and call the class
-                # method "tryinglock".
-                threads[t_index].tryinglock(event)
-                assert(threads[t_index].isTryingLock)
-
-            else:
-                # Otherwise, the thread definitely
-                # succeeded in acquiring the lock.
-                # Obtain the thread object and call the
-                # class method "acquired_lock".
-                threads[t_index].acquired_lock(event)
-
-        elif threads[t_index].isTryingLock and isYielding(event):
-            assert(len(event) >= 4)
-
-            # If the thread yielded after *trying* to acquire
-            # a lock, then the thread failed to obtain the
-            # lock.  Retrieve the thread object and call the
-            # class method "failed_trylock".
-            threads[t_index].failed_trylock(event)
-
-        elif isUnlocking(event):
-            assert(len(event) >= 4)
-
-            if threads[t_index].isTryingLock:
-
-                # If the thread released a lock
-                # immediately after *trying* to acquire
-                # it, then obviously the thread had
-                # succeeded in obtaining that lock.
-                # Obtain the thread object and call the
-                # class method "acquired_trylock".
-                threads[t_index].acquired_trylock()
-
-            # Obtain the thread object and call the class
-            # method "releasing_lock".
-            threads[t_index].releasing_lock(event)
-
-        elif threads[t_index].isTryingLock:
-
-            # If the thread did not yield after *trying* to
-            # acquire a lock, then the script assumes that
-            # the thread succeeded in obtaining the lock.
-
-            # Obtain the thread object and call the class
-            # method "acquired_trylock".
-            threads[t_index].acquired_trylock()
-
-            # After acquring the lock, the thread did not
-            # "communicate" with other threads by releasing
-            # the lock.  Therefore, the thread executed a
-            # local event.  Obtain the thread object and
-            # call the class method "executed_localevent".
-            threads[t_index].executed_localevent(event)
+        if isTryLockEvent(event):
+            # If the thread exited a function which
+            # was trying to acquire a lock, obtain
+            # the thread object and call the class
+            # method "tryinglock".
+            threads[t_index].tryinglock(event);
+            assert(threads[t_index].isTryingLock);
 
         else:
-            assert(len(event) >= 4)
+            # Otherwise, the thread definitely
+            # succeeded in acquiring the lock.
+            # Obtain the thread object and call the
+            # class method "acquired_lock".
+            threads[t_index].acquired_lock(event);
 
-            # The thread executed a local event.  Obtain the
-            # thread object and call the class method
-            # "executed_localevent".
-            threads[t_index].executed_localevent(event)
+    elif threads[t_index].isTryingLock and isYielding(event):
+        # If the thread yielded after *trying* to acquire
+        # a lock, then the thread failed to obtain the
+        # lock.  Retrieve the thread object and call the
+        # class method "failed_trylock".
+        threads[t_index].failed_trylock(event)
 
+    elif isUnlocking(event):
 
-eventsForAllThreads = [];
-threadIDs = {};
+        if threads[t_index].isTryingLock:
 
-def parse_file(fname):
+            # If the thread released a lock
+            # immediately after *trying* to acquire
+            # it, then obviously the thread had
+            # succeeded in obtaining that lock.
+            # Obtain the thread object and call the
+            # class method "acquired_trylock".
+            threads[t_index].acquired_trylock();
 
-    global eventsForAllThreads;
-    global threadIDs;
+        # Obtain the thread object and call the class
+        # method "releasing_lock".
+        threads[t_index].releasing_lock(event);
+
+    elif threads[t_index].isTryingLock:
+
+        # If the thread did not yield after *trying* to
+        # acquire a lock, then the script assumes that
+        # the thread succeeded in obtaining the lock.
+
+        # Obtain the thread object and call the class
+        # method "acquired_trylock".
+        threads[t_index].acquired_trylock();
+
+        # After acquring the lock, the thread did not
+        # "communicate" with other threads by releasing
+        # the lock.  Therefore, the thread executed a
+        # local event.  Obtain the thread object and
+        # call the class method "executed_localevent".
+        threads[t_index].executed_localevent(event);
+
+    else:
+        # The thread executed a local event.  Obtain the
+        # thread object and call the class method
+        # "executed_localevent".
+        threads[t_index].executed_localevent(event);
+
+    return False;
+
+bytesRead = 0;
+bytesLastReported = 0;
+
+def getFirstValidLine(file):
+
+    global bytesLastReported;
+    global bytesRead;
     global maxTID;
 
-    if(fname is not None):
-        try:
-            file = open(fname, "r");
-            print "Parsing file " + fname;
-        except:
-            print "Could not open file " + fname;
-            return;
+    while (True):
+        line = file.readline();
 
-    for line in file:
-        words = line.split(" ");
+        bytesRead = bytesRead + len(line);
+        if (bytesRead - bytesLastReported > 50*1024*1024):
+            print("Parsed " + getSizeStr(bytesRead) + " out of " +
+                      getSizeStr(totalFileSize));
+            bytesLastReported = bytesRead;
 
+        if (not line):
+            return None;
+
+        words = line.strip().split(" ");
         if (len(words) < 4):
             continue;
 
         if ((words[0] == "-->") or
                 (words[0] == "<--") or
-                    ((words[0] == "@") and
-                             (words[1] == "r") or (words[1] == "w"))):
+                ((words[0] == "@") and
+                     (words[1] == "r") or (words[1] == "w"))):
 
             try:
                 threadID = int(words[2]);
                 if (maxTID < threadID):
                     maxTID = threadID;
+
+                timestamp = long(words[3]);
             except:
-                print("Dropping invalid record:" + line);
+                print("Dropping invalid record: " + line);
                 continue;
 
-            assert(threadID >= 0);
+            if (threadID < 0):
+                print("Dropping invalid record: " + line);
+                continue;
+
             if (not threadIDs.has_key(threadID)):
                 threadIDs[threadID] = 1;
 
-            # Looks like a valid event, add to event list.
-            eventsForAllThreads.append(line.strip());
+            # Looks like a valid event, return the array or tokens
+            return words;
         else:
-            print("Dropping invalid record:" + line);
+            print("Dropping invalid record: " + line);
 
-    file.close();
+def fillWithValidEvents(files, fileCurrentLines):
+
+    foundValidLine = False;
+
+    for fname in fileCurrentLines:
+        line = fileCurrentLines[fname];
+        #
+        # If the current line is missing, read lines from the
+        # file and parse until we find one with a valid record.
+        # If we find no valid lines, return false.
+        if (line is None):
+            line = getFirstValidLine(files[fname]);
+            if (line is not None):
+                fileCurrentLines[fname] = line;
+                foundValidLine = True;
+        else:
+            foundValidLine = True;
+
+    return foundValidLine;
+
+def getOldestEvent(fileCurrentLines):
+
+    smallestTS = -1;
+    fnameOfSmallestTS = None;
+
+    for fname in fileCurrentLines:
+
+        words = fileCurrentLines[fname];
+        if (words is None):
+            continue;
+
+        timestamp = int(words[3]);
+        if (smallestTS == -1):
+            smallestTS = timestamp;
+            fnameOfSmallestTS = fname;
+
+        if (timestamp < smallestTS):
+            smallestTS = timestamp;
+            fnameOfSmallestTS = fname;
+
+    oldestEvent = fileCurrentLines[fnameOfSmallestTS];
+    fileCurrentLines[fnameOfSmallestTS] = None;
+
+    return oldestEvent;
+
+def getSizeStr(size):
+
+    if (size > 1024 * 1024 * 1024):
+        sizeStr = str(size / 1024 / 1024 / 1024) + "GB";
+    elif (size > 1024 * 1024):
+        sizeStr = str(size / 1024 / 1024) + "MB";
+    elif (size > 1024):
+        sizeStr = str(size / 1024) + "KB";
+    else:
+        sizeStr = str(size) + "B";
+    return sizeStr;
+
+def parse_files(fnames, outputFile, start, num):
+
+    global eventsForAllThreads;
+    global totalFileSize;
+    global threadIDs;
+    global maxTID;
+
+    files = {};
+    fileCurrentLines = {};
+
+    # Open all files
+    for fname in fnames:
+        if(fname is not None):
+            try:
+                files[fname] = open(fname, "r");
+                size = os.path.getsize(fname);
+                totalFileSize = totalFileSize + size;
+                sizeStr = getSizeStr(size);
+                print("Opened file " + fname + " of size " + sizeStr);
+                fileCurrentLines[fname] = None;
+            except:
+                print "Could not open file " + fname;
+                return;
+
+
+    # Read the first line in each file. Prepare to iterate
+    # them concurrently, parsing and sorting at once.
+    #
+    while (fillWithValidEvents(files, fileCurrentLines)):
+        oldestEvent = getOldestEvent(fileCurrentLines);
+        done = generate_vector_timestamps(oldestEvent, outputFile, start, num);
+        if (done):
+            break;
+
+    for fname in files:
+        files[fname].close();
+
+def guessThreadStats(fnames):
+
+    maxTID = 0;
+
+    nthreads = len(fnames);
+
+    for fname in fnames:
+        numbers = re.findall(r'\d+', fname);
+        for number in numbers:
+            if (maxTID < int(number)):
+                maxTID = int(number);
+
+    return nthreads, maxTID;
 
 def main():
 
@@ -1093,14 +1159,11 @@ def main():
     global showWindow;
     global maxTID;
 
-    preProcessedTrace = '.vec-clk-trace.pickle';
-
     parser = argparse.ArgumentParser(description=
                                     'Convert text traces to TSViz '
                                          'vector clock logs');
     parser.add_argument('files', type=str, nargs='*',
                             help='log files to process');
-    parser.add_argument('-l', '--load', dest='load', action='store_true');
     parser.add_argument('-n', '--numevents', dest='num_events',
                             default='ALL');
     parser.add_argument('-s', '--start', dest='starting_point',
@@ -1112,40 +1175,7 @@ def main():
     if (args.window):
         showWindow = True;
 
-    # Load the pre-processed trace from a file
-    #
-    if (args.load):
-        print("Loading pre-processed trace from " + preProcessedTrace);
-
-        with open(preProcessedTrace, 'r') as handle:
-            nthreads = pickle.load(handle);
-            maxTID = pickle.load(handle);
-            eventsForAllThreads = pickle.load(handle);
-    elif (len(args.files) > 0):
-        # Parse trace files from scratch
-        #
-        print("Parsing files...");
-        for fname in args.files:
-            parse_file(fname);
-
-        nthreads = len(threadIDs);
-        print("Parsed " + str(len(eventsForAllThreads)) + " events");
-
-        # Let's sort the list by timestamp
-        print("Sorting events list...");
-        eventsForAllThreads.sort(key=lambda ts: long(ts.split()[3]));
-
-        # Write the trace metadata and the sorted list of events into
-        # a file in case we ever want to reuse them later.
-        #
-        with open(preProcessedTrace, 'wb') as handle:
-            print("Saving pre-processed trace to " + preProcessedTrace);
-            pickle.dump(nthreads, handle, protocol=pickle.HIGHEST_PROTOCOL);
-            pickle.dump(maxTID, handle, protocol=pickle.HIGHEST_PROTOCOL);
-            pickle.dump(eventsForAllThreads, handle,
-                            protocol=pickle.HIGHEST_PROTOCOL);
-            handle.close();
-
+    nthreads, maxTID = guessThreadStats(args.files);
     print("Identified " + str(nthreads) + " threads.");
     print("Maximum thread ID is " + str(maxTID));
 
@@ -1153,8 +1183,6 @@ def main():
     # how many to generate
     if (args.starting_point == 'BEGINNING'):
         start = 0;
-    elif (args.starting_point == 'MIDDLE'):
-        start = len(eventsForAllThreads) / 2;
     else:
         try:
             start = int(args.starting_point);
@@ -1164,7 +1192,7 @@ def main():
             return;
 
     if (args.num_events == "ALL"):
-        num = len(eventsForAllThreads);
+        num = -1;
     else:
         try:
             num = int(args.num_events);
@@ -1173,9 +1201,25 @@ def main():
                        " to an integer value for --num_events argument");
             return;
 
-    outputFile = open("vector_timestamps." + str(start) + "-" + str(num) +
-                          ".vec", "w");
-    generate_vector_timestamps(eventsForAllThreads, outputFile, start, num);
+    outputFile = open("vector_timestamps." + args.starting_point
+                          + "-" + args.num_events
+                          + ".vec", "w");
+
+    # Write the header into the file for vector timestamps
+    #
+    # The first line needs to be a regular expression which
+	# TSViz uses to parse through the representation.
+    #
+    reg_expr = "(?<timestamp>(\\d*)) (?<event>.*)\\n(?<host>\\w*) (?<clock>.*)"
+    outputFile.write(reg_expr)
+    outputFile.write("\n\n")
+
+    if (len(args.files) > 0):
+        # Parse trace files from scratch
+        #
+        print("Parsing files...");
+        parse_files(args.files, outputFile, start, num);
+
     outputFile.close()
 
 if __name__ == '__main__':
