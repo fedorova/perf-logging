@@ -840,6 +840,7 @@ def generate_vector_timestamps(event, outputFile, start, num):
     global threadsInWindow;
     global windowBottom;
     global windowFile;
+    global windowFileOpen;
     global windowSize;
     global windowTop;
 
