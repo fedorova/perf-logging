@@ -25,6 +25,14 @@ class LogRecord:
         self.thread = thread;
         self.time = long(time);
         self.otherInfo = otherInfo;
+        #
+        # otherInfo typically includes argument values. We append
+        # it to the function name.
+        #
+        if (otherInfo is not None):
+            self.fullName = func + " " + otherInfo;
+        else:
+            self.fullName = func;
 
     def printLogRecord(self):
         print(self.op + " " + self.func + " " + str(self.thread) + " "
@@ -74,8 +82,13 @@ class TraceStats:
 
 class PerfData:
 
-    def __init__(self, name, threadID):
+    def __init__(self, name, otherInfo, threadID):
         self.name = name;
+        # If this is a lock function, then otherInfo
+        # would contain the information for identifying
+        # this lock.
+        #
+        self.lockName = otherInfo;
         self.threadID = threadID;
         self.numCalls = 0;
         self.totalRunningTime = long(0);
@@ -102,6 +115,23 @@ class PerfData:
         file.write("\t Largest running time: " +
                    '{:,}'.format(self.maxRunningTime) +
 	           " ns.\n");
+
+    def printSelfHTML(self, prefix, locksSummaryRecords):
+        with open(prefix + "/" + self.name + ".html", 'w+') as file:
+            file.write("*** " + self.name + "\n");
+            file.write("\t Total running time: " +
+                       '{:,}'.format(self.totalRunningTime) +
+                       " ns.\n");
+            file.write("\t Average running time: "
+                       + '{:,}'.format(long(self.getAverage())) + " ns.\n");
+            file.write("\t Largest running time: " +
+                       '{:,}'.format(self.maxRunningTime) +
+	               " ns.\n");
+            file.write("------------------\n");
+            if (self.lockName is not None):
+                if (locksSummaryRecords.has_key(self.lockName)):
+                    lockData = locksSummaryRecords[self.lockName];
+                    lockData.printSelfHTML(file);
 
 #
 # LockData class contains information about lock-related functions
@@ -161,6 +191,22 @@ class LockData:
         file.write("\t Average time the lock was held: "
               + str(long(self.getAverageTimeHeld())) + " ns.\n");
 
+    def printSelfHTML(self, file):
+
+        file.write("Lock \"" + self.name + "\":\n");
+        file.write("\t Num acquire: " + str(self.numAcquire) + "\n");
+        file.write("\t Num trylock: " + str(self.numTryLock) + "\n");
+        file.write("\t Num release: " + str(self.numRelease) + "\n");
+        file.write("\t Average time in acquire: "
+              + str(long(self.getAverageAcquire())) + " ns.\n");
+        file.write("\t Average time in trylock: "
+              + str(long(self.getAverageTryLock())) + " ns.\n");
+        file.write("\t Average time in release: "
+              + str(long(self.getAverageRelease())) + " ns.\n");
+        file.write("\t Average time the lock was held: "
+              + str(long(self.getAverageTimeHeld())) + " ns.\n");
+
+
 #
 # The following data structures and functions help us decide what
 # kind of lock-related action the function is doing:
@@ -208,19 +254,13 @@ def looks_like_lock(funcname):
         return False;
 
 def do_lock_processing(locksDictionary, logRec, runningTime,
-                       nameWords):
+                       lockName):
     global verbose;
     global multipleAcquireWithoutRelease;
     global tryLockWarning;
     global noMatchingAcquireOnRelease;
 
-    lockName = "";
     func = logRec.func
-
-    # Reconstruct the lock name
-    for word in nameWords:
-        lockName = lockName + word.strip() + " ";
-    lockName.strip();
 
     if(not locksDictionary.has_key(lockName)):
         lockData = LockData(lockName);
@@ -454,6 +494,7 @@ def augment_graph(graph, funcSummaryData, traceStats):
                                              attrs[1];
             graph.node[nodeName]['style'] = "filled";
             graph.node[nodeName]['fillcolor'] = attrs[0];
+            graph.node[nodeName]['URL'] = nodeName + ".html";
 
 def update_graph(graph, nodeName, prevNodeName):
 
@@ -499,7 +540,7 @@ def generate_graph(logRecords):
         prevNodeName = generate_func_only_graph(graph, logRecords, prevNodeName)
     else:
         for logRec in logRecords:
-            nodeName = logRec.op + " " + logRec.func;
+            nodeName = logRec.op + " " + logRec.fullName;
             update_graph(graph, nodeName, prevNodeName);
             prevNodeName = nodeName;
 
@@ -529,12 +570,12 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
         # logging before the function exit record was generated, as can
         # be with functions that start threads.
         #
-        if not funcSummaryRecords.has_key(rec.func):
+        if not funcSummaryRecords.has_key(rec.fullName):
             print("Warning: no performance record for function " +
                   rec.func);
             continue;
 
-        pdr = funcSummaryRecords[rec.func];
+        pdr = funcSummaryRecords[rec.fullName];
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
         if (percent <= percentThreshold):
@@ -547,6 +588,12 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
             filteredRecords.append(rec);
 
     return filteredRecords;
+
+def generateHTML(htmlFileName, imageFileName, mapFileName):
+
+    with open htmlFileName as htmlFile:
+        with open mapFileName as mapFile:
+            
 
 def parse_file(fname, prefix):
 
@@ -600,7 +647,8 @@ def parse_file(fname, prefix):
             thread = int(words[2]);
             time = long(words[3]);
             if (len(words) > 4):
-                otherInfo = words[4:len(words)];
+                parts = words[4:len(words)];
+                otherInfo = (" ".join(parts)).rstrip();
 
         except ValueError:
             print "Could not parse: " + line;
@@ -614,7 +662,6 @@ def parse_file(fname, prefix):
             continue;
 
         rec = LogRecord(func, op, thread, time, otherInfo);
-        logRecords.append(rec);
 
         if(startTime == 0):
             startTime = time;
@@ -625,6 +672,9 @@ def parse_file(fname, prefix):
             # Timestamp for function entrance
             # Push each entry record onto the stack.
             stack.append(rec);
+
+            # Add this log record to the array
+            logRecords.append(rec);
 
             # If we are told to write the records to the output
             # file, do so.
@@ -668,11 +718,11 @@ def parse_file(fname, prefix):
 
                     runningTime = long(rec.time) - long(stackRec.time);
 
-                    if(not funcSummaryRecords.has_key(stackRec.func)):
-                        newPDR = PerfData(stackRec.func, thread);
-                        funcSummaryRecords[stackRec.func] = newPDR;
+                    if(not funcSummaryRecords.has_key(stackRec.fullName)):
+                        newPDR = PerfData(stackRec.fullName, otherInfo, thread);
+                        funcSummaryRecords[stackRec.fullName] = newPDR;
 
-                    pdr = funcSummaryRecords[stackRec.func];
+                    pdr = funcSummaryRecords[stackRec.fullName];
                     pdr.totalRunningTime = pdr.totalRunningTime + runningTime;
                     pdr.numCalls = pdr.numCalls + 1;
                     pdr.runningTimes.append(runningTime);
@@ -680,6 +730,15 @@ def parse_file(fname, prefix):
                         pdr.maxRunningTime = runningTime;
                         pdr.maxRunningTimeTimeStamp = stackRec.time;
                     found = True
+
+                    # Full name is the name of the function, plus whatever other
+                    # info was given to us, usually values of arguments. This
+                    # information is only printed for the function entry record,
+                    # so if we are at the function exit record, we must copy
+                    # that information from the corresponding entry record.
+                    #
+                    rec.fullName = stackRec.fullName;
+                    logRecords.append(rec);
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -691,8 +750,7 @@ def parse_file(fname, prefix):
                                            runningTime,
                                            stackRec.otherInfo);
                         if(outputFile is not None):
-                            for lockNamePart in stackRec.otherInfo:
-                                outputFile.write(" " + lockNamePart.strip());
+                            outputFile.write(" " + stackRec.otherInfo);
                     break;
             if(not found):
                 print("Could not find matching function entrance for line: \n"
@@ -708,19 +766,34 @@ def parse_file(fname, prefix):
     filteredLogRecords = filterLogRecords(logRecords, funcSummaryRecords,
                                           traceStats);
 
+    # Generate HTML files summarizing function stats for all functions that
+    # were not filtered.
+    print("Generating per-function HTML files...");
+    for pdr in funcSummaryRecords.values():
+        if (not pdr.filtered):
+            pdr.printSelfHTML(".", locksSummaryRecords);
+
     # Augment graph attributes to reflect performance characteristics
     graph = generate_graph(filteredLogRecords);
     augment_graph(graph, funcSummaryRecords, traceStats);
 
-    # Print the graph
+    # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
     aGraph.add_subgraph("START", rank = "source");
     aGraph.add_subgraph("END", rank = "sink");
-    graphFileName = prefix + "." + graphType + "."  \
-                    + str(percentThreshold) + "%." + graphFilePostfix;
 
-    aGraph.draw(graphFileName, prog = 'dot');
-    print("Graph is saved to: " + graphFileName);
+    # Generate files
+    nameNoPostfix = prefix + "." + graphType + "."+ str(percentThreshold) + "%."
+
+    imageFileName = nameNoPostfix + graphFilePostfix;
+    print("Graph image is saved to: " + imageFileName);
+    aGraph.draw(imageFileName, prog = 'dot');
+
+    mapFileName = nameNoPostfix + "cmapx";
+    aGraph.draw(mapFileName, prog = 'dot');
+    print("Graph image map is saved to: " + graphFileName);
+
+    generateHTML(nameNoPostfix + "html", imageFileName, mapFileName);
 
     if(outputFile is not None):
         outputFile.close();
