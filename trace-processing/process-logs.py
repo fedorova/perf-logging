@@ -7,11 +7,12 @@ import networkx as nx
 import operator
 import os
 import os.path
+import re
 import sys
 
 graphFilePostfix = None;
 graphType = None;
-htmlTemplateLocation = "";
+htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
 separator = " ";
@@ -668,8 +669,36 @@ def stripHTMLDirFromFileName(fileName, htmlDir):
 
     return fileName;
 
-def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir):
+def insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile):
 
+    global htmlTemplate;
+
+    # Extract thread ID from the file names. We assume that this
+    # is the first number encountered in the file name.
+    #
+    numbers = re.findall(r'\d+', imageFileName);
+    if (len(numbers) > 0):
+        threadID = str(numbers[0]);
+    else:
+        threadID = "";
+
+    # Read the file, find the placeholder patterns, replace them
+    # with the actual values. Write the text into top HTML file.
+    for line in htmlTemplate:
+        if ("#Thread" in line):
+            line = line.replace("#Thread", "Thread " + threadID);
+        if ("#htmlFile" in line):
+            line = line.replace("#htmlFile", htmlFileName);
+        if ("#imageFile" in line):
+            line = line.replace("#imageFile", imageFileName);
+        topHTMLFile.write(line);
+
+    # Rewind the template file for the next reader
+    htmlTemplate.seek(0);
+
+
+def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
+                            topHTMLFile):
     i = 0;
 
     try:
@@ -702,6 +731,11 @@ def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir):
 
     htmlFile.close();
     mapFile.close();
+
+    # Insert the image file linked to the HTML file into the top HTML file.
+    insertIntoTopHTML(relativeImageFileName,
+                          stripHTMLDirFromFileName(htmlFileName, htmlDir),
+                                                       topHTMLFile);
 
 def parse_file(fname, prefix, topHTMLFile, htmlDir):
 
@@ -902,7 +936,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
     print("Image map is saved to: " + imageFileName);
 
     generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
-                            htmlDir);
+                            htmlDir, topHTMLFile);
 
     if(outputFile is not None):
         outputFile.close();
@@ -928,14 +962,61 @@ def createTopHTML(htmlDir):
         except:
             print "Could not create directory " + htmlDir;
             return None;
-    return None;
+
+    try:
+        topHTML = open(htmlDir + "/index.html", "w");
+    except:
+        print "Could not open " + htmlDir + "/index.html for writing";
+        return None;
+
+    topHTML.write("<!DOCTYPE html>\n");
+    topHTML.write("<html>\n");
+    topHTML.write("<head>\n");
+    topHTML.write("<link rel=\"stylesheet\" type=\"text/css\"" +
+                      "href=\"style.css\">\n");
+    topHTML.write("</head>\n");
+    topHTML.write("<body>\n");
+
+    return topHTML;
+
+def completeTopHTML(topHTML):
+
+    topHTML.write("</body>\n");
+    topHTML.write("</html>\n");
+    topHTML.close();
+
+def findHTMLTemplate(htmlDir):
+
+    scriptLocation = os.path.dirname(os.path.realpath(__file__));
+    htmlTemplateLocation = scriptLocation + "/" + \
+      "showGraphs/stateTransitionCharts.html";
+    cssFileLocation = scriptLocation + "/" + \
+      "showGraphs/style.css";
+    if (not (os.path.exists(htmlTemplateLocation) and
+                 os.path.exists(cssFileLocation))):
+        print("Cannot locate either of the required files: ");
+        print("\t" + '\033[1m' + htmlTemplateLocation);
+        print("\t" + cssFileLocation);
+        print("\033[0m" +
+                  "Please make sure you run the script from within the same "
+                  + " directory structure as in the original repository.");
+        return None;
+    else:
+        os.system('cp '+ cssFileLocation + " " + htmlDir + "/style.css");
+
+    try:
+        htmlTemplate = open(htmlTemplateLocation, "r");
+        return htmlTemplate;
+    except:
+        print "Could not open " + htmlTemplateLocation + " for reading";
+        return None;
 
 def main():
 
     global firstNodeName;
     global graphFilePostfix;
     global graphType;
-    global htmlTemplateLocation;
+    global htmlTemplate;
     global lastNodeName;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
@@ -989,25 +1070,16 @@ def main():
     # Make sure that we know where to find the HTML file templates
     # before we spend all the time parsing the traces only to fail later.
     #
-    scriptLocation = os.path.dirname(os.path.realpath(__file__));
-    htmlTemplateLocation = scriptLocation + "/" + \
-      "showGraphs/stateTransitionCharts.html";
-    cssFileLocation = scriptLocation + "/" + \
-      "showGraphs/style.css";
-    if (not (os.path.exists(htmlTemplateLocation) and
-                 os.path.exists(cssFileLocation))):
-        print("Cannot locate either of the required files: ");
-        print("\t" + '\033[1m' + htmlTemplateLocation);
-        print("\t" + cssFileLocation);
-        print("\033[0m" +
-                  "Please make sure you run the script from within the same "
-                  + " directory structure as in the original repository.");
+    htmlTemplate = findHTMLTemplate(args.htmlDir);
+    if (htmlTemplate is None):
         return;
 
     # Let's create the first part of the HTML file, which will contain
     # all graph images linked to per-graph HTML files.
     #
     topHTMLFile = createTopHTML(args.htmlDir);
+    if (topHTMLFile is None):
+        return;
 
     if(len(args.files) > 0):
         for fname in args.files:
@@ -1026,6 +1098,8 @@ def main():
             sys.exit();
         else:
             parse_file(None, args.prefix, topHTMLFile, args.htmlDir);
+
+    completeTopHTML(topHTMLFile);
 
 
 if __name__ == '__main__':
