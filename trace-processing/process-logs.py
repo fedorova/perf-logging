@@ -1067,18 +1067,18 @@ def main():
     for key, value in vars(args).iteritems():
         print ("\t" + key + ": " + str(value));
 
-    # Make sure that we know where to find the HTML file templates
-    # before we spend all the time parsing the traces only to fail later.
-    #
-    htmlTemplate = findHTMLTemplate(args.htmlDir);
-    if (htmlTemplate is None):
-        return;
-
     # Let's create the first part of the HTML file, which will contain
     # all graph images linked to per-graph HTML files.
     #
     topHTMLFile = createTopHTML(args.htmlDir);
     if (topHTMLFile is None):
+        return;
+
+    # Make sure that we know where to find the HTML file templates
+    # before we spend all the time parsing the traces only to fail later.
+    #
+    htmlTemplate = findHTMLTemplate(args.htmlDir);
+    if (htmlTemplate is None):
         return;
 
     if(len(args.files) > 0):
