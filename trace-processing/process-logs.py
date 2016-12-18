@@ -1,10 +1,12 @@
 #!/usr/local/bin/python -tt
 
-import sys
 import argparse
+import colorsys
+import errno
 import networkx as nx
 import operator
-import colorsys
+import os
+import sys
 
 graphFilePostfix = None;
 graphType = None;
@@ -117,7 +119,7 @@ class PerfData:
 	           " ns.\n");
 
     def printSelfHTML(self, prefix, locksSummaryRecords):
-        with open(prefix + "/" + self.name + ".html", 'w+') as file:
+        with open(prefix + "/" + self.name + ".txt", 'w+') as file:
             file.write("*** " + self.name + "\n");
             file.write("\t Total running time: " +
                        '{:,}'.format(self.totalRunningTime) +
@@ -431,12 +433,20 @@ def buildColorList():
 
     return colorRange;
 
+def extractFuncName(nodeName):
+
+    words = nodeName.split(" ");
+
+    if (words[0] == "enter" or words[0] == "exit"):
+        return " ".join(words[1:len(words)]);
+    else:
+        return nodeName;
 #
 # Figure out the percent execution time for each function relative to the total.
 # Compute the colour based on the percent. Set the node colour accordingly.
 # Update the node label with the percent value.
 #
-def augment_graph(graph, funcSummaryData, traceStats):
+def augment_graph(graph, funcSummaryData, traceStats, prefix):
 
     # This dictionary is the mapping between function names and
     # their percent of execution time.
@@ -494,7 +504,8 @@ def augment_graph(graph, funcSummaryData, traceStats):
                                              attrs[1];
             graph.node[nodeName]['style'] = "filled";
             graph.node[nodeName]['fillcolor'] = attrs[0];
-            graph.node[nodeName]['URL'] = nodeName + ".html";
+            graph.node[nodeName]['URL'] = "_" + prefix.upper() + "/" + \
+              extractFuncName(nodeName) + ".txt";
 
 def update_graph(graph, nodeName, prevNodeName):
 
@@ -589,11 +600,88 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     return filteredRecords;
 
+def writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
+                         traceStats):
+
+    # Write the summary to the output file.
+    try:
+        summaryFileName = prefix + ".summary";
+        summaryFile = open(summaryFileName, "w");
+        print("Summary file is " + summaryFileName);
+    except:
+        print("Could not create summary file " + summaryFileName);
+        summaryFile = sys.stdout;
+
+    summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
+    summaryFile.write("------------------------------\n");
+
+    summaryFile.write("Total trace time: "
+                      + str(traceStats.getTotalTime()) + "\n");
+    summaryFile.write(
+        "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
+
+    for fkey, pdr in funcSummaryRecords.iteritems():
+        pdr.printSelf(summaryFile);
+
+        summaryFile.write("------------------------------\n");
+
+    lockDataDict = locksSummaryRecords;
+
+    summaryFile.write("\nLOCKS SUMMARY\n");
+    for lockKey, lockData in lockDataDict.iteritems():
+        lockData.printSelf(summaryFile);
+
+    summaryFile.write("------------------------------\n");
+    summaryFile.close();
+
+def generatePerFuncHTMLFiles(prefix, funcSummaryRecords, locksSummaryRecords):
+
+    dirname = "_" + prefix.upper();
+
+    if not os.path.exists(dirname):
+        try:
+            os.mkdir("./" + dirname);
+            print("Directory " + dirname + " created");
+        except:
+            print "Could not create directory " + dirname;
+            return;
+
+    for pdr in funcSummaryRecords.values():
+        if (not pdr.filtered):
+             pdr.printSelfHTML(dirname, locksSummaryRecords);
+
 def generateHTML(htmlFileName, imageFileName, mapFileName):
 
-    with open htmlFileName as htmlFile:
-        with open mapFileName as mapFile:
-            
+    i = 0;
+
+    try:
+        htmlFile = open(htmlFileName, "w");
+    except:
+        print("Could not open " + htmlFileName + " for writing");
+        return;
+
+    try:
+        mapFile = open(mapFileName, "r");
+    except:
+        print("Could not open " + mapFileName + " for writing");
+        return;
+
+    htmlFile.write("<html><img src=\"" + imageFileName +
+                       "\"  usemap=\"#G\">\n");
+    htmlFile.write("<map id=\"G\" name=\"G\">\n");
+
+    for line in mapFile:
+        i = i + 1;
+        if (i == 1):
+            assert(line.startswith("<map id="));
+            continue;
+
+        htmlFile.write(line);
+
+    htmlFile.write("</html>\n");
+
+    htmlFile.close();
+    mapFile.close();
 
 def parse_file(fname, prefix):
 
@@ -769,13 +857,11 @@ def parse_file(fname, prefix):
     # Generate HTML files summarizing function stats for all functions that
     # were not filtered.
     print("Generating per-function HTML files...");
-    for pdr in funcSummaryRecords.values():
-        if (not pdr.filtered):
-            pdr.printSelfHTML(".", locksSummaryRecords);
+    generatePerFuncHTMLFiles(prefix, funcSummaryRecords, locksSummaryRecords);
 
     # Augment graph attributes to reflect performance characteristics
     graph = generate_graph(filteredLogRecords);
-    augment_graph(graph, funcSummaryRecords, traceStats);
+    augment_graph(graph, funcSummaryRecords, traceStats, prefix);
 
     # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
@@ -791,43 +877,15 @@ def parse_file(fname, prefix):
 
     mapFileName = nameNoPostfix + "cmapx";
     aGraph.draw(mapFileName, prog = 'dot');
-    print("Graph image map is saved to: " + graphFileName);
+    print("Graph image map is saved to: " + imageFileName);
 
     generateHTML(nameNoPostfix + "html", imageFileName, mapFileName);
 
     if(outputFile is not None):
         outputFile.close();
 
-    # Write the summary to the output file.
-    try:
-        summaryFileName = prefix + ".summary";
-        summaryFile = open(summaryFileName, "w");
-        print("Summary file is " + summaryFileName);
-    except:
-        print("Could not create summary file " + summaryFileName);
-        summaryFile = sys.stdout;
-
-    summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
-    summaryFile.write("------------------------------\n");
-
-    summaryFile.write("Total trace time: "
-                      + str(traceStats.getTotalTime()) + "\n");
-    summaryFile.write(
-        "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
-
-    for fkey, pdr in funcSummaryRecords.iteritems():
-        pdr.printSelf(summaryFile);
-
-        summaryFile.write("------------------------------\n");
-
-    lockDataDict = locksSummaryRecords;
-
-    summaryFile.write("\nLOCKS SUMMARY\n");
-    for lockKey, lockData in lockDataDict.iteritems():
-        lockData.printSelf(summaryFile);
-
-    summaryFile.write("------------------------------\n");
-    summaryFile.close();
+    writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
+                         traceStats);
 
 
 def getPrefix(fname):
