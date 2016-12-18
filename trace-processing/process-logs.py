@@ -6,10 +6,12 @@ import errno
 import networkx as nx
 import operator
 import os
+import os.path
 import sys
 
 graphFilePostfix = None;
 graphType = None;
+htmlTemplateLocation = "";
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
 separator = " ";
@@ -446,7 +448,7 @@ def extractFuncName(nodeName):
 # Compute the colour based on the percent. Set the node colour accordingly.
 # Update the node label with the percent value.
 #
-def augment_graph(graph, funcSummaryData, traceStats, prefix):
+def augment_graph(graph, funcSummaryData, traceStats, prefix, htmlDir):
 
     # This dictionary is the mapping between function names and
     # their percent of execution time.
@@ -504,8 +506,8 @@ def augment_graph(graph, funcSummaryData, traceStats, prefix):
                                              attrs[1];
             graph.node[nodeName]['style'] = "filled";
             graph.node[nodeName]['fillcolor'] = attrs[0];
-            graph.node[nodeName]['URL'] = "_" + prefix.upper() + "/" + \
-              extractFuncName(nodeName) + ".txt";
+            graph.node[nodeName]['URL'] = "_" + prefix.upper() \
+              + "/" + extractFuncName(nodeName) + ".txt";
 
 def update_graph(graph, nodeName, prevNodeName):
 
@@ -634,9 +636,10 @@ def writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
     summaryFile.write("------------------------------\n");
     summaryFile.close();
 
-def generatePerFuncHTMLFiles(prefix, funcSummaryRecords, locksSummaryRecords):
+def generatePerFuncHTMLFiles(prefix, htmlDir,
+                                 funcSummaryRecords, locksSummaryRecords):
 
-    dirname = "_" + prefix.upper();
+    dirname = htmlDir + "/" + "_" + prefix.upper();
 
     if not os.path.exists(dirname):
         try:
@@ -650,7 +653,22 @@ def generatePerFuncHTMLFiles(prefix, funcSummaryRecords, locksSummaryRecords):
         if (not pdr.filtered):
              pdr.printSelfHTML(dirname, locksSummaryRecords);
 
-def generateHTML(htmlFileName, imageFileName, mapFileName):
+# In some cases we need to strip the HTML directory name from the
+# beginning of the imageFileName, because the image source
+# must be relative to the html file, which itself is in
+# the HTML directory.
+#
+def stripHTMLDirFromFileName(fileName, htmlDir):
+
+    if (fileName.startswith(htmlDir)):
+        fileName = fileName[len(htmlDir):];
+
+    while (fileName.startswith("/")):
+        fileName = fileName[1:];
+
+    return fileName;
+
+def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir):
 
     i = 0;
 
@@ -666,7 +684,9 @@ def generateHTML(htmlFileName, imageFileName, mapFileName):
         print("Could not open " + mapFileName + " for writing");
         return;
 
-    htmlFile.write("<html><img src=\"" + imageFileName +
+    relativeImageFileName = stripHTMLDirFromFileName(imageFileName, htmlDir);
+
+    htmlFile.write("<html><img src=\"" + relativeImageFileName +
                        "\"  usemap=\"#G\">\n");
     htmlFile.write("<map id=\"G\" name=\"G\">\n");
 
@@ -683,7 +703,7 @@ def generateHTML(htmlFileName, imageFileName, mapFileName):
     htmlFile.close();
     mapFile.close();
 
-def parse_file(fname, prefix):
+def parse_file(fname, prefix, topHTMLFile, htmlDir):
 
     startTime = 0;
     endTime = 0;
@@ -857,11 +877,12 @@ def parse_file(fname, prefix):
     # Generate HTML files summarizing function stats for all functions that
     # were not filtered.
     print("Generating per-function HTML files...");
-    generatePerFuncHTMLFiles(prefix, funcSummaryRecords, locksSummaryRecords);
+    generatePerFuncHTMLFiles(prefix, htmlDir,
+                                 funcSummaryRecords, locksSummaryRecords);
 
     # Augment graph attributes to reflect performance characteristics
     graph = generate_graph(filteredLogRecords);
-    augment_graph(graph, funcSummaryRecords, traceStats, prefix);
+    augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
     # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
@@ -869,7 +890,8 @@ def parse_file(fname, prefix):
     aGraph.add_subgraph("END", rank = "sink");
 
     # Generate files
-    nameNoPostfix = prefix + "." + graphType + "."+ str(percentThreshold) + "%."
+    nameNoPostfix = htmlDir + "/" + \
+      prefix + "." + graphType + "."+ str(percentThreshold) + "%."
 
     imageFileName = nameNoPostfix + graphFilePostfix;
     print("Graph image is saved to: " + imageFileName);
@@ -877,9 +899,10 @@ def parse_file(fname, prefix):
 
     mapFileName = nameNoPostfix + "cmapx";
     aGraph.draw(mapFileName, prog = 'dot');
-    print("Graph image map is saved to: " + imageFileName);
+    print("Image map is saved to: " + imageFileName);
 
-    generateHTML(nameNoPostfix + "html", imageFileName, mapFileName);
+    generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
+                            htmlDir);
 
     if(outputFile is not None):
         outputFile.close();
@@ -896,11 +919,23 @@ def getPrefix(fname):
     else:
         return fname;
 
+def createTopHTML(htmlDir):
+
+    if not os.path.exists(htmlDir):
+        try:
+            os.mkdir("./" + htmlDir);
+            print("Directory " + htmlDir + " created");
+        except:
+            print "Could not create directory " + htmlDir;
+            return None;
+    return None;
+
 def main():
 
     global firstNodeName;
     global graphFilePostfix;
     global graphType;
+    global htmlTemplateLocation;
     global lastNodeName;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
@@ -916,6 +951,9 @@ def main():
 
     parser.add_argument('--prefix', dest='prefix', type=str);
 
+    parser.add_argument('--htmlDir', dest='htmlDir', type=str,
+                            default='HTML');
+
     parser.add_argument('--verbose', dest='verbose', action='store_true');
 
     parser.add_argument('-g', '--graphtype', dest='graphtype',
@@ -924,8 +962,8 @@ def main():
                         Possible values: enter_exit, func_only');
 
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
-                        type=float, default = 0.0,
-                        help='Default=0.0; \
+                        type=float, default = 2.0,
+                        help='Default=2.0; \
                         When we compute the execution flow graph, we will not \
                         include any functions, whose percent execution time   \
                         is smaller that value.')
@@ -944,6 +982,33 @@ def main():
     percentThreshold = args.percentThreshold;
     separator = args.separator;
 
+    print("Running with the following parameters:");
+    for key, value in vars(args).iteritems():
+        print ("\t" + key + ": " + str(value));
+
+    # Make sure that we know where to find the HTML file templates
+    # before we spend all the time parsing the traces only to fail later.
+    #
+    scriptLocation = os.path.dirname(os.path.realpath(__file__));
+    htmlTemplateLocation = scriptLocation + "/" + \
+      "showGraphs/stateTransitionCharts.html";
+    cssFileLocation = scriptLocation + "/" + \
+      "showGraphs/style.css";
+    if (not (os.path.exists(htmlTemplateLocation) and
+                 os.path.exists(cssFileLocation))):
+        print("Cannot locate either of the required files: ");
+        print("\t" + '\033[1m' + htmlTemplateLocation);
+        print("\t" + cssFileLocation);
+        print("\033[0m" +
+                  "Please make sure you run the script from within the same "
+                  + " directory structure as in the original repository.");
+        return;
+
+    # Let's create the first part of the HTML file, which will contain
+    # all graph images linked to per-graph HTML files.
+    #
+    topHTMLFile = createTopHTML(args.htmlDir);
+
     if(len(args.files) > 0):
         for fname in args.files:
             # Figure out the prefix for the output files
@@ -952,7 +1017,7 @@ def main():
             else:
                 prefix = args.prefix;
             print("Prefix is " + prefix);
-            parse_file(fname, prefix);
+            parse_file(fname, prefix, topHTMLFile, args.htmlDir);
     else: # We are reading from stdin
         if(args.prefix is None):
             print("I am told to read from stdin (no files are provided), "),
@@ -960,7 +1025,7 @@ def main():
             print("Please use --prefix to provide it.");
             sys.exit();
         else:
-            parse_file(None, args.prefix);
+            parse_file(None, args.prefix, topHTMLFile, args.htmlDir);
 
 
 if __name__ == '__main__':
