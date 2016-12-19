@@ -505,8 +505,8 @@ def augment_graph(graph, funcSummaryData, traceStats, prefix, htmlDir):
         for nodeName in allNames:
             graph.node[nodeName]['label'] = nodeName + "\n" + \
                                              attrs[1];
-            graph.node[nodeName]['style'] = "filled";
-            graph.node[nodeName]['fillcolor'] = attrs[0];
+            graph.node[nodeName]['style'] = "filled, rounded";
+            graph.node[nodeName]['color'] = attrs[0];
             graph.node[nodeName]['URL'] = "_" + prefix.upper() \
               + "/" + extractFuncName(nodeName) + ".txt";
 
@@ -514,6 +514,7 @@ def update_graph(graph, nodeName, prevNodeName):
 
     if (not graph.has_node(nodeName)):
             graph.add_node(nodeName, fontname="Helvetica");
+            graph.node[nodeName]['shape'] = 'box';
 
     if (not graph.has_edge(prevNodeName, nodeName)):
         graph.add_edge(prevNodeName, nodeName, label = " 1 ",
