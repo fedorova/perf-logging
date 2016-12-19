@@ -3,6 +3,7 @@
 import argparse
 import colorsys
 import errno
+import math
 import networkx as nx
 import operator
 import os
@@ -15,6 +16,7 @@ graphType = None;
 htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
+outliersFile = None;
 separator = " ";
 tryLockWarning = 0;
 verbose = False;
@@ -101,6 +103,33 @@ class PerfData:
         self.maxRunningTime = 0;
         self.maxRunningTimeTimestamp = 0;
         self.filtered = False;
+        self.cumSumSquares = 0.0;
+
+    def update(self, runningTime, beginTime):
+        global outliersFile;
+
+        self.totalRunningTime = self.totalRunningTime + runningTime;
+        self.numCalls = self.numCalls + 1;
+        #self.runningTimes.append(runningTime);
+        if (runningTime > self.maxRunningTime):
+            self.maxRunningTime = runningTime;
+            self.maxRunningTimeTimeStamp = beginTime;
+
+        # Update cumulative variance, so we can signal outliers
+        # on the fly.
+        #
+        cumMean = float(self.totalRunningTime) / float(self.numCalls);
+        self.cumSumSquares = self.cumSumSquares + \
+          math.pow(float(runningTime) - cumMean, 2);
+        cumStDev = math.sqrt(self.cumSumSquares / float(self.numCalls));
+
+        if (runningTime > cumMean + 2 * cumStDev):
+            if (outliersFile is not None):
+                outliersFile.write("T" + str(self.threadID) + ": " + self.name
+                                       + " took "
+                                       + str(runningTime) +
+                                       " ns at time " + str(beginTime) + "\n");
+
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -873,12 +902,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
                         funcSummaryRecords[stackRec.fullName] = newPDR;
 
                     pdr = funcSummaryRecords[stackRec.fullName];
-                    pdr.totalRunningTime = pdr.totalRunningTime + runningTime;
-                    pdr.numCalls = pdr.numCalls + 1;
-                    pdr.runningTimes.append(runningTime);
-                    if (runningTime > pdr.maxRunningTime):
-                        pdr.maxRunningTime = runningTime;
-                        pdr.maxRunningTimeTimeStamp = stackRec.time;
+                    pdr.update(runningTime, stackRec.time);
                     found = True
 
                     # Full name is the name of the function, plus whatever other
@@ -1028,6 +1052,7 @@ def main():
     global lastNodeName;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
+    global outliersFile;
     global percentThreshold;
     global separator;
     global tryLockWarning;
@@ -1074,6 +1099,14 @@ def main():
     print("Running with the following parameters:");
     for key, value in vars(args).iteritems():
         print ("\t" + key + ": " + str(value));
+
+    # Create the file for dumping info about outliers
+    #
+    try:
+        outliersFile = open("outliers.txt", "w");
+    except:
+        print ("Warning: could not open outliers.txt for writing");
+        outliersFile = None;
 
     # Let's create the first part of the HTML file, which will contain
     # all graph images linked to per-graph HTML files.
