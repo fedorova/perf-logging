@@ -260,10 +260,10 @@ def looks_like_lock(funcname):
 
 def do_lock_processing(locksDictionary, logRec, runningTime,
                        lockName):
-    global verbose;
     global multipleAcquireWithoutRelease;
-    global tryLockWarning;
     global noMatchingAcquireOnRelease;
+    global tryLockWarning;
+    global verbose;
 
     func = logRec.func
 
@@ -933,7 +933,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
 
     # Generate files
     nameNoPostfix = htmlDir + "/" + \
-      prefix + "." + graphType + "."+ str(percentThreshold) + "%."
+      prefix + "." + graphType + "."+ str(percentThreshold) + "."
 
     imageFileName = nameNoPostfix + graphFilePostfix;
     print("Graph image is saved to: " + imageFileName);
@@ -941,7 +941,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
 
     mapFileName = nameNoPostfix + "cmapx";
     aGraph.draw(mapFileName, prog = 'dot');
-    print("Image map is saved to: " + imageFileName);
+    print("Image map is saved to: " + mapFileName);
 
     generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
                             htmlDir, topHTMLFile);
