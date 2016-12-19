@@ -423,14 +423,21 @@ def isInt(s):
 
 def buildColorList():
 
+    # To generate colours from red to pale green, use:
+    # baseHue = 360;
+    # lightness = 0.56
+    # lightInc = 0.02
+    #
+    # In the loop: baseHue - i * 20.
+    #
     colorRange = [];
-    baseHue = 360;
+    baseHue = 200;
     saturation = 0.70;
-    lightness = 0.56;
-    lightInc = 0.02;
+    lightness = 0.4;
+    lightInc = 0.04;
 
     for i in range(0, 14):
-        hslColor = HSL(baseHue - i * 20, saturation, lightness + lightInc * i,);
+        hslColor = HSL(baseHue, saturation, lightness + lightInc * i,);
         hexColor = hslColor.toHex();
         colorRange.append(hexColor);
 
