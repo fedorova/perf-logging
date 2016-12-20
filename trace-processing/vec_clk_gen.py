@@ -7,6 +7,8 @@ import re
 import subprocess
 import os
 
+# Originally written by Augustine Wong, modified substantially by Sasha.
+#
 # This script takes as its input thread logs which capture the execution of a
 # multi-threaded system and outputs a ShiViz representation of that execution.
 # For more details on ShiViz, see
@@ -823,6 +825,7 @@ class SharedVariable:
 # in the sliding window of size windowSize;
 
 curRecordIdx = 0;
+eventAtStart = 0;
 showWindow = False;
 started = False;
 threadsInWindow = {};
@@ -832,7 +835,45 @@ windowFileOpen = False;
 windowSize = 7000;
 windowTop = 0;
 
-def generate_vector_timestamps(event, outputFile, start, num):
+
+def timeToStart(curTime, startTime, startRec, num, curRecordIdx):
+
+    global eventAtStart;
+    global started;
+
+    if (startTime > 0):
+        if (curTime >= startTime):
+            started = True;
+    elif (startRec > 0):
+        if (curRecordIdx >= startRec):
+            started = True;
+    else:
+        started = True;
+
+    if (started):
+        eventAtStart = curRecordIdx;
+        print("Starting at record " + str(curRecordIdx) + ", time " +
+                  str(curTime) + ".");
+        return True;
+    else:
+        return False;
+
+def timeToStop(curTime, curRecordIdx, num):
+
+    global eventAtStart;
+    global started;
+
+    if (num < 0):
+        return False;
+    if (started and (curRecordIdx - eventAtStart) > num):
+        print("Stopping processing at record " + str(curRecordIdx) +
+                  ", time " + str(curTime) +  ".");
+        return True;
+    else:
+        return False;
+
+
+def generate_vector_timestamps(event, outputFile, startTime, startRec, num):
 
     global curRecordIdx;
     global showWindow;
@@ -851,16 +892,13 @@ def generate_vector_timestamps(event, outputFile, start, num):
     # not parsing the entire trace.
     #
     curRecordIdx = curRecordIdx + 1;
-    if (curRecordIdx < start):
+
+    if (not started and
+            not timeToStart(event[3], startTime, startRec, num, curRecordIdx)):
         return False;
 
-    if ((num > 0) and (curRecordIdx > start + num)):
-        print("Stopping processing at record " + str(curRecordIdx));
+    if (timeToStop(event[3], curRecordIdx, num)):
         return True;
-
-    if (not started):
-        print("Beginning to process with record ID " + str(curRecordIdx));
-        started = True;
 
     t_index = int(event[2]);
     if (not threads.has_key(t_index)):
@@ -1102,7 +1140,7 @@ def getSizeStr(size):
         sizeStr = str(size) + "B";
     return sizeStr;
 
-def parse_files(fnames, outputFile, start, num):
+def parse_files(fnames, outputFile, startTime, start, num):
 
     global eventsForAllThreads;
     global totalFileSize;
@@ -1132,7 +1170,8 @@ def parse_files(fnames, outputFile, start, num):
     #
     while (fillWithValidEvents(files, fileCurrentLines)):
         oldestEvent = getOldestEvent(fileCurrentLines);
-        done = generate_vector_timestamps(oldestEvent, outputFile, start, num);
+        done = generate_vector_timestamps(oldestEvent, outputFile, startTime,
+                                              start, num);
         if (done):
             break;
 
@@ -1169,6 +1208,8 @@ def main():
                             default='ALL');
     parser.add_argument('-s', '--start', dest='starting_point',
                             default='BEGINNING');
+    parser.add_argument('-t', '--starttime', dest='startTime',
+                            default=0);
     parser.add_argument('-w', '--window', dest='window', action='store_true');
 
     args = parser.parse_args();
@@ -1219,7 +1260,7 @@ def main():
         # Parse trace files from scratch
         #
         print("Parsing files...");
-        parse_files(args.files, outputFile, start, num);
+        parse_files(args.files, outputFile, args.startTime, start, num);
 
     outputFile.close()
 
