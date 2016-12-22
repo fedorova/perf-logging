@@ -20,6 +20,7 @@ outliersFile = None;
 separator = " ";
 tryLockWarning = 0;
 verbose = False;
+shortenFuncName = True;
 
 #
 # LogRecord contains all the fields we expect in the log record.
@@ -150,7 +151,15 @@ class PerfData:
                    '{:,}'.format(self.maxRunningTime) +
 	           " ns.\n");
 
-    def printSelfHTML(self, prefix, locksSummaryRecords):
+    def printSelfCSVLine(self, file):
+        if(file is None):
+            file = sys.stdout
+
+        file.write("{}, {}, {}, {}, {}\n"
+                   .format(self.name, self.numCalls, self.totalRunningTime,
+                           self.getAverage(), self.maxRunningTime))
+ 
+  def printSelfHTML(self, prefix, locksSummaryRecords):
         with open(prefix + "/" + self.name + ".txt", 'w+') as file:
             file.write("*** " + self.name + "\n");
             file.write("\t Total running time: " +
@@ -166,6 +175,7 @@ class PerfData:
                 if (locksSummaryRecords.has_key(self.lockName)):
                     lockData = locksSummaryRecords[self.lockName];
                     lockData.printSelfHTML(file);
+
 
 #
 # LockData class contains information about lock-related functions
@@ -640,6 +650,45 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     return filteredRecords;
 
+def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
+    if transformMode == 'multiple lines':
+        lineLength = 50
+        lines = []
+        i = 0
+        while len(name) > lineLength:
+            if i == 0:
+                lines.append(name[0:lineLength])
+            else:
+                lines.append(name[0:lineLength])
+            name = name[lineLength:]
+            i += 1
+        lines.append(name)
+        return '\n'.join(lines)
+    elif transformMode == 'replace with *':
+        stack = []
+        chars = []
+        for c in name:
+            if c == CHAR_OPEN:
+                if len(stack) == 0:
+                    chars.append(c)
+                stack.append(c)
+            elif c == CHAR_CLOSE:
+                if len(stack) == 0: # miss the matched '<'
+                    chars.append(c)
+                else:
+                    stack.pop()
+                    if len(stack) == 0:
+                        chars.append('*')
+                        chars.append(CHAR_CLOSE)
+            else:
+                if len(stack) == 0:
+                    chars.append(c)
+
+        return ''.join(chars)
+    else:
+        return name
+
+
 def writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
                          traceStats):
 
@@ -823,6 +872,9 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
 
         try:
             func = words[1];
+            if shortenFuncName:
+                func = transform_name(func, 'replace with *', '<', '>')
+                func = transform_name(func, 'replace with *', '(', ')')
             thread = int(words[2]);
             time = long(words[3]);
             if (len(words) > 4):
@@ -959,6 +1011,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
     nameNoPostfix = htmlDir + "/" + \
       prefix + "." + graphType + "."+ str(percentThreshold) + "."
 
+
     imageFileName = nameNoPostfix + graphFilePostfix;
     print("Graph image is saved to: " + imageFileName);
     aGraph.draw(imageFileName, prog = 'dot');
@@ -973,8 +1026,29 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
     if(outputFile is not None):
         outputFile.close();
 
-    writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
-                         traceStats);
+    generateSummaryFile('', prefix, traceStats, funcSummaryRecords, locksSummaryRecords)
+    generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords, locksSummaryRecords)
+
+
+def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords, locksSummaryRecords):
+    # Write the summary to the output file.
+    try:
+        summaryFileName = prefix + ".summary" + fileType;
+        summaryFile = open(summaryFileName, "w");
+        print("Summary file is " + summaryFileName);
+    except:
+        print("Could not create summary file " + summaryFileName);
+        summaryFile = sys.stdout;
+
+    if fileType == '.csv':
+        summaryFile.write("Function, Num calls, Total Runtime (ns), Averge Runtime (ns), Largest Runtime (ns)\n");
+        for fkey, pdr in funcSummaryRecords.iteritems():
+            pdr.printSelfCSVLine(summaryFile)
+        summaryFile.close();
+        return;
+
+    summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
+    summaryFile.write("------------------------------\n");
 
 
 def getPrefix(fname):
@@ -1057,6 +1131,7 @@ def main():
     global separator;
     global tryLockWarning;
     global verbose;
+    global shortenFuncName;
 
     parser = argparse.ArgumentParser(description=
                                  'Process performance log files');
@@ -1085,6 +1160,7 @@ def main():
     parser.add_argument('--graph-file-postfix', dest='graphFilePostfix',
                         default='png');
     parser.add_argument('-s', '--separator', dest='separator', default=' ');
+    parser.add_argument('--shorten_func_name', dest='shortenFuncName', type=bool, default=True);
 
     args = parser.parse_args();
 
@@ -1095,6 +1171,7 @@ def main():
     graphFilePostfix = args.graphFilePostfix;
     percentThreshold = args.percentThreshold;
     separator = args.separator;
+    shortenFuncName = args.shortenFuncName;
 
     print("Running with the following parameters:");
     for key, value in vars(args).iteritems():
