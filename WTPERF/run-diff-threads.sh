@@ -1,22 +1,22 @@
 #!/bin/bash
-BRANCH=wt-2898
+BRANCH=wt-dev
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
 #    WT_HOME=/tmpfs/${BRANCH}/build_posix
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 fi
-#DB_HOME=/tmp/WT_TEST/
-DB_HOME=/mnt/fast/sasha/WT_TEST/
+DB_HOME=/tmp/WT_TEST/
+#DB_HOME=/mnt/fast/sasha/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 #SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%b-%d-%H:%M`
-EVICT_WORKERS=30
+EVICT_WORKERS=4
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
-WORKLOAD="update-btree.wtperf"
+WORKLOAD="evict-btree-multi-Alex-run.wtperf"
 DINAMITE_TRACE_DIR="/tmp"
-EXCLUDE_TID="1"
+EXCLUDE_TID=""
 
 #for t in 8 16 48 64 96;
 for t in 4;
@@ -39,7 +39,7 @@ do
 		DINAMITE_EXCLUDE_TID=${EXCLUDE_TID} DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/evict-btree-run.wtperf -o threads=\(\(count=${t},reads=1\)\) -o conn_config=\"cache_size=50M,statistics=\(fast,clear\),statistics_log=\(wait=5\),eviction=\(threads_max=${EVICT_WORKERS}\),eviction=\(threads_min=1\)\"
 	    fi
 	else
-	    ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${WT_HOME}/../bench/wtperf/runners/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\" -o run_time=120
+	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\"
 	fi
 
 	mv ${DB_HOME}/test.stat ${OUTPUT}/${i}/.

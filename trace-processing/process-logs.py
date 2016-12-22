@@ -1,15 +1,22 @@
 #!/usr/local/bin/python -tt
 
-import sys
 import argparse
+import colorsys
+import errno
+import math
 import networkx as nx
 import operator
-import colorsys
+import os
+import os.path
+import re
+import sys
 
 graphFilePostfix = None;
 graphType = None;
+htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
+outliersFile = None;
 separator = " ";
 tryLockWarning = 0;
 verbose = False;
@@ -26,6 +33,14 @@ class LogRecord:
         self.thread = thread;
         self.time = long(time);
         self.otherInfo = otherInfo;
+        #
+        # otherInfo typically includes argument values. We append
+        # it to the function name.
+        #
+        if (otherInfo is not None):
+            self.fullName = func + " " + otherInfo;
+        else:
+            self.fullName = func;
 
     def printLogRecord(self):
         print(self.op + " " + self.func + " " + str(self.thread) + " "
@@ -75,8 +90,13 @@ class TraceStats:
 
 class PerfData:
 
-    def __init__(self, name, threadID):
+    def __init__(self, name, otherInfo, threadID):
         self.name = name;
+        # If this is a lock function, then otherInfo
+        # would contain the information for identifying
+        # this lock.
+        #
+        self.lockName = otherInfo;
         self.threadID = threadID;
         self.numCalls = 0;
         self.totalRunningTime = long(0);
@@ -84,6 +104,33 @@ class PerfData:
         self.maxRunningTime = 0;
         self.maxRunningTimeTimestamp = 0;
         self.filtered = False;
+        self.cumSumSquares = 0.0;
+
+    def update(self, runningTime, beginTime):
+        global outliersFile;
+
+        self.totalRunningTime = self.totalRunningTime + runningTime;
+        self.numCalls = self.numCalls + 1;
+        #self.runningTimes.append(runningTime);
+        if (runningTime > self.maxRunningTime):
+            self.maxRunningTime = runningTime;
+            self.maxRunningTimeTimeStamp = beginTime;
+
+        # Update cumulative variance, so we can signal outliers
+        # on the fly.
+        #
+        cumMean = float(self.totalRunningTime) / float(self.numCalls);
+        self.cumSumSquares = self.cumSumSquares + \
+          math.pow(float(runningTime) - cumMean, 2);
+        cumStDev = math.sqrt(self.cumSumSquares / float(self.numCalls));
+
+        if (runningTime > cumMean + 2 * cumStDev):
+            if (outliersFile is not None):
+                outliersFile.write("T" + str(self.threadID) + ": " + self.name
+                                       + " took "
+                                       + str(runningTime) +
+                                       " ns at time " + str(beginTime) + "\n");
+
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -111,6 +158,24 @@ class PerfData:
         file.write("{}, {}, {}, {}, {}\n"
                    .format(self.name, self.numCalls, self.totalRunningTime,
                            self.getAverage(), self.maxRunningTime))
+ 
+  def printSelfHTML(self, prefix, locksSummaryRecords):
+        with open(prefix + "/" + self.name + ".txt", 'w+') as file:
+            file.write("*** " + self.name + "\n");
+            file.write("\t Total running time: " +
+                       '{:,}'.format(self.totalRunningTime) +
+                       " ns.\n");
+            file.write("\t Average running time: "
+                       + '{:,}'.format(long(self.getAverage())) + " ns.\n");
+            file.write("\t Largest running time: " +
+                       '{:,}'.format(self.maxRunningTime) +
+	               " ns.\n");
+            file.write("------------------\n");
+            if (self.lockName is not None):
+                if (locksSummaryRecords.has_key(self.lockName)):
+                    lockData = locksSummaryRecords[self.lockName];
+                    lockData.printSelfHTML(file);
+
 
 #
 # LockData class contains information about lock-related functions
@@ -170,6 +235,22 @@ class LockData:
         file.write("\t Average time the lock was held: "
               + str(long(self.getAverageTimeHeld())) + " ns.\n");
 
+    def printSelfHTML(self, file):
+
+        file.write("Lock \"" + self.name + "\":\n");
+        file.write("\t Num acquire: " + str(self.numAcquire) + "\n");
+        file.write("\t Num trylock: " + str(self.numTryLock) + "\n");
+        file.write("\t Num release: " + str(self.numRelease) + "\n");
+        file.write("\t Average time in acquire: "
+              + str(long(self.getAverageAcquire())) + " ns.\n");
+        file.write("\t Average time in trylock: "
+              + str(long(self.getAverageTryLock())) + " ns.\n");
+        file.write("\t Average time in release: "
+              + str(long(self.getAverageRelease())) + " ns.\n");
+        file.write("\t Average time the lock was held: "
+              + str(long(self.getAverageTimeHeld())) + " ns.\n");
+
+
 #
 # The following data structures and functions help us decide what
 # kind of lock-related action the function is doing:
@@ -217,19 +298,13 @@ def looks_like_lock(funcname):
         return False;
 
 def do_lock_processing(locksDictionary, logRec, runningTime,
-                       nameWords):
-    global verbose;
+                       lockName):
     global multipleAcquireWithoutRelease;
-    global tryLockWarning;
     global noMatchingAcquireOnRelease;
+    global tryLockWarning;
+    global verbose;
 
-    lockName = "";
     func = logRec.func
-
-    # Reconstruct the lock name
-    for word in nameWords:
-        lockName = lockName + word.strip() + " ";
-    lockName.strip();
 
     if(not locksDictionary.has_key(lockName)):
         lockData = LockData(lockName);
@@ -387,25 +462,40 @@ def isInt(s):
 
 def buildColorList():
 
+    # To generate colours from red to pale green, use:
+    # baseHue = 360;
+    # lightness = 0.56
+    # lightInc = 0.02
+    #
+    # In the loop: baseHue - i * 20.
+    #
     colorRange = [];
-    baseHue = 360;
+    baseHue = 200;
     saturation = 0.70;
-    lightness = 0.56;
-    lightInc = 0.02;
+    lightness = 0.4;
+    lightInc = 0.04;
 
     for i in range(0, 14):
-        hslColor = HSL(baseHue - i * 20, saturation, lightness + lightInc * i,);
+        hslColor = HSL(baseHue, saturation, lightness + lightInc * i,);
         hexColor = hslColor.toHex();
         colorRange.append(hexColor);
 
     return colorRange;
 
+def extractFuncName(nodeName):
+
+    words = nodeName.split(" ");
+
+    if (words[0] == "enter" or words[0] == "exit"):
+        return " ".join(words[1:len(words)]);
+    else:
+        return nodeName;
 #
 # Figure out the percent execution time for each function relative to the total.
 # Compute the colour based on the percent. Set the node colour accordingly.
 # Update the node label with the percent value.
 #
-def augment_graph(graph, funcSummaryData, traceStats):
+def augment_graph(graph, funcSummaryData, traceStats, prefix, htmlDir):
 
     # This dictionary is the mapping between function names and
     # their percent of execution time.
@@ -461,13 +551,16 @@ def augment_graph(graph, funcSummaryData, traceStats):
         for nodeName in allNames:
             graph.node[nodeName]['label'] = nodeName + "\n" + \
                                              attrs[1];
-            graph.node[nodeName]['style'] = "filled";
-            graph.node[nodeName]['fillcolor'] = attrs[0];
+            graph.node[nodeName]['style'] = "filled, rounded";
+            graph.node[nodeName]['color'] = attrs[0];
+            graph.node[nodeName]['URL'] = "_" + prefix.upper() \
+              + "/" + extractFuncName(nodeName) + ".txt";
 
 def update_graph(graph, nodeName, prevNodeName):
 
     if (not graph.has_node(nodeName)):
             graph.add_node(nodeName, fontname="Helvetica");
+            graph.node[nodeName]['shape'] = 'box';
 
     if (not graph.has_edge(prevNodeName, nodeName)):
         graph.add_edge(prevNodeName, nodeName, label = " 1 ",
@@ -508,7 +601,7 @@ def generate_graph(logRecords):
         prevNodeName = generate_func_only_graph(graph, logRecords, prevNodeName)
     else:
         for logRec in logRecords:
-            nodeName = logRec.op + " " + logRec.func;
+            nodeName = logRec.op + " " + logRec.fullName;
             update_graph(graph, nodeName, prevNodeName);
             prevNodeName = nodeName;
 
@@ -538,12 +631,12 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
         # logging before the function exit record was generated, as can
         # be with functions that start threads.
         #
-        if not funcSummaryRecords.has_key(rec.func):
+        if not funcSummaryRecords.has_key(rec.fullName):
             print("Warning: no performance record for function " +
                   rec.func);
             continue;
 
-        pdr = funcSummaryRecords[rec.func];
+        pdr = funcSummaryRecords[rec.fullName];
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
         if (percent <= percentThreshold):
@@ -556,7 +649,6 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
             filteredRecords.append(rec);
 
     return filteredRecords;
-
 
 def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
     if transformMode == 'multiple lines':
@@ -597,7 +689,141 @@ def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
         return name
 
 
-def parse_file(fname, prefix):
+def writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
+                         traceStats):
+
+    # Write the summary to the output file.
+    try:
+        summaryFileName = prefix + ".summary";
+        summaryFile = open(summaryFileName, "w");
+        print("Summary file is " + summaryFileName);
+    except:
+        print("Could not create summary file " + summaryFileName);
+        summaryFile = sys.stdout;
+
+    summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
+    summaryFile.write("------------------------------\n");
+
+    summaryFile.write("Total trace time: "
+                      + str(traceStats.getTotalTime()) + "\n");
+    summaryFile.write(
+        "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
+
+    for fkey, pdr in funcSummaryRecords.iteritems():
+        pdr.printSelf(summaryFile);
+
+        summaryFile.write("------------------------------\n");
+
+    lockDataDict = locksSummaryRecords;
+
+    summaryFile.write("\nLOCKS SUMMARY\n");
+    for lockKey, lockData in lockDataDict.iteritems():
+        lockData.printSelf(summaryFile);
+
+    summaryFile.write("------------------------------\n");
+    summaryFile.close();
+
+def generatePerFuncHTMLFiles(prefix, htmlDir,
+                                 funcSummaryRecords, locksSummaryRecords):
+
+    dirname = htmlDir + "/" + "_" + prefix.upper();
+
+    if not os.path.exists(dirname):
+        try:
+            os.mkdir("./" + dirname);
+            print("Directory " + dirname + " created");
+        except:
+            print "Could not create directory " + dirname;
+            return;
+
+    for pdr in funcSummaryRecords.values():
+        if (not pdr.filtered):
+             pdr.printSelfHTML(dirname, locksSummaryRecords);
+
+# In some cases we need to strip the HTML directory name from the
+# beginning of the imageFileName, because the image source
+# must be relative to the html file, which itself is in
+# the HTML directory.
+#
+def stripHTMLDirFromFileName(fileName, htmlDir):
+
+    if (fileName.startswith(htmlDir)):
+        fileName = fileName[len(htmlDir):];
+
+    while (fileName.startswith("/")):
+        fileName = fileName[1:];
+
+    return fileName;
+
+def insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile):
+
+    global htmlTemplate;
+
+    # Extract thread ID from the file names. We assume that this
+    # is the first number encountered in the file name.
+    #
+    numbers = re.findall(r'\d+', imageFileName);
+    if (len(numbers) > 0):
+        threadID = str(numbers[0]);
+    else:
+        threadID = "";
+
+    # Read the file, find the placeholder patterns, replace them
+    # with the actual values. Write the text into top HTML file.
+    for line in htmlTemplate:
+        if ("#Thread" in line):
+            line = line.replace("#Thread", "Thread " + threadID);
+        if ("#htmlFile" in line):
+            line = line.replace("#htmlFile", htmlFileName);
+        if ("#imageFile" in line):
+            line = line.replace("#imageFile", imageFileName);
+        topHTMLFile.write(line);
+
+    # Rewind the template file for the next reader
+    htmlTemplate.seek(0);
+
+
+def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
+                            topHTMLFile):
+    i = 0;
+
+    try:
+        htmlFile = open(htmlFileName, "w");
+    except:
+        print("Could not open " + htmlFileName + " for writing");
+        return;
+
+    try:
+        mapFile = open(mapFileName, "r");
+    except:
+        print("Could not open " + mapFileName + " for writing");
+        return;
+
+    relativeImageFileName = stripHTMLDirFromFileName(imageFileName, htmlDir);
+
+    htmlFile.write("<html><img src=\"" + relativeImageFileName +
+                       "\"  usemap=\"#G\">\n");
+    htmlFile.write("<map id=\"G\" name=\"G\">\n");
+
+    for line in mapFile:
+        i = i + 1;
+        if (i == 1):
+            assert(line.startswith("<map id="));
+            continue;
+
+        htmlFile.write(line);
+
+    htmlFile.write("</html>\n");
+
+    htmlFile.close();
+    mapFile.close();
+
+    # Insert the image file linked to the HTML file into the top HTML file.
+    insertIntoTopHTML(relativeImageFileName,
+                          stripHTMLDirFromFileName(htmlFileName, htmlDir),
+                                                       topHTMLFile);
+
+def parse_file(fname, prefix, topHTMLFile, htmlDir):
 
     startTime = 0;
     endTime = 0;
@@ -652,7 +878,8 @@ def parse_file(fname, prefix):
             thread = int(words[2]);
             time = long(words[3]);
             if (len(words) > 4):
-                otherInfo = words[4:len(words)];
+                parts = words[4:len(words)];
+                otherInfo = (" ".join(parts)).rstrip();
 
         except ValueError:
             print "Could not parse: " + line;
@@ -666,7 +893,6 @@ def parse_file(fname, prefix):
             continue;
 
         rec = LogRecord(func, op, thread, time, otherInfo);
-        logRecords.append(rec);
 
         if(startTime == 0):
             startTime = time;
@@ -677,6 +903,9 @@ def parse_file(fname, prefix):
             # Timestamp for function entrance
             # Push each entry record onto the stack.
             stack.append(rec);
+
+            # Add this log record to the array
+            logRecords.append(rec);
 
             # If we are told to write the records to the output
             # file, do so.
@@ -720,18 +949,22 @@ def parse_file(fname, prefix):
 
                     runningTime = long(rec.time) - long(stackRec.time);
 
-                    if(not funcSummaryRecords.has_key(stackRec.func)):
-                        newPDR = PerfData(stackRec.func, thread);
-                        funcSummaryRecords[stackRec.func] = newPDR;
+                    if(not funcSummaryRecords.has_key(stackRec.fullName)):
+                        newPDR = PerfData(stackRec.fullName, otherInfo, thread);
+                        funcSummaryRecords[stackRec.fullName] = newPDR;
 
-                    pdr = funcSummaryRecords[stackRec.func];
-                    pdr.totalRunningTime = pdr.totalRunningTime + runningTime;
-                    pdr.numCalls = pdr.numCalls + 1;
-                    pdr.runningTimes.append(runningTime);
-                    if (runningTime > pdr.maxRunningTime):
-                        pdr.maxRunningTime = runningTime;
-                        pdr.maxRunningTimeTimeStamp = stackRec.time;
+                    pdr = funcSummaryRecords[stackRec.fullName];
+                    pdr.update(runningTime, stackRec.time);
                     found = True
+
+                    # Full name is the name of the function, plus whatever other
+                    # info was given to us, usually values of arguments. This
+                    # information is only printed for the function entry record,
+                    # so if we are at the function exit record, we must copy
+                    # that information from the corresponding entry record.
+                    #
+                    rec.fullName = stackRec.fullName;
+                    logRecords.append(rec);
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -743,8 +976,7 @@ def parse_file(fname, prefix):
                                            runningTime,
                                            stackRec.otherInfo);
                         if(outputFile is not None):
-                            for lockNamePart in stackRec.otherInfo:
-                                outputFile.write(" " + lockNamePart.strip());
+                            outputFile.write(" " + stackRec.otherInfo);
                     break;
             if(not found):
                 print("Could not find matching function entrance for line: \n"
@@ -760,19 +992,36 @@ def parse_file(fname, prefix):
     filteredLogRecords = filterLogRecords(logRecords, funcSummaryRecords,
                                           traceStats);
 
+    # Generate HTML files summarizing function stats for all functions that
+    # were not filtered.
+    print("Generating per-function HTML files...");
+    generatePerFuncHTMLFiles(prefix, htmlDir,
+                                 funcSummaryRecords, locksSummaryRecords);
+
     # Augment graph attributes to reflect performance characteristics
     graph = generate_graph(filteredLogRecords);
-    augment_graph(graph, funcSummaryRecords, traceStats);
+    augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
-    # Print the graph
+    # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
     aGraph.add_subgraph("START", rank = "source");
     aGraph.add_subgraph("END", rank = "sink");
-    graphFileName = prefix + "." + graphType + "."  \
-                    + str(percentThreshold) + "%." + graphFilePostfix;
 
-    aGraph.draw(graphFileName, prog = 'dot');
-    print("Graph is saved to: " + graphFileName);
+    # Generate files
+    nameNoPostfix = htmlDir + "/" + \
+      prefix + "." + graphType + "."+ str(percentThreshold) + "."
+
+
+    imageFileName = nameNoPostfix + graphFilePostfix;
+    print("Graph image is saved to: " + imageFileName);
+    aGraph.draw(imageFileName, prog = 'dot');
+
+    mapFileName = nameNoPostfix + "cmapx";
+    aGraph.draw(mapFileName, prog = 'dot');
+    print("Image map is saved to: " + mapFileName);
+
+    generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
+                            htmlDir, topHTMLFile);
 
     if(outputFile is not None):
         outputFile.close();
@@ -801,25 +1050,6 @@ def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords, locksS
     summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
     summaryFile.write("------------------------------\n");
 
-    summaryFile.write("Total trace time: "
-                      + str(traceStats.getTotalTime()) + "\n");
-    summaryFile.write(
-        "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
-
-    for fkey, pdr in funcSummaryRecords.iteritems():
-        pdr.printSelf(summaryFile);
-
-        summaryFile.write("------------------------------\n");
-
-    lockDataDict = locksSummaryRecords;
-
-    summaryFile.write("\nLOCKS SUMMARY\n");
-    for lockKey, lockData in lockDataDict.iteritems():
-        lockData.printSelf(summaryFile);
-
-    summaryFile.write("------------------------------\n");
-    summaryFile.close();
-
 
 def getPrefix(fname):
 
@@ -829,14 +1059,74 @@ def getPrefix(fname):
     else:
         return fname;
 
+def createTopHTML(htmlDir):
+
+    if not os.path.exists(htmlDir):
+        try:
+            os.mkdir("./" + htmlDir);
+            print("Directory " + htmlDir + " created");
+        except:
+            print "Could not create directory " + htmlDir;
+            return None;
+
+    try:
+        topHTML = open(htmlDir + "/index.html", "w");
+    except:
+        print "Could not open " + htmlDir + "/index.html for writing";
+        return None;
+
+    topHTML.write("<!DOCTYPE html>\n");
+    topHTML.write("<html>\n");
+    topHTML.write("<head>\n");
+    topHTML.write("<link rel=\"stylesheet\" type=\"text/css\"" +
+                      "href=\"style.css\">\n");
+    topHTML.write("</head>\n");
+    topHTML.write("<body>\n");
+
+    return topHTML;
+
+def completeTopHTML(topHTML):
+
+    topHTML.write("</body>\n");
+    topHTML.write("</html>\n");
+    topHTML.close();
+
+def findHTMLTemplate(htmlDir):
+
+    scriptLocation = os.path.dirname(os.path.realpath(__file__));
+    htmlTemplateLocation = scriptLocation + "/" + \
+      "showGraphs/stateTransitionCharts.html";
+    cssFileLocation = scriptLocation + "/" + \
+      "showGraphs/style.css";
+    if (not (os.path.exists(htmlTemplateLocation) and
+                 os.path.exists(cssFileLocation))):
+        print("Cannot locate either of the required files: ");
+        print("\t" + '\033[1m' + htmlTemplateLocation);
+        print("\t" + cssFileLocation);
+        print("\033[0m" +
+                  "Please make sure you run the script from within the same "
+                  + " directory structure as in the original repository.");
+        return None;
+    else:
+        os.system('cp '+ cssFileLocation + " " + htmlDir + "/style.css");
+
+    try:
+        htmlTemplate = open(htmlTemplateLocation, "r");
+        return htmlTemplate;
+    except:
+        print "Could not open " + htmlTemplateLocation + " for reading";
+        return None;
+
 def main():
 
     global firstNodeName;
     global graphFilePostfix;
     global graphType;
+    global htmlTemplate;
     global lastNodeName;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
+    global outliersFile;
     global percentThreshold;
     global separator;
     global tryLockWarning;
@@ -850,6 +1140,9 @@ def main():
 
     parser.add_argument('--prefix', dest='prefix', type=str);
 
+    parser.add_argument('--htmlDir', dest='htmlDir', type=str,
+                            default='HTML');
+
     parser.add_argument('--verbose', dest='verbose', action='store_true');
 
     parser.add_argument('-g', '--graphtype', dest='graphtype',
@@ -858,8 +1151,8 @@ def main():
                         Possible values: enter_exit, func_only');
 
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
-                        type=float, default = 0.0,
-                        help='Default=0.0; \
+                        type=float, default = 2.0,
+                        help='Default=2.0; \
                         When we compute the execution flow graph, we will not \
                         include any functions, whose percent execution time   \
                         is smaller that value.')
@@ -880,6 +1173,32 @@ def main():
     separator = args.separator;
     shortenFuncName = args.shortenFuncName;
 
+    print("Running with the following parameters:");
+    for key, value in vars(args).iteritems():
+        print ("\t" + key + ": " + str(value));
+
+    # Create the file for dumping info about outliers
+    #
+    try:
+        outliersFile = open("outliers.txt", "w");
+    except:
+        print ("Warning: could not open outliers.txt for writing");
+        outliersFile = None;
+
+    # Let's create the first part of the HTML file, which will contain
+    # all graph images linked to per-graph HTML files.
+    #
+    topHTMLFile = createTopHTML(args.htmlDir);
+    if (topHTMLFile is None):
+        return;
+
+    # Make sure that we know where to find the HTML file templates
+    # before we spend all the time parsing the traces only to fail later.
+    #
+    htmlTemplate = findHTMLTemplate(args.htmlDir);
+    if (htmlTemplate is None):
+        return;
+
     if(len(args.files) > 0):
         for fname in args.files:
             # Figure out the prefix for the output files
@@ -888,7 +1207,7 @@ def main():
             else:
                 prefix = args.prefix;
             print("Prefix is " + prefix);
-            parse_file(fname, prefix);
+            parse_file(fname, prefix, topHTMLFile, args.htmlDir);
     else: # We are reading from stdin
         if(args.prefix is None):
             print("I am told to read from stdin (no files are provided), "),
@@ -896,7 +1215,9 @@ def main():
             print("Please use --prefix to provide it.");
             sys.exit();
         else:
-            parse_file(None, args.prefix);
+            parse_file(None, args.prefix, topHTMLFile, args.htmlDir);
+
+    completeTopHTML(topHTMLFile);
 
 
 if __name__ == '__main__':
