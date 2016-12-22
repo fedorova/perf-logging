@@ -158,8 +158,8 @@ class PerfData:
         file.write("{}, {}, {}, {}, {}\n"
                    .format(self.name, self.numCalls, self.totalRunningTime,
                            self.getAverage(), self.maxRunningTime))
- 
-  def printSelfHTML(self, prefix, locksSummaryRecords):
+
+    def printSelfHTML(self, prefix, locksSummaryRecords):
         with open(prefix + "/" + self.name + ".txt", 'w+') as file:
             file.write("*** " + self.name + "\n");
             file.write("\t Total running time: " +
