@@ -46,6 +46,18 @@ class LogRecord:
         print(self.op + " " + self.func + " " + str(self.thread) + " "
               + str(self.time));
 
+    def writeToFile(self, file):
+        if (self.op == "enter"):
+            file.write("-->");
+        elif (self.op == "exit"):
+            file.write("<--");
+        else:
+            file.write(self.op);
+        file.write(" " + self.func + " " + str(self.thread) +
+                       " " + str(self.time));
+        if (self.otherInfo is not None):
+            file.write(" " + self.otherInfo);
+
 #
 # LockRecord contains temporary information for generating lock-held times
 
@@ -910,7 +922,8 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
             # If we are told to write the records to the output
             # file, do so.
             if(outputFile is not None):
-                outputFile.write(line);
+                rec.writeToFile(outputFile);
+                outputFile.write("\n");
 
         else:
             if(outputFile is not None):
@@ -921,7 +934,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
                 # will either add the lock name with the newline character
                 # (if this happens to be a lock function, or just the
                 # newline character otherwise.
-                outputFile.write(line.rstrip());
+                rec.writeToFile(outputFile);
 
             found = False;
 
