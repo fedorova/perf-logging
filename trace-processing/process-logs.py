@@ -10,6 +10,7 @@ import os
 import os.path
 import re
 import sys
+import json
 
 graphFilePostfix = None;
 graphType = None;
@@ -102,8 +103,11 @@ class TraceStats:
 
 class PerfData:
 
-    def __init__(self, name, otherInfo, threadID):
+    def __init__(self, name, funcName, otherInfo, threadID):
         self.name = name;
+        self.originName = funcName;
+        if shortenFuncName and (self.originName in shortnameMappings):
+            self.originName = shortnameMappings[self.originName]
         # If this is a lock function, then otherInfo
         # would contain the information for identifying
         # this lock.
@@ -174,6 +178,7 @@ class PerfData:
     def printSelfHTML(self, prefix, locksSummaryRecords):
         with open(prefix + "/" + self.name + ".txt", 'w+') as file:
             file.write("*** " + self.name + "\n");
+            file.write("\t Origin full name: " + self.originName + "\n");
             file.write("\t Total running time: " +
                        '{:,}'.format(self.totalRunningTime) +
                        " ns.\n");
@@ -701,6 +706,40 @@ def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
         return name
 
 
+shortnameMapped = {}   # originName     => shortname
+shortnameMappings = {} # shortname      => originName
+shortnameVersion = {}  # shortnameBase  => version
+
+# Different functions could have the same shorten name.
+# The following method is to generate unique shorten name for
+# different functions by appending _v* to the generated shorten name
+def unique_shortname(originName):
+    if originName in shortnameMapped:
+        return shortnameMapped[originName]
+
+    shortnameBase = transform_name(originName, 'replace with *', '<', '>')
+    shortnameBase = transform_name(shortnameBase, 'replace with *', '(', ')')
+    version = 0
+
+    if shortnameBase in shortnameVersion:
+        version = shortnameVersion[shortnameBase]
+    shortnameVersion[shortnameBase] = version + 1
+
+    shortname = shortnameBase
+    if version != 0:
+        shortname = shortnameBase + "_v" + str(version)
+
+    shortnameMapped[originName] = shortname
+    shortnameMappings[shortname] = originName
+    return shortname
+
+
+def dump_shortname_maps(filename):
+    with open(filename, 'w') as fp:
+        json.dump(shortnameMappings, fp)
+
+
+
 def writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
                          traceStats):
 
@@ -885,8 +924,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
         try:
             func = words[1];
             if shortenFuncName:
-                func = transform_name(func, 'replace with *', '<', '>')
-                func = transform_name(func, 'replace with *', '(', ')')
+                func = unique_shortname(func)
             thread = int(words[2]);
             time = long(words[3]);
             if (len(words) > 4):
@@ -963,7 +1001,7 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
                     runningTime = long(rec.time) - long(stackRec.time);
 
                     if(not funcSummaryRecords.has_key(stackRec.fullName)):
-                        newPDR = PerfData(stackRec.fullName, otherInfo, thread);
+                        newPDR = PerfData(stackRec.fullName, stackRec.func, otherInfo, thread);
                         funcSummaryRecords[stackRec.fullName] = newPDR;
 
                     pdr = funcSummaryRecords[stackRec.fullName];
@@ -1004,6 +1042,11 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
     # Filter the log records according to criteria on their attributes
     filteredLogRecords = filterLogRecords(logRecords, funcSummaryRecords,
                                           traceStats);
+
+    if shortenFuncName:
+        shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
+        dump_shortname_maps(shortnameMapsFilename)
+        print("shortname_maps is saved to {}".format(shortnameMapsFilename))
 
     # Generate HTML files summarizing function stats for all functions that
     # were not filtered.
