@@ -105,9 +105,9 @@ class PerfData:
 
     def __init__(self, name, funcName, otherInfo, threadID):
         self.name = name;
-        self.originName = funcName;
-        if shortenFuncName and (self.originName in shortnameMappings):
-            self.originName = shortnameMappings[self.originName]
+        self.originalName = funcName;
+        if shortenFuncName and (self.originalName in shortnameMappings):
+            self.originalName = shortnameMappings[self.originalName]
         # If this is a lock function, then otherInfo
         # would contain the information for identifying
         # this lock.
@@ -178,7 +178,7 @@ class PerfData:
     def printSelfHTML(self, prefix, locksSummaryRecords):
         with open(prefix + "/" + self.name + ".txt", 'w+') as file:
             file.write("*** " + self.name + "\n");
-            file.write("\t Origin full name: " + self.originName + "\n");
+            file.write("\t Origin full name: " + self.originalName + "\n");
             file.write("\t Total running time: " +
                        '{:,}'.format(self.totalRunningTime) +
                        " ns.\n");
@@ -706,73 +706,37 @@ def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
         return name
 
 
-shortnameMapped = {}   # originName     => shortname
-shortnameMappings = {} # shortname      => originName
+shortnameMapped = {}   # originalName     => shortname
+shortnameMappings = {} # shortname      => originalName
 shortnameVersion = {}  # shortnameBase  => version
 
-# Different functions could have the same shorten name.
-# The following method is to generate unique shorten name for
-# different functions by appending _v* to the generated shorten name
-def unique_shortname(originName):
-    if originName in shortnameMapped:
-        return shortnameMapped[originName]
+# Different functions could have the same short name.
+# The following method is to generate unique short names for
+# different functions by appending _v* to the generated short name
+#
+def unique_shortname(originalName):
+    if originalName in shortnameMapped:
+        return shortnameMapped[originalName];
 
-    shortnameBase = transform_name(originName, 'replace with *', '<', '>')
-    shortnameBase = transform_name(shortnameBase, 'replace with *', '(', ')')
-    version = 0
+    shortnameBase = transform_name(originalName, 'replace with *', '<', '>');
+    shortnameBase = transform_name(shortnameBase, 'replace with *', '(', ')');
+    version = 0;
 
-    if shortnameBase in shortnameVersion:
-        version = shortnameVersion[shortnameBase]
-    shortnameVersion[shortnameBase] = version + 1
+    if (shortnameBase in shortnameVersion):
+        version = shortnameVersion[shortnameBase];
+    shortnameVersion[shortnameBase] = version + 1;
 
-    shortname = shortnameBase
-    if version != 0:
+    shortname = shortnameBase;
+    if (version != 0):
         shortname = shortnameBase + "_v" + str(version)
 
-    shortnameMapped[originName] = shortname
-    shortnameMappings[shortname] = originName
-    return shortname
-
+    shortnameMapped[originalName] = shortname;
+    shortnameMappings[shortname] = originalName;
+    return shortname;
 
 def dump_shortname_maps(filename):
     with open(filename, 'w') as fp:
         json.dump(shortnameMappings, fp)
-
-
-
-def writeSummaryFile(prefix, funcSummaryRecords, locksSummaryRecords,
-                         traceStats):
-
-    # Write the summary to the output file.
-    try:
-        summaryFileName = prefix + ".summary";
-        summaryFile = open(summaryFileName, "w");
-        print("Summary file is " + summaryFileName);
-    except:
-        print("Could not create summary file " + summaryFileName);
-        summaryFile = sys.stdout;
-
-    summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
-    summaryFile.write("------------------------------\n");
-
-    summaryFile.write("Total trace time: "
-                      + str(traceStats.getTotalTime()) + "\n");
-    summaryFile.write(
-        "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
-
-    for fkey, pdr in funcSummaryRecords.iteritems():
-        pdr.printSelf(summaryFile);
-
-        summaryFile.write("------------------------------\n");
-
-    lockDataDict = locksSummaryRecords;
-
-    summaryFile.write("\nLOCKS SUMMARY\n");
-    for lockKey, lockData in lockDataDict.iteritems():
-        lockData.printSelf(summaryFile);
-
-    summaryFile.write("------------------------------\n");
-    summaryFile.close();
 
 def generatePerFuncHTMLFiles(prefix, htmlDir,
                                  funcSummaryRecords, locksSummaryRecords):
@@ -1001,7 +965,8 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
                     runningTime = long(rec.time) - long(stackRec.time);
 
                     if(not funcSummaryRecords.has_key(stackRec.fullName)):
-                        newPDR = PerfData(stackRec.fullName, stackRec.func, otherInfo, thread);
+                        newPDR = PerfData(stackRec.fullName, stackRec.func,
+                                              otherInfo, thread);
                         funcSummaryRecords[stackRec.fullName] = newPDR;
 
                     pdr = funcSummaryRecords[stackRec.fullName];
@@ -1082,11 +1047,14 @@ def parse_file(fname, prefix, topHTMLFile, htmlDir):
     if(outputFile is not None):
         outputFile.close();
 
-    generateSummaryFile('', prefix, traceStats, funcSummaryRecords, locksSummaryRecords)
-    generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords, locksSummaryRecords)
+    generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
+                            locksSummaryRecords)
+    generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
+                            locksSummaryRecords)
 
 
-def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords, locksSummaryRecords):
+def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
+                            locksSummaryRecords):
     # Write the summary to the output file.
     try:
         summaryFileName = prefix + ".summary" + fileType;
@@ -1097,15 +1065,31 @@ def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords, locksS
         summaryFile = sys.stdout;
 
     if fileType == '.csv':
-        summaryFile.write("Function, Num calls, Total Runtime (ns), Averge Runtime (ns), Largest Runtime (ns)\n");
+        summaryFile.write("Function, Num calls, Total Runtime (ns), "
+                              "Averge Runtime (ns), Largest Runtime (ns)\n");
         for fkey, pdr in funcSummaryRecords.iteritems():
-            pdr.printSelfCSVLine(summaryFile)
-        summaryFile.close();
-        return;
+            pdr.printSelfCSVLine(summaryFile);
+    else:
+        summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
+        summaryFile.write("------------------------------\n");
+        summaryFile.write("Total trace time: "
+                      + str(traceStats.getTotalTime()) + "\n");
+        summaryFile.write(
+            "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
 
-    summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
-    summaryFile.write("------------------------------\n");
+        for fkey, pdr in funcSummaryRecords.iteritems():
+            pdr.printSelf(summaryFile);
+            summaryFile.write("------------------------------\n");
 
+        lockDataDict = locksSummaryRecords;
+
+        summaryFile.write("\nLOCKS SUMMARY\n");
+        for lockKey, lockData in lockDataDict.iteritems():
+            lockData.printSelf(summaryFile);
+
+        summaryFile.write("------------------------------\n");
+
+    summaryFile.close();
 
 def getPrefix(fname):
 
@@ -1216,7 +1200,8 @@ def main():
     parser.add_argument('--graph-file-postfix', dest='graphFilePostfix',
                         default='png');
     parser.add_argument('-s', '--separator', dest='separator', default=' ');
-    parser.add_argument('--shorten_func_name', dest='shortenFuncName', type=bool, default=True);
+    parser.add_argument('--shorten_func_name', dest='shortenFuncName',
+                            type=bool, default=True);
 
     args = parser.parse_args();
 
