@@ -2,6 +2,10 @@
 
 DINAMITE_HOME=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 
+echo !!!!!!!
+echo IMPORTANT: Make sure that your version of clang is the same as that supported by DINAMITE.
+echo !!!!!!!
+
 if [ "$OSTYPE" == 'darwin' ]; then
     echo "Configuring for OS X"
     INST_LIB=${DINAMITE_HOME}  DYLD_LIBRARY_PATH="${DINAMITE_HOME}" LDFLAGS="-L${DINAMITE_HOME}" LIBS="-linstrumentation"  CFLAGS="-O3 -g -Xclang -load -Xclang ${DINAMITE_HOME}/../../../Release+Asserts/lib/AccessInstrument.dylib" CC="clang" ../configure --enable-snappy
