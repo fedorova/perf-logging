@@ -853,7 +853,7 @@ def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
                           stripHTMLDirFromFileName(htmlFileName, htmlDir),
                                                        topHTMLFile);
 
-def parse_file(traceFile, prefix, topHTMLFile, htmlDir):
+def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
     startTime = 0;
     endTime = 0;
@@ -870,6 +870,14 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir):
     graph.add_node("START", fontname="Helvetica");
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
+
+    if (createTextFile):
+        try:
+            outputFile = open(prefix + ".txt", "w");
+        except:
+            print("Could not open " + prefix + ".txt for writing.");
+            # We will not exit on this error, but will attempt to
+            # parse the trace anyway.
 
     while True:
         line = traceFile.readline();
@@ -1302,7 +1310,8 @@ def main():
                     print("Could not open " + fname + " for reading");
                     continue;
 
-                parse_file(traceFile, prefix, topHTMLFile, args.htmlDir);
+                parse_file(traceFile, prefix, topHTMLFile, args.htmlDir,
+                               False);
 
             else:
                 # Figure out the name of the script that will launch
@@ -1327,7 +1336,8 @@ def main():
                 # created process. That process will output text trace
                 # into its standard out.
                 #
-                parse_file(process.stdout, prefix, topHTMLFile, args.htmlDir);
+                parse_file(process.stdout, prefix, topHTMLFile, args.htmlDir,
+                               True);
 
     completeTopHTML(topHTMLFile);
 
