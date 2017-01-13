@@ -1123,6 +1123,11 @@ def getTextConverterCommand():
     # We need to know where the DINAMITE trace parser lives.
     # Its location should be in the DINAMITE_TRACE_PARSER variable.
     #
+    if not os.environ.has_key("DINAMITE_TRACE_PARSER"):
+       print("Error: DINAMITE_TRACE_PARSER environment variable MUST be set\n"
+             "\t to the location of the trace_parser binary from the\n"
+             "\t DINAMITE binary trace toolkit");
+       return None;
     parserLocation = os.environ["DINAMITE_TRACE_PARSER"];
     if (parserLocation is None):
         print("Could not determine the location of the DINAMTE " +
