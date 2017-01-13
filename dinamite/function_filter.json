@@ -2,6 +2,22 @@
     "minimum_function_size" : 50,
     "check_small_function_loops" : true,
     "function_size_metric" : "LOC_PATH",
+    "blacklist" : {
+        "function_filters" : [
+            "__rec_child_modify",
+            "__rec_cell_build_leaf_key",
+	    "__rec_copy_incr",
+	    "CityHash64",
+	    "__wt_lex_compare_skip",
+	    "__block_off_srch",
+	    "__wt_vunpack_posint",
+	    "__block_size_srch",
+	    "__block_off_remove",
+	    "__free_page_row_leaf",
+	    "__wt_vpack_posint",
+	    "__config_next"
+        ]
+    },
     "whitelist": {
 	"function_filters" : {
             "*" : {
