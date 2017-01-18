@@ -789,6 +789,10 @@ def insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile):
 
     global htmlTemplate;
 
+    print("Inserting HTML " + imageFileName + " " + htmlFileName
+              + " " + str(topHTMLFile));
+
+
     # Extract thread ID from the file names. We assume that this
     # is the first number encountered in the file name.
     #
@@ -852,6 +856,25 @@ def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
     insertIntoTopHTML(relativeImageFileName,
                           stripHTMLDirFromFileName(htmlFileName, htmlDir),
                                                        topHTMLFile);
+
+def regenerateHTML(topHTMLFile, filenames):
+
+    global htmlTemplate;
+
+    # Iterate over the list of files. Extract the prefix, construct
+    # the desired image and HTML file names based on global variables
+    # that were set from the command-line arguments, emit HTML into
+    # topHTMLFile.
+    #
+    for fname in filenames:
+        prefix = getPrefix(fname);
+
+        imageFileName = prefix + "." + graphType + "." + \
+          str(percentThreshold) + "." + graphFilePostfix;
+        htmlFileName = prefix + "." + graphType + "." + \
+          str(percentThreshold) + ".html";
+
+        insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile);
 
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
@@ -1240,46 +1263,78 @@ def main():
 
     parser = argparse.ArgumentParser(description=
                                  'Process performance log files');
+
     parser.add_argument('files', type=str, nargs='*',
                     help='log files to process');
-
-    parser.add_argument('--htmlDir', dest='htmlDir', type=str,
-                            default='HTML');
-
-    parser.add_argument('--verbose', dest='verbose', action='store_true');
 
     parser.add_argument('-g', '--graphtype', dest='graphtype',
                         default='enter_exit',
                         help='Default=enter_exit; \
                         Possible values: enter_exit, func_only');
 
+    parser.add_argument('--graph-file-postfix', dest='graphFilePostfix',
+                        default='png');
+
+    parser.add_argument('--htmlDir', dest='htmlDir', type=str,
+                            default='HTML');
+
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
                         type=float, default = 2.0,
                         help='Default=2.0; \
                         When we compute the execution flow graph, we will not \
                         include any functions, whose percent execution time   \
-                        is smaller that value.')
+                        is smaller that value.');
 
-    parser.add_argument('--graph-file-postfix', dest='graphFilePostfix',
-                        default='png');
+    parser.add_argument('-r', '--regenHTML', dest='regenHTML',
+                            action='store_true');
+
     parser.add_argument('-s', '--separator', dest='separator', default=' ');
     parser.add_argument('--shorten_func_name', dest='shortenFuncName',
                             type=bool, default=True);
 
-    args = parser.parse_args();
+    parser.add_argument('--verbose', dest='verbose', action='store_true');
 
-    if(args.verbose):
-        verbose = True;
+    args = parser.parse_args();
 
     graphType = args.graphtype;
     graphFilePostfix = args.graphFilePostfix;
     percentThreshold = args.percentThreshold;
     separator = args.separator;
     shortenFuncName = args.shortenFuncName;
+    verbose = args.verbose;
 
     print("Running with the following parameters:");
     for key, value in vars(args).iteritems():
         print ("\t" + key + ": " + str(value));
+
+    # Let's create the first part of the HTML file, which will contain
+    # all graph images linked to per-graph HTML files.
+    #
+    topHTMLFile = createTopHTML(args.htmlDir);
+    if (topHTMLFile is None):
+        return;
+
+    # Make sure that we know where to find the HTML file templates
+    # before we spend all the time parsing the traces only to fail later.
+    #
+    htmlTemplate = findHTMLTemplate(args.htmlDir);
+    if (htmlTemplate is None):
+        return;
+
+    if (args.regenHTML):
+        if (len(args.files) > 0):
+            print("Regenerating the top HTML file for trace files: "
+                      + str(args.files));
+            print(color.BOLD + "Contained per-file images, image maps "
+                      "and HTML files must be present in the HTML directory!" +
+                      color.END);
+            regenerateHTML(topHTMLFile, args.files);
+            completeTopHTML(topHTMLFile);
+            return;
+        else:
+            print("If asking to only regenerate the top HTML, please supply " +
+                      "a list of trace file names you want included.");
+            return;
 
     if (percentThreshold > 0.0):
         print(color.RED + color.BOLD +
@@ -1296,20 +1351,6 @@ def main():
     except:
         print ("Warning: could not open outliers.txt for writing");
         outliersFile = None;
-
-    # Let's create the first part of the HTML file, which will contain
-    # all graph images linked to per-graph HTML files.
-    #
-    topHTMLFile = createTopHTML(args.htmlDir);
-    if (topHTMLFile is None):
-        return;
-
-    # Make sure that we know where to find the HTML file templates
-    # before we spend all the time parsing the traces only to fail later.
-    #
-    htmlTemplate = findHTMLTemplate(args.htmlDir);
-    if (htmlTemplate is None):
-        return;
 
     if(len(args.files) > 0):
         for fname in args.files:
