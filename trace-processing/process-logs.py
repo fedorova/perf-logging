@@ -789,10 +789,6 @@ def insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile):
 
     global htmlTemplate;
 
-    print("Inserting HTML " + imageFileName + " " + htmlFileName
-              + " " + str(topHTMLFile));
-
-
     # Extract thread ID from the file names. We assume that this
     # is the first number encountered in the file name.
     #
@@ -859,7 +855,14 @@ def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
 
 def regenerateHTML(topHTMLFile, filenames):
 
-    global htmlTemplate;
+    # This list will keep track of the trace files, whose images we
+    # already added to the top HTML file, so we don't add the same
+    # file twice. A user may specify the same file more than once
+    # on the command line, because two different file names may
+    # contain the same prefix. We are using the prefix to derive
+    # image and HTML file names.
+    #
+    alreadyAdded = [];
 
     # Iterate over the list of files. Extract the prefix, construct
     # the desired image and HTML file names based on global variables
@@ -868,6 +871,11 @@ def regenerateHTML(topHTMLFile, filenames):
     #
     for fname in filenames:
         prefix = getPrefix(fname);
+        if (prefix in alreadyAdded):
+            continue;
+        else:
+            alreadyAdded.append(prefix);
+            print("Inserting trace image for " + prefix);
 
         imageFileName = prefix + "." + graphType + "." + \
           str(percentThreshold) + "." + graphFilePostfix;
@@ -1126,11 +1134,16 @@ def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
 
 def getPrefix(fname):
 
-    words = fname.split(".txt");
-    if (len(words) > 0):
-        return words[0];
+    prefix = re.findall(r'trace.bin.\d+', fname);
+
+    if (len(prefix) > 0):
+        return prefix[0];
     else:
-        return fname;
+        words = fname.split(".txt");
+        if (len(words) > 0):
+            return words[0];
+        else:
+            return fname;
 
 def looksLikeTextTrace(fname):
 
