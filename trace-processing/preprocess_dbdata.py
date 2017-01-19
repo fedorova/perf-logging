@@ -46,6 +46,8 @@ def createLineDict(line, fd):
 
 def main():
 
+    ignoredLines = 0;
+
     parser = argparse.ArgumentParser(description=
                                          'Process data for a database dump');
     parser.add_argument('files', type=str, nargs='*');
@@ -107,7 +109,7 @@ def main():
                                + tid + " " + time + " " + lockname + "\n");
                 del eventids[tid + function + lockname];
             else:
-                print "Ignoring " + line;
+                ignoredLines += 1;
 
             oid+=1
             lineDicts.remove(lineDict);
@@ -120,6 +122,8 @@ def main():
                 lineDicts.append(lineDict);
             else:
                 fd.close()
+
+    print(str(ignoredLines) + " lines ignored");
 
 if __name__ == '__main__':
     main()
