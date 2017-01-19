@@ -7,8 +7,6 @@ from operator import itemgetter
 
 def readValidLine(fd):
 
-    print("Reading line from fd " + str(fd));
-
     while(True):
         line = fd.readline();
         isValidLine = re.match(r'(-->|<--)\s+\w+\s+\d+\s+\d+($|\s+\w+)',
@@ -60,7 +58,7 @@ def main():
         # Find all trace text files.
         validFname = re.findall(r'trace.bin.\d+.txt', file);
         if (len(validFname) > 0):
-            print("Found file " + file);
+            print("Will process file " + file);
             try:
                 fd = open(validFname[0], 'r')
                 fds.append(fd);
@@ -73,7 +71,6 @@ def main():
         # Read the first line from every file.
         for fd in fds:
             line = readValidLine(fd);
-            print line;
 
             if (line is None):
                 fd.close()
@@ -85,8 +82,6 @@ def main():
         oid = 0;
         eventid = 0;
         eventids = {};
-
-        print str(lineDicts);
 
         while len(lineDicts) > 0:
             lineDicts = sorted(lineDicts, key=itemgetter('time'))
@@ -120,7 +115,6 @@ def main():
             # Read the next line from this file
             #
             line = readValidLine(fd);
-            print line;
             if (line is not None):
                 lineDict = createLineDict(line, fd);
                 lineDicts.append(lineDict);
