@@ -102,16 +102,17 @@ def main():
                                    + " " + function + " " + tid + " " + time
                                    + " " + lockname + "\n")
                 eventid+=1
+                oid+=1
             elif (tid + function + lockname in eventids):
                 fout.write(str(oid) + " "
                                + str(eventids[tid + function + lockname])
                                + " " + direction + " " + function + " "
                                + tid + " " + time + " " + lockname + "\n");
                 del eventids[tid + function + lockname];
+                oid+=1
             else:
                 ignoredLines += 1;
 
-            oid+=1
             lineDicts.remove(lineDict);
 
             # Read the next line from this file
