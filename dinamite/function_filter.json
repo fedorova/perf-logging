@@ -16,7 +16,7 @@
 	    "__free_page_row_leaf",
 	    "__wt_vpack_posint",
 	    "__wt_curtable_open"
-        ]
+        ],
 	"file_filters" : [
             "config*.c",
 	    "bt_handle.c",
