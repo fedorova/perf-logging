@@ -14,8 +14,11 @@
 	    "__block_size_srch",
 	    "__block_off_remove",
 	    "__free_page_row_leaf",
-	    "__wt_vpack_posint",
-	    "__config_next"
+	    "__wt_vpack_posint"
+        ]
+	"file_filters" : [
+            "config*.c",
+	    "bt_handle.c"
         ]
     },
     "whitelist": {
