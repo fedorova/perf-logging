@@ -14,11 +14,14 @@
 	    "__block_size_srch",
 	    "__block_off_remove",
 	    "__free_page_row_leaf",
-	    "__wt_vpack_posint"
+	    "__wt_vpack_posint",
+	    "__wt_curtable_open"
         ]
 	"file_filters" : [
             "config*.c",
-	    "bt_handle.c"
+	    "bt_handle.c",
+	    "session_dhandle.c",
+	    "track.c"
         ]
     },
     "whitelist": {
@@ -83,6 +86,18 @@
 		"arguments" : [ 1 ]
             },
 	    "__wt_writeunlock" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_cond_wait_signal" : {
+		"events" : [
+                    "function"
+		],
+		"arguments" : [ 1 ]
+            },
+	    "__wt_cond_signal" : {
 		"events" : [
                     "function"
 		],
