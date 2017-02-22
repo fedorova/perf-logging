@@ -1,27 +1,30 @@
 #!/bin/bash
-BRANCH=wt-dev
+BRANCH=wt-dev-track
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
     WT_HOME=/tmpfs/${BRANCH}/build_posix
 #    WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 fi
-DB_HOME=/mnt/scratch/WT_TEST/
+DB_HOME=/tmp/WT_TEST
+#DB_HOME=/mnt/scratch/WT_TEST/
 #DB_HOME=/mnt/fast/sasha/WT_TEST/
-SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
-#SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
+#SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
+SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
 OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=8
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
-WORKLOAD="evict-btree-stress-multi-run.wtperf"
+#WORKLOAD="evict-btree-stress-multi-run.wtperf"
+WORKLOAD="small-btree.wtperf"
 DINAMITE_TRACE_DIR="/tmpfs"
 EXCLUDE_TID=""
+NAME="wt_epoch"
 
 #for t in 8 16 48 64 96;
 for t in 4;
 do
-    EXPNAME=${BRANCH}-${WORKLOAD}-${EVICT_WORKERS}-EV-${DATE}
+    EXPNAME=${BRANCH}-${WORKLOAD}-${NAME}-${EVICT_WORKERS}-EV-${DATE}
     EXPID=${EXPNAME}-${t}T
     OUTPUT=${OUTPUT_ROOT}/${EXPID}
     mkdir ${OUTPUT}
