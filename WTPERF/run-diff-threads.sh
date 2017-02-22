@@ -46,7 +46,7 @@ do
 		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\"
 	    else
 		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\"
-	    fi	
+	    fi
 	fi
 
 	mv ${DB_HOME}/test.stat ${OUTPUT}/${i}/.
