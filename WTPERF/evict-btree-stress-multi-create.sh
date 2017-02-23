@@ -1,11 +1,11 @@
 #!/bin/bash
-BRANCH=wt-2898
+BRANCH=wt-dev-track
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
     WT_HOME=/tmpfs/${BRANCH}/build_posix
 fi
-DB_HOME=/mnt/scratch/WT_TEST
+DB_HOME=/tmp/WT_TEST
 SCRIPTS_HOME=$HOME/Work/WiredTiger/perf-logging/WTPERF
 
 mkdir ${DB_HOME}

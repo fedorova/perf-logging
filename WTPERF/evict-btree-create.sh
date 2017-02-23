@@ -1,4 +1,4 @@
-WT_HOME=$HOME/Work/WiredTiger/wt-dev/build_posix
+WT_HOME=$HOME/Work/WiredTiger/wt-dev-track/build_posix
 DB_HOME=./WT_TEST
 SCRIPTS_HOME=$HOME/Work/WiredTiger/perf-logging/WTPERF
 
