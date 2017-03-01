@@ -7,7 +7,11 @@
 		"events" : [
                     "function"
                 ]
-            }
+            },
+	    "*lock*" : {
+	    	 "events" : [ "function" ],
+		 "arguments" : [ 1 ]
+	    }
 	}
     }
 }
