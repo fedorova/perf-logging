@@ -13,13 +13,16 @@ import re
 import subprocess
 import sys
 
+durations = {};
 graphFilePostfix = None;
 graphType = None;
 htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
 outliersFile = None;
+recID = 0;
 separator = " ";
+traceKeyedByTime = {};
 tryLockWarning = 0;
 verbose = False;
 shortenFuncName = True;
@@ -57,9 +60,44 @@ class LogRecord:
         else:
             self.fullName = func;
 
+    # Each log record has an id. The constraint is that the entry
+    # and exit to the same function invocation must have the same id.
+    # Different invocations for identical functions would have different
+    # ids.
+    #
+    def setID(self, id):
+        self.id = id;
+
     def printLogRecord(self):
         print(self.op + " " + self.func + " " + str(self.thread) + " "
               + str(self.time));
+
+    # This is for writing records into a file that contains the entire
+    # trace in the format that is easily importable into a database.
+    # We use delimiters that are default for MonetDB: "|".
+    #
+    def writeToDBFile(self, file):
+        duration = 0;
+        # First, retrieve this function's duration.
+        #
+        if (durations.has_key(self.id)):
+            duration = durations[self.id];
+        else:
+            print("Warning: duration missing for the following record:");
+            self.printLogRecord();
+
+        file.write(str(self.id) + "|");
+
+        if (self.op == "enter"):
+            file.write("0");
+        elif (self.op == "exit"):
+            file.write("1");
+        file.write("|");
+
+        file.write("\"" + self.fullName + "\"" + "|");
+        file.write(str(self.thread) + "|");
+        file.write(str(self.time) + "|");
+        file.write(str(duration) + "\n");
 
     def writeToFile(self, file):
         if (self.op == "enter"):
@@ -275,7 +313,7 @@ class LockData:
         file.write("\t Average time in acquire: "
               + str(long(self.getAverageAcquire())) + " ns.\n");
         file.write("\t Average time in trylock: "
-              + str(long(self.getAverageTryLock())) + " ns.\n");
+             + str(long(self.getAverageTryLock())) + " ns.\n");
         file.write("\t Average time in release: "
               + str(long(self.getAverageRelease())) + " ns.\n");
         file.write("\t Average time the lock was held: "
@@ -884,7 +922,30 @@ def regenerateHTML(topHTMLFile, filenames):
 
         insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile);
 
+#
+# The dictionary into which we are inserting is keyed by time, so
+# timestamps must be unique. This is not only python requirement:
+# we eventually want to import this data into a DB, with time as
+# the primary key, hence ditto.
+# In a trace, two different records may have the same timestamps.
+# While we expect this to be a rare occurrence, we check for this.
+# We fix any collisions by simply incrementing the timestamp. We
+# assume that such a small change won't affect the user.
+#
+def insertRecordIntoTraceDict(logRec):
+
+    global traceKeyedByTime;
+
+    while (traceKeyedByTime.has_key(logRec.time)):
+        print("Warning: two records with time stamp " + str(logRec.time));
+        print("Will correct by incrementing the timestamp by 1");
+        logRec.time += 1;
+
+    traceKeyedByTime[logRec.time] = logRec;
+
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
+
+    global recID;
 
     startTime = 0;
     endTime = 0;
@@ -959,8 +1020,17 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
             # Push each entry record onto the stack.
             stack.append(rec);
 
-            # Add this log record to the array
+            # This is a new enter record, so generate an id for it.
+            rec.setID(recID);
+            recID = recID + 1;
+
+            # Add this log record to the per-file list of records
             logRecords.append(rec);
+
+            # Add this log record to the global trace dictionary
+            # containing records from all files and keyed by time.
+            #
+            insertRecordIntoTraceDict(rec);
 
             # If we are told to write the records to the output
             # file, do so.
@@ -1021,7 +1091,15 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                     # that information from the corresponding entry record.
                     #
                     rec.fullName = stackRec.fullName;
+                    rec.setID(stackRec.id);
                     logRecords.append(rec);
+                    insertRecordIntoTraceDict(rec);
+
+                    # Now that we know the function's duration, put it in a
+                    # dictionary. We will need it later when dumping the
+                    # database file.
+                    #
+                    durations[rec.id] = runningTime;
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -1258,6 +1336,25 @@ def findHTMLTemplate(htmlDir):
         print "Could not open " + htmlTemplateLocation + " for reading";
         return None;
 
+#
+# The resulting file can be used to create schema and import data into
+# a database.
+#
+def createImportableDBFile(dbFile):
+
+    numRecords = len(traceKeyedByTime);
+    # Write the commands to create the schema
+    dbFile.write("CREATE TABLE trace (id int, dir int, func varchar(255), ");
+    dbFile.write("tid int, time bigint, duration bigint);\n");
+
+    # Write the command to import the records
+    dbFile.write(
+        "COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN;\n");
+    for time, logRec in sorted(traceKeyedByTime.items()):
+        logRec.writeToDBFile(dbFile);
+    dbFile.close();
+
+
 def main():
 
     global firstNodeName;
@@ -1279,6 +1376,14 @@ def main():
 
     parser.add_argument('files', type=str, nargs='*',
                     help='log files to process');
+
+    parser.add_argument('-d', '--dumpdbfile', dest='dumpdbfile', type=bool,
+                        default=True,
+                        help='Default: True; \
+                        By default we dump a file for the entire trace that \
+                        can be imported in any SQL database and is compatible \
+                        with TimeSquared. Set this option to false if you want \
+                        to opt out of this feature and save disk space.');
 
     parser.add_argument('-g', '--graphtype', dest='graphtype',
                         default='enter_exit',
@@ -1365,7 +1470,17 @@ def main():
         print ("Warning: could not open outliers.txt for writing");
         outliersFile = None;
 
-    if(len(args.files) > 0):
+    # Create a file for dumping the data in a database-importable format,
+    # unless the user opted out.
+    #
+    if (args.dumpdbfile == True):
+        try:
+            dbFile = open("dbfile.txt", "w");
+        except:
+            print ("Warning: could not open dbfile.txt for writing");
+            outliersFile = None;
+
+    if (len(args.files) > 0):
         for fname in args.files:
             prefix = getPrefix(fname);
             print(color.BOLD + "Prefix is " + prefix + color.END);
@@ -1413,6 +1528,9 @@ def main():
 
     completeTopHTML(topHTMLFile);
 
+    # Dump all records into a DB-importable file
+    print("Almost done: dumping the trace into a database-importable file...");
+    createImportableDBFile(dbFile);
 
 if __name__ == '__main__':
     main()

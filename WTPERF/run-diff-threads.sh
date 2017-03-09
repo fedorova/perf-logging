@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=wt-dev-track
+BRANCH=wt-3190
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
@@ -11,12 +11,13 @@ DB_HOME=/tmp/WT_TEST
 #DB_HOME=/mnt/fast/sasha/WT_TEST/
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 #SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
-OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
+#OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
+OUTPUT_ROOT=./
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=8
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 WORKLOAD="evict-btree-stress-multi-run.wtperf"
-#WORKLOAD="small-btree.wtperf"
+#WORKLOAD="evict-btree.wtperf"
 DINAMITE_TRACE_DIR="/tmpfs"
 EXCLUDE_TID=""
 NAME="no-instr"
