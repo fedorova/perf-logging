@@ -22,7 +22,7 @@ noMatchingAcquireOnRelease = 0;
 outliersFile = None;
 recID = 0;
 separator = " ";
-traceKeyedByTime = {};
+traceRecsFromAllFiles = [];
 tryLockWarning = 0;
 verbose = False;
 shortenFuncName = True;
@@ -922,26 +922,17 @@ def regenerateHTML(topHTMLFile, filenames):
 
         insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile);
 
+
+# This list contains trace records across all files. We organize this list
+# in the form of tuples, containing the time and the record. This way, we
+# will be able to later sort the records by time.
 #
-# The dictionary into which we are inserting is keyed by time, so
-# timestamps must be unique. This is not only python requirement:
-# we eventually want to import this data into a DB, with time as
-# the primary key, hence ditto.
-# In a trace, two different records may have the same timestamps.
-# While we expect this to be a rare occurrence, we check for this.
-# We fix any collisions by simply incrementing the timestamp. We
-# assume that such a small change won't affect the user.
-#
-def insertRecordIntoTraceDict(logRec):
+def insertRecordIntoGlobalTraceLog(logRec):
 
-    global traceKeyedByTime;
+   global traceRecsFromAllFiles;
 
-    while (traceKeyedByTime.has_key(logRec.time)):
-        print("Warning: two records with time stamp " + str(logRec.time));
-        print("Will correct by incrementing the timestamp by 1");
-        logRec.time += 1;
-
-    traceKeyedByTime[logRec.time] = logRec;
+   timeTuple = (logRec.time, logRec);
+   traceRecsFromAllFiles.append(timeTuple);
 
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
@@ -1028,9 +1019,9 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
             logRecords.append(rec);
 
             # Add this log record to the global trace dictionary
-            # containing records from all files and keyed by time.
+            # that keeps records across all files.
             #
-            insertRecordIntoTraceDict(rec);
+            insertRecordIntoGlobalTraceLog(rec);
 
             # If we are told to write the records to the output
             # file, do so.
@@ -1093,7 +1084,7 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                     rec.fullName = stackRec.fullName;
                     rec.setID(stackRec.id);
                     logRecords.append(rec);
-                    insertRecordIntoTraceDict(rec);
+                    insertRecordIntoGlobalTraceLog(rec);
 
                     # Now that we know the function's duration, put it in a
                     # dictionary. We will need it later when dumping the
@@ -1342,7 +1333,12 @@ def findHTMLTemplate(htmlDir):
 #
 def createImportableDBFile(dbFile):
 
-    numRecords = len(traceKeyedByTime);
+    global traceRecsFromAllFiles;
+    numRecords = len(traceRecsFromAllFiles);
+
+    # Sort the list of records by time
+    traceRecsFromAllFiles.sort(key=operator.itemgetter(0));
+
     # Write the commands to create the schema
     dbFile.write("CREATE TABLE trace (id int, dir int, func varchar(255), "
                  "tid int, time bigint, duration bigint);\n");
@@ -1351,8 +1347,9 @@ def createImportableDBFile(dbFile):
     dbFile.write("COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN "
                  "USING DELIMITERS '|','\\n','\"' NULL AS '';\n");
 
-    for time, logRec in sorted(traceKeyedByTime.items()):
-        logRec.writeToDBFile(dbFile);
+    for timeTuple in traceRecsFromAllFiles:
+       logRec = timeTuple[1];
+       logRec.writeToDBFile(dbFile);
 
     # Next, create the table with average function durations and their standard
     # deviations.
