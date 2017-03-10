@@ -1353,8 +1353,19 @@ def createImportableDBFile(dbFile):
 
     for time, logRec in sorted(traceKeyedByTime.items()):
         logRec.writeToDBFile(dbFile);
-    dbFile.close();
 
+    # Next, create the table with average function durations and their standard
+    # deviations.
+    #
+    dbFile.write("CREATE TABLE avg_stdev AS SELECT func, "
+                     "stddev_pop(duration) AS stdev, avg(duration) AS avg "
+                     "FROM trace GROUP BY func;\n");
+
+    # Create a table with outliers: functions whose duration was greater than
+    # two standard deviations higher than the average.
+    #
+    
+    dbFile.close();
 
 def main():
 
