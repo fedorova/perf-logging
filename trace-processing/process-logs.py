@@ -1344,12 +1344,12 @@ def createImportableDBFile(dbFile):
 
     numRecords = len(traceKeyedByTime);
     # Write the commands to create the schema
-    dbFile.write("CREATE TABLE trace (id int, dir int, func varchar(255), ");
-    dbFile.write("tid int, time bigint, duration bigint);\n");
+    dbFile.write("CREATE TABLE trace (id int, dir int, func varchar(255), "
+                 "tid int, time bigint, duration bigint);\n");
 
     # Write the command to import the records
-    dbFile.write("COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN ");
-    dbFile.write("USING DELIMITERS '|','\\n','\"' NULL AS '';\n");
+    dbFile.write("COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN "
+                 "USING DELIMITERS '|','\\n','\"' NULL AS '';\n");
 
     for time, logRec in sorted(traceKeyedByTime.items()):
         logRec.writeToDBFile(dbFile);
@@ -1358,13 +1358,18 @@ def createImportableDBFile(dbFile):
     # deviations.
     #
     dbFile.write("CREATE TABLE avg_stdev AS SELECT func, "
-                     "stddev_pop(duration) AS stdev, avg(duration) AS avg "
-                     "FROM trace GROUP BY func;\n");
+                 "stddev_pop(duration) AS stdev, avg(duration) AS avg "
+                 "FROM trace GROUP BY func;\n");
 
     # Create a table with outliers: functions whose duration was greater than
     # two standard deviations higher than the average.
     #
-    
+    dbFile.write("CREATE TABLE outliers as (WITH with_stats as "
+                 "(SELECT trace.id, trace.dir, trace.func, trace.time, "
+                 "trace.duration, avg_stdev.avg, avg_stdev.stdev FROM "
+                 "trace INNER JOIN avg_stdev on trace.func=avg_stdev.func) "
+                 "SELECT id, func, time, duration FROM with_stats "
+                 "WHERE dir = 0 AND duration >= avg + 2 *stdev);\n");
     dbFile.close();
 
 def main():
@@ -1550,8 +1555,8 @@ def main():
     completeTopHTML(topHTMLFile);
 
     # Dump all records into a DB-importable file
-    print("Almost done: dumping the trace into a " +
-              " database-importable file " + dbFileName);
+    print(color.BOLD + "Almost done: dumping the trace into a " +
+          " database-importable file " + dbFileName + color.END);
     createImportableDBFile(dbFile);
 
 if __name__ == '__main__':
