@@ -1348,8 +1348,9 @@ def createImportableDBFile(dbFile):
     dbFile.write("tid int, time bigint, duration bigint);\n");
 
     # Write the command to import the records
-    dbFile.write(
-        "COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN;\n");
+    dbFile.write("COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN ");
+    dbFile.write("USING DELIMITERS '|','\\n','\"' NULL AS '';\n");
+
     for time, logRec in sorted(traceKeyedByTime.items()):
         logRec.writeToDBFile(dbFile);
     dbFile.close();
@@ -1370,6 +1371,8 @@ def main():
     global tryLockWarning;
     global verbose;
     global shortenFuncName;
+
+    dbFileName = "trace.sql";
 
     parser = argparse.ArgumentParser(description=
                                  'Process performance log files');
@@ -1409,6 +1412,13 @@ def main():
     parser.add_argument('-s', '--separator', dest='separator', default=' ');
     parser.add_argument('--shorten_func_name', dest='shortenFuncName',
                             type=bool, default=True);
+
+    parser.add_argument('-t', '--generateTextFiles', dest='generateTextFiles',
+                            default=False, action='store_true',
+                            help='Default: False. Generate per-thread text \
+                            traces in addition to the single database \
+                            importable file containing records for all \
+                            threads.');
 
     parser.add_argument('--verbose', dest='verbose', action='store_true');
 
@@ -1475,7 +1485,7 @@ def main():
     #
     if (args.dumpdbfile == True):
         try:
-            dbFile = open("dbfile.txt", "w");
+            dbFile = open(dbFileName, "w");
         except:
             print ("Warning: could not open dbfile.txt for writing");
             outliersFile = None;
@@ -1524,12 +1534,13 @@ def main():
                 # into its standard out.
                 #
                 parse_file(process.stdout, prefix, topHTMLFile, args.htmlDir,
-                               True);
+                               args.generateTextFiles);
 
     completeTopHTML(topHTMLFile);
 
     # Dump all records into a DB-importable file
-    print("Almost done: dumping the trace into a database-importable file...");
+    print("Almost done: dumping the trace into a " +
+              " database-importable file " + dbFileName);
     createImportableDBFile(dbFile);
 
 if __name__ == '__main__':
