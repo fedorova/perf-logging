@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 
-durations = {};
+dbFile = None;
 graphFilePostfix = None;
 graphType = None;
 htmlTemplate = None;
@@ -22,7 +22,7 @@ noMatchingAcquireOnRelease = 0;
 outliersFile = None;
 recID = 0;
 separator = " ";
-traceRecsFromAllFiles = [];
+totalRecords = 0;
 tryLockWarning = 0;
 verbose = False;
 shortenFuncName = True;
@@ -76,15 +76,7 @@ class LogRecord:
     # trace in the format that is easily importable into a database.
     # We use delimiters that are default for MonetDB: "|".
     #
-    def writeToDBFile(self, file):
-        duration = 0;
-        # First, retrieve this function's duration.
-        #
-        if (durations.has_key(self.id)):
-            duration = durations[self.id];
-        else:
-            print("Warning: duration missing for the following record:");
-            self.printLogRecord();
+    def writeToDBFile(self, file, duration):
 
         file.write(str(self.id) + "|");
 
@@ -923,20 +915,10 @@ def regenerateHTML(topHTMLFile, filenames):
         insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile);
 
 
-# This list contains trace records across all files. We organize this list
-# in the form of tuples, containing the time and the record. This way, we
-# will be able to later sort the records by time.
-#
-def insertRecordIntoGlobalTraceLog(logRec):
-
-   global traceRecsFromAllFiles;
-
-   timeTuple = (logRec.time, logRec);
-   traceRecsFromAllFiles.append(timeTuple);
-
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
     global recID;
+    global totalRecords;
 
     startTime = 0;
     endTime = 0;
@@ -1018,11 +1000,6 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
             # Add this log record to the per-file list of records
             logRecords.append(rec);
 
-            # Add this log record to the global trace dictionary
-            # that keeps records across all files.
-            #
-            insertRecordIntoGlobalTraceLog(rec);
-
             # If we are told to write the records to the output
             # file, do so.
             if(outputFile is not None):
@@ -1084,13 +1061,15 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                     rec.fullName = stackRec.fullName;
                     rec.setID(stackRec.id);
                     logRecords.append(rec);
-                    insertRecordIntoGlobalTraceLog(rec);
 
-                    # Now that we know the function's duration, put it in a
-                    # dictionary. We will need it later when dumping the
-                    # database file.
+                    # Now that we know this function's duration we can write
+                    # it's opening and closing record into the database
+                    # importable file.
                     #
-                    durations[rec.id] = runningTime;
+                    if (dbFile is not None):
+                        stackRec.writeToDBFile(dbFile, runningTime);
+                        rec.writeToDBFile(dbFile, runningTime);
+                        totalRecords += 2;
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -1327,29 +1306,29 @@ def findHTMLTemplate(htmlDir):
         print "Could not open " + htmlTemplateLocation + " for reading";
         return None;
 
+# Write the top part of the file that has both the commands and data
+# to be imported into a SQL database. We use default delimiters for
+# MonetDB.
 #
-# The resulting file can be used to create schema and import data into
-# a database.
-#
-def createImportableDBFile(dbFile):
-
-    global traceRecsFromAllFiles;
-    numRecords = len(traceRecsFromAllFiles);
-
-    # Sort the list of records by time
-    traceRecsFromAllFiles.sort(key=operator.itemgetter(0));
+def createDBFileHead(dbFile):
 
     # Write the commands to create the schema
-    dbFile.write("CREATE TABLE trace (id int, dir int, func varchar(255), "
+    dbFile.write("CREATE TABLE traceTMP (id int, dir int, func varchar(255), "
                  "tid int, time bigint, duration bigint);\n");
 
     # Write the command to import the records
-    dbFile.write("COPY " + str(numRecords) + " RECORDS INTO trace FROM STDIN "
+    dbFile.write("COPY RECORDS INTO traceTMP FROM STDIN "
                  "USING DELIMITERS '|','\\n','\"' NULL AS '';\n");
 
-    for timeTuple in traceRecsFromAllFiles:
-       logRec = timeTuple[1];
-       logRec.writeToDBFile(dbFile);
+def createDBFileTail(dbFile):
+
+    global totalRecords;
+
+    # Now create a new table where the original data is sorted
+    #
+    dbFile.write("CREATE TABLE trace AS SELECT * from traceTMP "
+                     "ORDER BY time ASC;\n");
+    dbFile.write("DROP TABLE traceTMP;\n");
 
     # Next, create the table with average function durations and their standard
     # deviations.
@@ -1367,11 +1346,17 @@ def createImportableDBFile(dbFile):
                  "trace INNER JOIN avg_stdev on trace.func=avg_stdev.func) "
                  "SELECT id, func, time, duration FROM with_stats "
                  "WHERE dir = 0 AND duration >= avg + 2 *stdev);\n");
+
     dbFile.close();
+
+    # Now that we know how many records there are in the file, fix the
+    # import SQL command to include the number of records.
+
 
 def main():
 
     global firstNodeName;
+    global dbFile;
     global graphFilePostfix;
     global graphType;
     global htmlTemplate;
@@ -1499,6 +1484,7 @@ def main():
     if (args.dumpdbfile == True):
         try:
             dbFile = open(dbFileName, "w");
+            createDBFileHead(dbFile);
         except:
             print ("Warning: could not open dbfile.txt for writing");
             outliersFile = None;
@@ -1550,11 +1536,7 @@ def main():
                                args.generateTextFiles);
 
     completeTopHTML(topHTMLFile);
-
-    # Dump all records into a DB-importable file
-    print(color.BOLD + "Almost done: dumping the trace into a " +
-          " database-importable file " + dbFileName + color.END);
-    createImportableDBFile(dbFile);
+    createDBFileTail(dbFile);
 
 if __name__ == '__main__':
     main()
