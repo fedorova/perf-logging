@@ -9,6 +9,7 @@ import networkx as nx
 import operator
 import os
 import os.path
+import platform
 import re
 import subprocess
 import sys
@@ -78,6 +79,9 @@ class LogRecord:
     #
     def writeToDBFile(self, file, duration):
 
+        global totalRecords;
+
+        totalRecords += 1;
         file.write(str(self.id) + "|");
 
         if (self.op == "enter"):
@@ -918,7 +922,6 @@ def regenerateHTML(topHTMLFile, filenames):
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
     global recID;
-    global totalRecords;
 
     startTime = 0;
     endTime = 0;
@@ -1069,7 +1072,6 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                     if (dbFile is not None):
                         stackRec.writeToDBFile(dbFile, runningTime);
                         rec.writeToDBFile(dbFile, runningTime);
-                        totalRecords += 2;
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -1351,7 +1353,24 @@ def createDBFileTail(dbFile):
 
     # Now that we know how many records there are in the file, fix the
     # import SQL command to include the number of records.
-    print("Processed a total of " + totalRecords + " records...");
+    print("Processed a total of " + str(totalRecords) + " records...");
+    print("Fixing up the trace.sql file...");
+
+    # Fix up the DBfile by inserting the number of records in the command
+    # for reading the input.
+    #
+    # For MacOS use the command:
+    # sed -i ' '  -e '1,/RECORDS/ s/RECORDS/<n> RECORDS/' trace.sql
+    #
+    if(platform.system() == "darwin" or platform.system() == "Darwin"):
+       command = "sed -i \' \' -e \'1,/RECORDS/ s/RECORDS/" + str(totalRecords)\
+                 + " RECORDS/\' trace.sql";
+       os.system(command);
+    else:
+       print("Could not fix the file for your platform " + platform.system());
+       print("Please open the file trace.sql and change \'COPY RECORDS\' to "
+             "\'COPY " + str(totalRecords) + " RECORDS\'");
+    #
 
 def main():
 
