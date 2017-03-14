@@ -1351,7 +1351,7 @@ def createDBFileTail(dbFile):
 
     # Now that we know how many records there are in the file, fix the
     # import SQL command to include the number of records.
-
+    print("Processed a total of " + totalRecords + " records...");
 
 def main():
 
