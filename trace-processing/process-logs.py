@@ -56,7 +56,7 @@ class LogRecord:
         # it to the function name.
         #
         if (otherInfo is not None):
-            self.fullName = func + " " + otherInfo;
+            self.fullName = func + "::" + otherInfo;
         else:
             self.fullName = func;
 
