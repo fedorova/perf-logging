@@ -233,7 +233,7 @@ class PerfData:
 	               " ns.\n");
             file.write("------------------\n");
             if (self.lockName is not None):
-                if (locksSummaryRecords.has_key(self.lockName)):
+                if (self.lockName in locksSummaryRecords):
                     lockData = locksSummaryRecords[self.lockName];
                     lockData.printSelfHTML(file);
 
@@ -1205,7 +1205,7 @@ def getTextConverterCommand():
     # We need to know where the DINAMITE trace parser lives.
     # Its location should be in the DINAMITE_TRACE_PARSER variable.
     #
-    if not os.environ.has_key("DINAMITE_TRACE_PARSER"):
+    if "DINAMITE_TRACE_PARSER" not in os.environ:
        print("Error: DINAMITE_TRACE_PARSER environment variable MUST be set\n"
              "\t to the location of the trace_parser binary from the\n"
              "\t DINAMITE binary trace toolkit");
