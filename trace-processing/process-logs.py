@@ -1,4 +1,4 @@
-#!/usr/local/bin/python -tt
+#!/usr/bin/env python -tt
 
 import argparse
 import colorsys
