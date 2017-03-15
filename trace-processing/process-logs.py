@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 dbFile = None;
+dbFileName = "trace.sql";
 graphFilePostfix = None;
 graphType = None;
 htmlTemplate = None;
@@ -45,7 +46,6 @@ class color:
 # LogRecord contains all the fields we expect in the log record.
 
 class LogRecord:
-
     def __init__(self, func, op, thread, time, otherInfo):
         self.func = func;
         self.op = op;
@@ -78,7 +78,6 @@ class LogRecord:
     # We use delimiters that are default for MonetDB: "|".
     #
     def writeToDBFile(self, file, duration):
-
         global totalRecords;
 
         totalRecords += 1;
@@ -128,7 +127,6 @@ class LockRecord:
 # trace.
 
 class TraceStats:
-
     def __init__(self, name):
         self.name = name;
         self.startTime = 0;
@@ -150,7 +148,6 @@ class TraceStats:
 # times.
 
 class PerfData:
-
     def __init__(self, name, funcName, otherInfo, threadID):
         self.name = name;
         self.originalName = funcName;
@@ -194,7 +191,6 @@ class PerfData:
                                        + " took "
                                        + str(runningTime) +
                                        " ns at time " + str(beginTime) + "\n");
-
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -1334,48 +1330,61 @@ def createDBFileTail(dbFile):
 
     # Next, create the table with average function durations and their standard
     # deviations.
-    #
     dbFile.write("CREATE TABLE avg_stdev AS SELECT func, "
-                 "stddev_pop(duration) AS stdev, avg(duration) AS avg "
-                 "FROM trace GROUP BY func;\n");
+                    "stddev_pop(duration) AS stdev, avg(duration) AS avg "
+                    "FROM trace GROUP BY func;\n");
 
     # Create a table with outliers: functions whose duration was greater than
     # two standard deviations higher than the average.
     #
     dbFile.write("CREATE TABLE outliers as (WITH with_stats as "
-                 "(SELECT trace.id, trace.dir, trace.func, trace.time, "
-                 "trace.duration, avg_stdev.avg, avg_stdev.stdev FROM "
-                 "trace INNER JOIN avg_stdev on trace.func=avg_stdev.func) "
-                 "SELECT id, func, time, duration FROM with_stats "
-                 "WHERE dir = 0 AND duration >= avg + 2 *stdev);\n");
+                    "(SELECT trace.id, trace.dir, trace.func, trace.time, "
+                    "trace.duration, avg_stdev.avg, avg_stdev.stdev FROM "
+                    "trace INNER JOIN avg_stdev on trace.func=avg_stdev.func) "
+                    "SELECT id, func, time, duration FROM with_stats "
+                    "WHERE dir = 0 AND duration >= avg + 2 *stdev);\n");
 
     dbFile.close();
 
     # Now that we know how many records there are in the file, fix the
     # import SQL command to include the number of records.
     print("Processed a total of " + str(totalRecords) + " records...");
-    print("Fixing up the trace.sql file...");
+    print("Fixing up the " + dbFileName + " file...");
 
-    # Fix up the DBfile by inserting the number of records in the command
-    # for reading the input.
-    #
-    # For MacOS use the command:
-    # sed -i ' '  -e '1,/RECORDS/ s/RECORDS/<n> RECORDS/' trace.sql
-    #
-    if(platform.system() == "darwin" or platform.system() == "Darwin"):
-       command = "sed -i \' \' -e \'1,/RECORDS/ s/RECORDS/" + str(totalRecords)\
-                 + " RECORDS/\' trace.sql";
-       os.system(command);
+    command = getCommand();
+
+    if (command is None or os.system(command)):
+        print("Could not fix the file for your platform " + platform.system());
+        print("Please open the file " + dbFileName +
+                "and change \'COPY RECORDS\' to "
+                "\'COPY " + str(totalRecords) + " RECORDS\'");
+
+# Fix up the DBfile by inserting the number of records in the command
+# for reading the input.
+#
+# For MacOS use the command:
+# sed -i ' '  -e '1,/RECORDS/ s/RECORDS/<n> RECORDS/' dbFileName
+#
+# For Linux use command:
+# sed -i -e '0,/RECORDS/ s/RECORDS/<n> RECORDS/' dbFileName
+def getCommand():
+
+    macOrLinux = False;
+    if (platform.system() == "darwin" or platform.system() == "Darwin"):
+        command = "sed -i \' \' -e \'1,/RECORDS/ s/RECORDS/";
+    elif ("Linux" in platform.system() or "linux" in platform.system()):
+	    command = "sed -i -e \'0,/RECORDS/ s/RECORDS/";
     else:
-       print("Could not fix the file for your platform " + platform.system());
-       print("Please open the file trace.sql and change \'COPY RECORDS\' to "
-             "\'COPY " + str(totalRecords) + " RECORDS\'");
-    #
+        return None;
+
+    command += str(totalRecords) + " RECORDS/\' " + dbFileName;
+    return command;
 
 def main():
 
-    global firstNodeName;
     global dbFile;
+    global dbFileName;
+    global firstNodeName;
     global graphFilePostfix;
     global graphType;
     global htmlTemplate;
@@ -1388,8 +1397,6 @@ def main():
     global tryLockWarning;
     global verbose;
     global shortenFuncName;
-
-    dbFileName = "trace.sql";
 
     parser = argparse.ArgumentParser(description=
                                  'Process performance log files');
