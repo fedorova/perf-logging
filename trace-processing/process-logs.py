@@ -576,7 +576,7 @@ def augment_graph(graph, funcSummaryData, traceStats, prefix, htmlDir):
     # the percent runtime contributed to total by this function.
     #
     traceRuntime = traceStats.getTotalTime();
-    for func, pdr in funcSummaryData.iteritems():
+    for func, pdr in funcSummaryData.items():
         if(pdr.filtered):
             continue;
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
@@ -600,7 +600,7 @@ def augment_graph(graph, funcSummaryData, traceStats, prefix, htmlDir):
         idx = int(round((100.0 - percent) / 7.5));
         funcWithColorCode[func] = [rgbArray[idx], percentStr];
 
-    for func, attrs in funcWithColorCode.iteritems():
+    for func, attrs in funcWithColorCode.items():
 
         if graphType == 'func_only':
             allNames = [func];
@@ -793,7 +793,7 @@ def generatePerFuncHTMLFiles(prefix, htmlDir,
             os.mkdir("./" + dirname);
             print("Directory " + dirname + " created");
         except:
-            print "Could not create directory " + dirname;
+            print("Could not create directory " + dirname);
             return;
 
     for pdr in funcSummaryRecords.values():
@@ -970,7 +970,7 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                 otherInfo = (" ".join(parts)).rstrip();
 
         except ValueError:
-            print "Could not parse: " + line;
+            print("Could not parse: " + line);
             continue;
 
         if (words[0] == "-->"):
@@ -1154,7 +1154,7 @@ def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
     if fileType == '.csv':
         summaryFile.write("Function, Num calls, Total Runtime (ns), "
                               "Averge Runtime (ns), Largest Runtime (ns)\n");
-        for fkey, pdr in funcSummaryRecords.iteritems():
+        for fkey, pdr in funcSummaryRecords.items():
             pdr.printSelfCSVLine(summaryFile);
     else:
         summaryFile.write(" SUMMARY FOR FILE " + prefix + ":\n");
@@ -1164,14 +1164,14 @@ def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
         summaryFile.write(
             "Function \t Num calls \t Runtime (tot) \t Runtime (avg)\n");
 
-        for fkey, pdr in funcSummaryRecords.iteritems():
+        for fkey, pdr in funcSummaryRecords.items():
             pdr.printSelf(summaryFile);
             summaryFile.write("------------------------------\n");
 
         lockDataDict = locksSummaryRecords;
 
         summaryFile.write("\nLOCKS SUMMARY\n");
-        for lockKey, lockData in lockDataDict.iteritems():
+        for lockKey, lockData in lockDataDict.items():
             lockData.printSelf(summaryFile);
 
         summaryFile.write("------------------------------\n");
@@ -1253,13 +1253,13 @@ def createTopHTML(htmlDir):
             os.mkdir("./" + htmlDir);
             print("Directory " + htmlDir + " created");
         except:
-            print "Could not create directory " + htmlDir;
+            print("Could not create directory " + htmlDir);
             return None;
 
     try:
         topHTML = open(htmlDir + "/index.html", "w");
     except:
-        print "Could not open " + htmlDir + "/index.html for writing";
+        print("Could not open " + htmlDir + "/index.html for writing");
         return None;
 
     topHTML.write("<!DOCTYPE html>\n");
@@ -1301,7 +1301,7 @@ def findHTMLTemplate(htmlDir):
         htmlTemplate = open(htmlTemplateLocation, "r");
         return htmlTemplate;
     except:
-        print "Could not open " + htmlTemplateLocation + " for reading";
+        print("Could not open " + htmlTemplateLocation + " for reading");
         return None;
 
 # Write the top part of the file that has both the commands and data
@@ -1456,7 +1456,7 @@ def main():
     verbose = args.verbose;
 
     print("Running with the following parameters:");
-    for key, value in vars(args).iteritems():
+    for key, value in vars(args).items():
         print ("\t" + key + ": " + str(value));
 
     # Let's create the first part of the HTML file, which will contain
