@@ -1398,6 +1398,12 @@ def main():
     global verbose;
     global shortenFuncName;
 
+    if (sys.version_info[0] != 2):
+       print("This script requires python version 2 to run.");
+       print("You are running version " + str(sys.version_info[0]) + "." +
+             str(sys.version_info[1]));
+       sys.exit(-1);
+
     parser = argparse.ArgumentParser(description=
                                  'Process performance log files');
 
