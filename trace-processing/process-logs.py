@@ -355,9 +355,11 @@ def looks_like_release(funcname):
 
 def looks_like_lock(funcname):
 
-	if(looks_like_acquire(funcname) or
-	   looks_like_release(funcname) or
-	   looks_like_trylock(funcname)):
+	if ("block" in funcname):
+		return False;
+	if (looks_like_acquire(funcname) or
+		looks_like_release(funcname) or
+		looks_like_trylock(funcname)):
 		return True;
 	else:
 		return False;
@@ -1012,12 +1014,15 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 		else:
 			if(outputFile is not None):
 				# If this is a function exit record, we may need to add
-				# the name of the lock to the end of the line, if this
-				# happens to be a lock function. So for now we write the
-				# line without the newline character at the end. Later we
-				# will either add the lock name with the newline character
-				# (if this happens to be a lock function, or just the
-				# newline character otherwise.
+				# otherInfo to the end of the line. otherInfo contains
+				# function arguments, so it is only available at function
+				# entry.
+				# So for now we write the line without the newline character
+				# at the end. Later we will either add the otherInfo with the
+				# newline character (if this information was provided with the
+				# function entry record, or just the newline character
+				# otherwise.
+				#
 				rec.writeToFile(outputFile);
 
 			found = False;
@@ -1082,7 +1087,9 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 						do_lock_processing(locksSummaryRecords, rec,
 										   runningTime,
 										   stackRec.otherInfo);
-						if(outputFile is not None):
+
+					if(stackRec.otherInfo is not None and
+							   outputFile is not None):
 							outputFile.write(" " + stackRec.otherInfo);
 					break;
 			if(not found):
