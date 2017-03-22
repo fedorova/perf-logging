@@ -1356,6 +1356,7 @@ def createDBFileTail(dbFile):
 	print("Fixing up the " + dbFileName + " file...");
 
 	command = getCommand();
+	print("Using command: " + command);
 
 	if (command is None or os.system(command)):
 		print("Could not fix the file for your platform " + platform.system());
@@ -1375,7 +1376,7 @@ def getCommand():
 
 	macOrLinux = False;
 	if (platform.system() == "darwin" or platform.system() == "Darwin"):
-		command = "sed -i \' \' -e \'1,/RECORDS/ s/RECORDS/";
+		command = "sed -i \'\' -e \'1,/RECORDS/ s/RECORDS/";
 	elif ("Linux" in platform.system() or "linux" in platform.system()):
 		command = "sed -i -e \'0,/RECORDS/ s/RECORDS/";
 	else:
