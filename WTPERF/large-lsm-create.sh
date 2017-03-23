@@ -14,4 +14,4 @@ mkdir ${DB_HOME}
 rm ${DB_HOME}/*
 
 
-${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPTS_HOME}/evict-btree-stress-multi-create.wtperf
+${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPTS_HOME}/large-lsm-create.wtperf

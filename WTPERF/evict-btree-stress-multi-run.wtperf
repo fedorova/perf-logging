@@ -3,7 +3,7 @@ table_config="type=file"
 table_count=100
 icount=100000000
 report_interval=5
-run_time=120
+run_time=20
 create=false
 threads=((count=20,updates=1,reads=4,ops_per_txn=30))
 # Warn if a latency over a quarter second is seen

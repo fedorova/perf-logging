@@ -3,22 +3,22 @@ BRANCH=wt-dev
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
-    WT_HOME=/tmpfs/${BRANCH}/build_posix
-#    WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
+#    WT_HOME=/tmpfs/${BRANCH}/build_posix
+    WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 fi
 
 #DB_HOME=/tmp/WT_TEST/
 DB_HOME=/mnt/fast/sasha/WT_TEST/
-#SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
-SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
+SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
+#SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
 #OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 OUTPUT_ROOT=.
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
-WORKLOAD="evict-btree-stress-multi.wtperf"
+#WORKLOAD="evict-btree-stress-multi.wtperf"
 #WORKLOAD="evict-btree-stress.wtperf"
-#WORKLOAD="evict-btree-stress-multi-run.wtperf"
+WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="500m-btree-populate.wtperf"
 #WORKLOAD="evict-btree-run.wtperf"
 #WORKLOAD="500m-btree-80r20u.wtperf"
@@ -28,9 +28,12 @@ WORKLOAD="evict-btree-stress-multi.wtperf"
 #WORKLOAD="evict-btree.wtperf"
 #WORKLOAD="evict-lsm-readonly.wtperf"
 #WORKLOAD="small-btree.wtperf"
-DINAMITE_TRACE_DIR="/tmp"
-EXCLUDE_TID="1"
-NAME="no-instr"
+
+#DINAMITE_TRACE_DIR="/mnt/fast/sasha"
+DINAMITE_TRACE_DIR="/dev/shm"
+#DINAMITE_TRACE_DIR="/tmp"
+#EXCLUDE_TID=""
+NAME="dinamite"
 
 #for t in 8 16 48 64 96;
 for t in 4;
@@ -56,7 +59,7 @@ do
 	    if [ "$OSTYPE" == 'darwin' ]; then
 		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\"
 	    else
-		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\"
+		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\)\"
 	    fi
 	fi
 
