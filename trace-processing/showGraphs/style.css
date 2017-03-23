@@ -22,7 +22,7 @@ div.ib {
 }
 
 div.float-border {
-    border: solid green 1px;
+    border: solid teal 1px;
     margin: 1em;
     /* Floated for positioning */
     float: left;

@@ -1,0 +1,17 @@
+{
+    "minimum_function_size" : 40,
+    "function_size_metric" : "LOC",
+    "whitelist": {
+	"function_filters" : {
+            "*" : {
+		"events" : [
+                    "function"
+                ]
+            },
+	    "*lock*" : {
+	    	 "events" : [ "function" ],
+		 "arguments" : [ 1 ]
+	    }
+	}
+    }
+}
