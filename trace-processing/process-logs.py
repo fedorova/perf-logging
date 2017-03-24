@@ -686,15 +686,30 @@ def generate_graph(logRecords):
 #
 percentThreshold = 0.0;
 
-useMaxRuntimeFilter = False;
-maxRuntimeThreshold = 3300000; # in clock cycles
+def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
+
+    traceRuntime = traceStats.getTotalTime();
+
+    if (percentThreshold == 0.0):
+        return;
+
+    print("Marking function to filter based on filtering threshold "
+              + str(percentThreshold));
+
+    for key, pdr in funcSummaryRecords.items():
+        percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
+
+        if (percent <= percentThreshold):
+            pdr.filtered = True;
+            print("PDR " + key + " marked filtered");
+
 
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     filteredRecords = [];
     numFiltered = 0;
-    traceRuntime = traceStats.getTotalTime();
 
+    decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
     print("Filtering records...");
 
     while (len(logRecords) > 0):
@@ -714,14 +729,8 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
                   rec.func);
             continue;
 
-        pdr = funcSummaryRecords[rec.fullName];
-        percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
-
-        if (percent <= percentThreshold):
-            pdr.filtered = True;
-            continue;
-        elif (useMaxRuntimeFilter and pdr.maxRunningTime < maxRuntimeThreshold):
-            pdr.filtered = True;
+        funcPDR = funcSummaryRecords[rec.fullName];
+        if funcPDR.filtered:
             continue;
         else:
             filteredRecords.append(rec);
