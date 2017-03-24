@@ -5,7 +5,7 @@ compact=true
 compression="snappy"
 icount=250000000
 report_interval=5
-run_time=5
+run_time=10
 populate_threads=1
 sample_interval=10
 threads=((count=16,reads=1))
