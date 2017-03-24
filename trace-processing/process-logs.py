@@ -716,7 +716,7 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
         numFiltered += 1;
         if (numFiltered % 1000 == 0):
-           print(str(numFiltered) + " done...");
+            print(str(numFiltered) + " done...");
 
         rec = logRecords[index];
 
@@ -940,6 +940,71 @@ def regenerateHTML(topHTMLFile, filenames):
 
         insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile);
 
+def funcFiltered(func, funcSummaryRecords):
+
+    if not funcSummaryRecords.has_key(func):
+        print("Warning: no performance record for function " +
+                  func);
+        return False;
+
+    funcPDR = funcSummaryRecords[func];
+    if (funcPDR.filtered):
+        return True;
+    else:
+        return False;
+
+def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
+
+    filteredLogRecords = [];
+    numParsed = 0;
+
+    print("Re-parsing and filtering data...");
+    while True:
+        line = dbFile.readline();
+        if (line is None):
+            break;
+        if (line == ''):
+            break;
+
+        numParsed += 1;
+        if (numParsed % 1000 == 0):
+            print(str(numParsed) + " done...");
+
+        words = line.split("|");
+        if (len(words) < 6):
+            print("Invalid record format in SQL file. " +
+                      "Your results may be incorrect.");
+            print(line);
+            continue;
+
+        if (words[1] == "0"):
+            op = "enter";
+        elif (words[1] == "1"):
+            op = "exit";
+        else:
+            print("Invalid record format in SQL file. " +
+                       "Your results may be incorrect.");
+            print(line);
+            continue;
+
+        func = words[2].strip('"');
+
+        # Let's see if we need this log record
+        if (funcFiltered(func, funcSummaryRecords)):
+            continue;
+
+        # If not, add it to the dictionary
+        try:
+            time = long(words[4]);
+        except:
+            print("Could not parse:");
+            print(line);
+            continue;
+
+        rec = LogRecord(func, op, 0, time, None);
+        filteredLogRecords.append(rec);
+
+    return sorted(filteredLogRecords, key=operator.attrgetter("time"));
 
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
@@ -948,21 +1013,27 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     global summaryTxt;
     global treatLocksSpecially;
 
-    startTime = 0;
     endTime = 0;
-    stack = [];
-    lockStack = [];
-    outputFile = None;
-
-    funcSummaryRecords = {}
-    locksSummaryRecords = {}
-    traceStats = TraceStats(prefix);
-    logRecords = [];
+    fileBeginPosition = -1;
+    funcSummaryRecords = {};
     graph = nx.DiGraph();
+    lockStack = [];
+    locksSummaryRecords = {}
+    logRecords = [];
+    outputFile = None;
+    traceStats = TraceStats(prefix);
+    stack = [];
+    startTime = 0;
 
     graph.add_node("START", fontname="Helvetica");
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
+
+    if (dbFile is None):
+        print("Cannot proceed without an open dbFile");
+        return;
+
+    fileBeginPosition = dbFile.tell();
 
     if (createTextFile):
         try:
@@ -1127,9 +1198,18 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     if (dbFile is not None):
        dbFile.flush();
 
-    # Filter the log records according to criteria on their attributes
-    filteredLogRecords = filterLogRecords(logRecords, funcSummaryRecords,
-                                          traceStats);
+    print("Parsed " + str(len(logRecords)) + " records.");
+
+    # Delete the log records dictionary, regenerate the list of filtered
+    # records by parsing the data we just wrote to a file. This is faster
+    # than filtering this data in memory.
+    print("Filtering records...");
+    del logRecords;
+    dbFile.seek(fileBeginPosition);
+    decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
+    filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
+
+    # Dumping original function names if names were shortened
     if shortenFuncName:
         shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
         dump_shortname_maps(shortnameMapsFilename)
@@ -1580,10 +1660,11 @@ def main():
     #
     if (args.dumpdbfile == True):
         try:
-            dbFile = open(dbFileName, "w");
+            dbFile = open(dbFileName, "w+");
             createDBFileHead(dbFile);
         except:
             print ("Warning: could not open " + dbFileName + " for writing");
+            sys.exit();
 
     if (len(args.files) > 0):
         for fname in args.files:
