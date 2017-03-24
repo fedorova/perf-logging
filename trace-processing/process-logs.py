@@ -701,24 +701,24 @@ def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
 
         if (percent <= percentThreshold):
             pdr.filtered = True;
-            print("PDR " + key + " marked filtered");
 
 
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     filteredRecords = [];
+    index = 0;
     numFiltered = 0;
 
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
     print("Filtering records...");
 
-    while (len(logRecords) > 0):
+    while (index < len(logRecords)):
 
         numFiltered += 1;
         if (numFiltered % 1000 == 0):
            print(str(numFiltered) + " done...");
 
-        rec = logRecords.pop(0);
+        rec = logRecords[index];
 
         # A log may have no corresponding function record if we stopped
         # logging before the function exit record was generated, as can
@@ -731,11 +731,11 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
         funcPDR = funcSummaryRecords[rec.fullName];
         if funcPDR.filtered:
-            continue;
+            del logRecords[index];
         else:
-            filteredRecords.append(rec);
+            index += 1;
 
-    return filteredRecords;
+    return logRecords;
 
 def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
     if transformMode == 'multiple lines':
