@@ -692,9 +692,17 @@ maxRuntimeThreshold = 3300000; # in clock cycles
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     filteredRecords = [];
+    numFiltered = 0;
     traceRuntime = traceStats.getTotalTime();
 
+    print("Filtering records...");
+
     while (len(logRecords) > 0):
+
+        numFiltered += 1;
+        if (numFiltered % 1000 == 0):
+           print(str(numFiltered) + " done...");
+
         rec = logRecords.pop(0);
 
         # A log may have no corresponding function record if we stopped
@@ -1107,10 +1115,12 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     traceStats.setStartTime(startTime);
     traceStats.setEndTime(endTime);
 
+    if (dbFile is not None):
+       dbFile.flush();
+
     # Filter the log records according to criteria on their attributes
     filteredLogRecords = filterLogRecords(logRecords, funcSummaryRecords,
                                           traceStats);
-
     if shortenFuncName:
         shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
         dump_shortname_maps(shortnameMapsFilename)
