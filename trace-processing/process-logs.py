@@ -24,11 +24,13 @@ noMatchingAcquireOnRelease = 0;
 outliersFile = None;
 recID = 0;
 separator = " ";
+shortenFuncName = True;
+summaryCSV = False;
+summaryTxt = False;
+treatLocksSpecially = False;
 totalRecords = 0;
 tryLockWarning = 0;
 verbose = False;
-shortenFuncName = True;
-
 
 class color:
    PURPLE = '\033[95m'
@@ -689,33 +691,34 @@ maxRuntimeThreshold = 3300000; # in clock cycles
 
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
-	filteredRecords = [];
-	traceRuntime = traceStats.getTotalTime();
+    filteredRecords = [];
+    traceRuntime = traceStats.getTotalTime();
 
-	for rec in logRecords:
+    while (len(logRecords) > 0):
+        rec = logRecords.pop(0);
 
 		# A log may have no corresponding function record if we stopped
 		# logging before the function exit record was generated, as can
 		# be with functions that start threads.
 		#
-		if not funcSummaryRecords.has_key(rec.fullName):
-			print("Warning: no performance record for function " +
+        if not funcSummaryRecords.has_key(rec.fullName):
+            print("Warning: no performance record for function " +
 				  rec.func);
-			continue;
+            continue;
 
-		pdr = funcSummaryRecords[rec.fullName];
-		percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
+        pdr = funcSummaryRecords[rec.fullName];
+        percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
-		if (percent <= percentThreshold):
-			pdr.filtered = True;
-			continue;
-		elif (useMaxRuntimeFilter and pdr.maxRunningTime < maxRuntimeThreshold):
-			pdr.filtered = True;
-			continue;
-		else:
-			filteredRecords.append(rec);
+        if (percent <= percentThreshold):
+            pdr.filtered = True;
+            continue;
+        elif (useMaxRuntimeFilter and pdr.maxRunningTime < maxRuntimeThreshold):
+            pdr.filtered = True;
+            continue;
+        else:
+            filteredRecords.append(rec);
 
-	return filteredRecords;
+    return filteredRecords;
 
 def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
 	if transformMode == 'multiple lines':
@@ -924,6 +927,9 @@ def regenerateHTML(topHTMLFile, filenames):
 def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
 	global recID;
+	global summaryCSV;
+	global summaryTxt;
+	global treatLocksSpecially;
 
 	startTime = 0;
 	endTime = 0;
@@ -1082,17 +1088,16 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 					# processing. stackRec.otherInfo variable would contain
 					# the name of the lock, since only the function enter
 					# record has this information, not the exit record.
-					if(stackRec.otherInfo is not None
-					   and looks_like_lock(func)):
-						do_lock_processing(locksSummaryRecords, rec,
-										   runningTime,
-										   stackRec.otherInfo);
+					if (treatLocksSpecially and stackRec.otherInfo is not None
+								and looks_like_lock(func)):
+							do_lock_processing(locksSummaryRecords, rec,
+										runningTime, stackRec.otherInfo);
 
 					if(stackRec.otherInfo is not None and
 							   outputFile is not None):
 							outputFile.write(" " + stackRec.otherInfo);
 					break;
-			if(not found):
+			if (not found):
 				print("Could not find matching function entrance for line: \n"
 					  + line);
 
@@ -1142,13 +1147,15 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 	generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
 							htmlDir, topHTMLFile);
 
-	if(outputFile is not None):
+	if (outputFile is not None):
 		outputFile.close();
 
-	generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
-							locksSummaryRecords)
-	generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
-							locksSummaryRecords)
+	if (summaryTxt):
+		generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
+								locksSummaryRecords)
+	if (summaryCSV):
+		generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
+								locksSummaryRecords)
 
 
 def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
@@ -1406,9 +1413,12 @@ def main():
 	global outliersFile;
 	global percentThreshold;
 	global separator;
+	global shortenFuncName;
+	global summaryCSV;
+	global summaryTxt;
+	global treatLocksSpecially;
 	global tryLockWarning;
 	global verbose;
-	global shortenFuncName;
 
 	if (sys.version_info[0] != 2):
 	   print("This script requires python version 2 to run.");
@@ -1462,6 +1472,20 @@ def main():
 	parser.add_argument('--shorten_func_name', dest='shortenFuncName',
 							type=bool, default=True);
 
+	parser.add_argument('--summaryCSV', dest='summaryCSV',
+							type=bool, default=True,
+							help='Generate per-file summary in CSV format');
+
+	parser.add_argument('--summaryTxt', dest='summaryTxt',
+							type=bool, default=False,
+							help='Generate per-file summary in text format');
+
+	parser.add_argument('--treatLocksSpecially', dest='treatLocksSpecially',
+							action='store_true',
+							help='Try to guess which functions acquire and \
+							release locks, and compute statistics about \
+							time spent holding locks based on that.');
+
 	parser.add_argument('-t', '--generateTextFiles', dest='generateTextFiles',
 							default=False, action='store_true',
 							help='Default: False. Generate per-thread text \
@@ -1478,6 +1502,9 @@ def main():
 	percentThreshold = args.percentThreshold;
 	separator = args.separator;
 	shortenFuncName = args.shortenFuncName;
+	summaryCSV = args.summaryCSV;
+	summmaryTxt = args.summaryTxt;
+	treatLocksSpecially = args.treatLocksSpecially;
 	verbose = args.verbose;
 
 	print("Running with the following parameters:");
