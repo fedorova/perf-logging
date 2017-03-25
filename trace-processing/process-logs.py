@@ -54,6 +54,7 @@ class LogRecord:
         self.thread = thread;
         self.time = long(time);
         self.otherInfo = otherInfo;
+        self.filtered = False;
         #
         # otherInfo typically includes argument values. We append
         # it to the function name.
@@ -670,6 +671,8 @@ def generate_graph(logRecords):
         prevNodeName = generate_func_only_graph(graph, logRecords, prevNodeName)
     else:
         for logRec in logRecords:
+            if (logRec.filtered):
+                continue;
             nodeName = logRec.op + " " + logRec.fullName;
             update_graph(graph, nodeName, prevNodeName);
             prevNodeName = nodeName;
@@ -705,20 +708,16 @@ def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
 
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
-    filteredRecords = [];
-    index = 0;
     numFiltered = 0;
 
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
     print("Filtering records...");
 
-    while (index < len(logRecords)):
+    for rec in logRecords:
 
         numFiltered += 1;
         if (numFiltered % 1000 == 0):
             print(str(numFiltered) + " done...");
-
-        rec = logRecords[index];
 
         # A log may have no corresponding function record if we stopped
         # logging before the function exit record was generated, as can
@@ -731,11 +730,7 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
         funcPDR = funcSummaryRecords[rec.fullName];
         if funcPDR.filtered:
-            del logRecords[index];
-        else:
-            index += 1;
-
-    return logRecords;
+            rec.filtered = True;
 
 def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
     if transformMode == 'multiple lines':
@@ -1204,11 +1199,12 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     # records by parsing the data we just wrote to a file. This is faster
     # than filtering this data in memory.
     print("Filtering records...");
-    del logRecords;
-    dbFile.seek(fileBeginPosition);
-    decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
-    filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
+    #del logRecords;
+    #dbFile.seek(fileBeginPosition);
+    #decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
+    #filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
 
+    filterLogRecords(logRecords, funcSummaryRecords, traceStats);
     # Dumping original function names if names were shortened
     if shortenFuncName:
         shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
@@ -1222,7 +1218,7 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                                  funcSummaryRecords, locksSummaryRecords);
 
     # Augment graph attributes to reflect performance characteristics
-    graph = generate_graph(filteredLogRecords);
+    graph = generate_graph(logRecords);
     augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
     # Prepare the graph
