@@ -815,8 +815,8 @@ def dump_shortname_maps(filename):
     with open(filename, 'w') as fp:
         json.dump(shortnameMappings, fp);
         if (len(shortnameMappings) > 0):
-           print("Some function names may have been shortened for readability.",
-                 " The original function names and their shorthand equivalents",
+           print("Some function names may have been shortened for readability."
+                 " The original function names and their shorthand equivalents"
                  " were saved to " + filename);
 
 
@@ -1220,21 +1220,20 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
     # Generate HTML files summarizing function stats for all functions that
     # were not filtered.
-    print("Generating per-function HTML files...");
+    print("Generating per-function HTML file...");
     generatePerFuncHTMLFiles(prefix, htmlDir,
                                  funcSummaryRecords, locksSummaryRecords);
 
     # Augment graph attributes to reflect performance characteristics
+    print("Generating the FlowViz graph...");
     graph = generate_graph(logRecords);
     augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
     # Free up some memory
-    mem();
     logRecords = None;
     print("Forcing garbage collection..."),
     collected = gc.collect();
     print(" collected " + str(collected) + " objects.");
-    mem();
 
     # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
@@ -1247,7 +1246,11 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
     imageFileName = nameNoPostfix + graphFilePostfix;
     mapFileName = nameNoPostfix + "cmapx";
+    dotFileName = nameNoPostfix + "dot";
     try:
+       print("Writing dot file to: " + dotFileName + " ... ");
+       aGraph.write(dotFileName);
+
        print("Saving graph image to: " + imageFileName + "... "),
        aGraph.draw(imageFileName, prog = 'dot');
        print("Done.");
