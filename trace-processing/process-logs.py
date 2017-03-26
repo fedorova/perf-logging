@@ -3,6 +3,7 @@
 import argparse
 import colorsys
 import errno
+import gc
 import json
 import math
 import networkx as nx
@@ -11,6 +12,7 @@ import os
 import os.path
 import platform
 import re
+import resource
 import subprocess
 import sys
 
@@ -22,12 +24,14 @@ htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
 outliersFile = None;
+percentThreshold = 0.0;
 recID = 0;
 separator = " ";
 shortenFuncName = True;
 summaryCSV = False;
 summaryTxt = False;
 treatLocksSpecially = False;
+totalNodes = 0;
 totalRecords = 0;
 tryLockWarning = 0;
 verbose = False;
@@ -318,6 +322,12 @@ class LockData:
         file.write("\t Average time the lock was held: "
               + str(long(self.getAverageTimeHeld())) + " ns.\n");
 
+
+
+def mem():
+    print('Memory usage         : % 2.2f MB' % round(
+        resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0,1)
+    )
 
 #
 # The following data structures and functions help us decide what
@@ -628,9 +638,12 @@ def augment_graph(graph, funcSummaryData, traceStats, prefix, htmlDir):
 
 def update_graph(graph, nodeName, prevNodeName):
 
+    global totalNodes;
+
     if (not graph.has_node(nodeName)):
             graph.add_node(nodeName, fontname="Helvetica");
             graph.node[nodeName]['shape'] = 'box';
+            totalNodes += 1;
 
     if (not graph.has_edge(prevNodeName, nodeName)):
         graph.add_edge(prevNodeName, nodeName, label = " 1 ",
@@ -661,6 +674,9 @@ def generate_func_only_graph(graph, logRecords, prevNodeName):
 
 def generate_graph(logRecords):
 
+    global totalNodes;
+    totalNodes = 0;
+
     graph = nx.DiGraph();
 
     graph.add_node("START", fontname="Helvetica");
@@ -681,23 +697,20 @@ def generate_graph(logRecords):
     graph.add_edge(prevNodeName, "END");
     graph.node["END"]['shape']='diamond';
 
+    print("Generated a FlowViz graph with " + str(totalNodes) + " nodes.");
     return graph;
 
-#
-# When we compute the execution flow graph, we will not include any functions
-# whose percent execution time is below that value.
-#
-percentThreshold = 0.0;
 
 def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
 
+    global percentThreshold;
     traceRuntime = traceStats.getTotalTime();
 
     if (percentThreshold == 0.0):
         return;
 
     print("Marking function to filter based on filtering threshold "
-              + str(percentThreshold));
+              + str(percentThreshold) + "%");
 
     for key, pdr in funcSummaryRecords.items():
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
@@ -709,15 +722,10 @@ def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
 def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
 
     numFiltered = 0;
-
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
     print("Filtering records...");
 
     for rec in logRecords:
-
-        numFiltered += 1;
-        if (numFiltered % 1000 == 0):
-            print(str(numFiltered) + " done...");
 
         # A log may have no corresponding function record if we stopped
         # logging before the function exit record was generated, as can
@@ -731,6 +739,9 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
         funcPDR = funcSummaryRecords[rec.fullName];
         if funcPDR.filtered:
             rec.filtered = True;
+            numFiltered += 1;
+
+    print("Filtered " + str(numFiltered) + " records.");
 
 def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
     if transformMode == 'multiple lines':
@@ -802,7 +813,12 @@ def unique_shortname(originalName):
 
 def dump_shortname_maps(filename):
     with open(filename, 'w') as fp:
-        json.dump(shortnameMappings, fp)
+        json.dump(shortnameMappings, fp);
+        if (len(shortnameMappings) > 0):
+           print("Some function names may have been shortened for readability.",
+                 " The original function names and their shorthand equivalents",
+                 " were saved to " + filename);
+
 
 def generatePerFuncHTMLFiles(prefix, htmlDir,
                                  funcSummaryRecords, locksSummaryRecords):
@@ -1195,21 +1211,12 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
 
     print("Parsed " + str(len(logRecords)) + " records.");
 
-    # Delete the log records dictionary, regenerate the list of filtered
-    # records by parsing the data we just wrote to a file. This is faster
-    # than filtering this data in memory.
-    print("Filtering records...");
-    #del logRecords;
-    #dbFile.seek(fileBeginPosition);
-    #decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
-    #filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
-
     filterLogRecords(logRecords, funcSummaryRecords, traceStats);
+
     # Dumping original function names if names were shortened
     if shortenFuncName:
         shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
         dump_shortname_maps(shortnameMapsFilename)
-        print("shortname_maps is saved to {}".format(shortnameMapsFilename))
 
     # Generate HTML files summarizing function stats for all functions that
     # were not filtered.
@@ -1221,6 +1228,14 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     graph = generate_graph(logRecords);
     augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
+    # Free up some memory
+    mem();
+    logRecords = None;
+    print("Forcing garbage collection..."),
+    collected = gc.collect();
+    print(" collected " + str(collected) + " objects.");
+    mem();
+
     # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
     aGraph.add_subgraph("START", rank = "source");
@@ -1230,14 +1245,20 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     nameNoPostfix = htmlDir + "/" + \
       prefix + "." + graphType + "."+ str(percentThreshold) + "."
 
-
     imageFileName = nameNoPostfix + graphFilePostfix;
-    print("Graph image is saved to: " + imageFileName);
-    aGraph.draw(imageFileName, prog = 'dot');
-
     mapFileName = nameNoPostfix + "cmapx";
-    aGraph.draw(mapFileName, prog = 'dot');
-    print("Image map is saved to: " + mapFileName);
+    try:
+       print("Saving graph image to: " + imageFileName + "... "),
+       aGraph.draw(imageFileName, prog = 'dot');
+       print("Done.");
+
+       print("Saving image map to: " + mapFileName + "... "),
+       aGraph.draw(mapFileName, prog = 'dot');
+       print("Done.");
+    except:
+       print("Failed to save image files. The amount of memory needed by " +
+             "the program could be too large. Try increasing the filtering " +
+             "threshold.");
 
     generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
                             htmlDir, topHTMLFile);
@@ -1470,7 +1491,7 @@ def createDBFileTail(dbFile):
     if (command is None or os.system(command)):
         print("Could not fix the file for your platform " + platform.system());
         print("Please open the file " + dbFileName +
-                "and change \'COPY RECORDS\' to "
+                " and change \'COPY RECORDS\' to "
                 "\'COPY " + str(totalRecords) + " RECORDS\'");
 
 # Fix up the DBfile by inserting the number of records in the command
@@ -1555,7 +1576,7 @@ def main():
 
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
                         type=float, default = 2.0,
-                        help='Default=2.0; \
+                        help='Default=2.0%; \
                         When we compute the execution flow graph, we will not \
                         include any functions, whose percent execution time   \
                         is smaller that value.');
