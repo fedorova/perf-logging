@@ -6,6 +6,7 @@ import errno
 import gc
 import json
 import math
+from multiprocessing import Process, Queue, Value
 import networkx as nx
 import operator
 import os
@@ -18,8 +19,10 @@ import sys
 
 dbFile = None;
 dbFileName = "trace.sql";
+generateTextFiles = False;
 graphFilePostfix = None;
 graphType = None;
+htmlDir = "./";
 htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
@@ -85,9 +88,7 @@ class LogRecord:
     # We use delimiters that are default for MonetDB: "|".
     #
     def writeToDBFile(self, file, duration):
-        global totalRecords;
 
-        totalRecords += 1;
         file.write(str(self.id) + "|");
 
         if (self.op == "enter"):
@@ -230,11 +231,14 @@ class PerfData:
 
     def printSelfHTML(self, prefix, locksSummaryRecords):
         with open(prefix + "/" + self.name + ".txt", 'w+') as file:
-            file.write("*** " + self.name + "\n");
+            file.write(self.name + "\n");
             file.write("\t Original full name: " + self.originalName + "\n");
             file.write("\t Total running time: " +
                        '{:,}'.format(self.totalRunningTime) +
                        " ns.\n");
+            file.write("\t Number of invocations: " +
+                        '{:,}'.format(self.numCalls) +
+                       ".\n");
             file.write("\t Average running time: "
                         + '{:,}'.format(long(self.getAverage())) + " ns.\n");
             file.write("\t Standard deviation: "
@@ -709,9 +713,6 @@ def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
     if (percentThreshold == 0.0):
         return;
 
-    print("Marking function to filter based on filtering threshold "
-              + str(percentThreshold) + "%");
-
     for key, pdr in funcSummaryRecords.items():
         percent = float(pdr.totalRunningTime) / float(traceRuntime) * 100;
 
@@ -815,7 +816,7 @@ def dump_shortname_maps(filename):
     with open(filename, 'w') as fp:
         json.dump(shortnameMappings, fp);
         if (len(shortnameMappings) > 0):
-           print("Some function names may have been shortened for readability."
+           print("Some function names may have been shortened for readability.\n"
                  " The original function names and their shorthand equivalents"
                  " were saved to " + filename);
 
@@ -915,12 +916,12 @@ def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
     htmlFile.close();
     mapFile.close();
 
-    # Insert the image file linked to the HTML file into the top HTML file.
-    insertIntoTopHTML(relativeImageFileName,
-                          stripHTMLDirFromFileName(htmlFileName, htmlDir),
-                                                       topHTMLFile);
+def generateTopHTML(filenames, htmlDir):
 
-def regenerateHTML(topHTMLFile, filenames):
+    topHTMLFile = createTopHTML(htmlDir);
+
+    if (topHTMLFile is None):
+        return;
 
     # This list will keep track of the trace files, whose images we
     # already added to the top HTML file, so we don't add the same
@@ -942,7 +943,6 @@ def regenerateHTML(topHTMLFile, filenames):
             continue;
         else:
             alreadyAdded.append(prefix);
-            print("Inserting trace image for " + prefix);
 
         imageFileName = prefix + "." + graphType + "." + \
           str(percentThreshold) + "." + graphFilePostfix;
@@ -950,6 +950,8 @@ def regenerateHTML(topHTMLFile, filenames):
           str(percentThreshold) + ".html";
 
         insertIntoTopHTML(imageFileName, htmlFileName, topHTMLFile);
+
+    return topHTMLFile;
 
 def funcFiltered(func, funcSummaryRecords):
 
@@ -964,62 +966,9 @@ def funcFiltered(func, funcSummaryRecords):
     else:
         return False;
 
-def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
+def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
-    filteredLogRecords = [];
-    numParsed = 0;
-
-    print("Re-parsing and filtering data...");
-    while True:
-        line = dbFile.readline();
-        if (line is None):
-            break;
-        if (line == ''):
-            break;
-
-        numParsed += 1;
-        if (numParsed % 1000 == 0):
-            print(str(numParsed) + " done...");
-
-        words = line.split("|");
-        if (len(words) < 6):
-            print("Invalid record format in SQL file. " +
-                      "Your results may be incorrect.");
-            print(line);
-            continue;
-
-        if (words[1] == "0"):
-            op = "enter";
-        elif (words[1] == "1"):
-            op = "exit";
-        else:
-            print("Invalid record format in SQL file. " +
-                       "Your results may be incorrect.");
-            print(line);
-            continue;
-
-        func = words[2].strip('"');
-
-        # Let's see if we need this log record
-        if (funcFiltered(func, funcSummaryRecords)):
-            continue;
-
-        # If not, add it to the dictionary
-        try:
-            time = long(words[4]);
-        except:
-            print("Could not parse:");
-            print(line);
-            continue;
-
-        rec = LogRecord(func, op, 0, time, None);
-        filteredLogRecords.append(rec);
-
-    return sorted(filteredLogRecords, key=operator.attrgetter("time"));
-
-def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
-
-    global recID;
+    global htmlDir;
     global summaryCSV;
     global summaryTxt;
     global treatLocksSpecially;
@@ -1032,7 +981,9 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     locksSummaryRecords = {}
     logRecords = [];
     outputFile = None;
+    recID = firstUnusedID;
     traceStats = TraceStats(prefix);
+    totalRecordsWritten = 0;
     stack = [];
     startTime = 0;
 
@@ -1182,6 +1133,7 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
                     if (dbFile is not None):
                         stackRec.writeToDBFile(dbFile, runningTime);
                         rec.writeToDBFile(dbFile, runningTime);
+                        totalRecordsWritten += 2;
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -1209,7 +1161,18 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     if (dbFile is not None):
        dbFile.flush();
 
-    print("Parsed " + str(len(logRecords)) + " records.");
+    if (outputFile is not None):
+        outputFile.close();
+
+    print("Parsed " + str(len(logRecords)) + " records,"),
+    print("wrote " + str(totalRecordsWritten) + " to DB file.");
+
+    if (summaryTxt):
+        generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
+                                locksSummaryRecords)
+    if (summaryCSV):
+        generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
+                                locksSummaryRecords)
 
     filterLogRecords(logRecords, funcSummaryRecords, traceStats);
 
@@ -1229,66 +1192,122 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     graph = generate_graph(logRecords);
     augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
-    # Free up some memory
-    logRecords = None;
-    print("Forcing garbage collection..."),
-    collected = gc.collect();
-    print(" collected " + str(collected) + " objects.");
-
     # Prepare the graph
     aGraph = nx.drawing.nx_agraph.to_agraph(graph);
     aGraph.add_subgraph("START", rank = "source");
     aGraph.add_subgraph("END", rank = "sink");
 
-    # Generate files
+    # Generate the dot file
     nameNoPostfix = htmlDir + "/" + \
       prefix + "." + graphType + "."+ str(percentThreshold) + "."
 
-    imageFileName = nameNoPostfix + graphFilePostfix;
-    mapFileName = nameNoPostfix + "cmapx";
     dotFileName = nameNoPostfix + "dot";
 
     print("Writing dot file to: " + dotFileName + " ... ");
-    aGraph.write(dotFileName);
-    aGraph = None;
+    try:
+        aGraph.write(dotFileName);
+    except:
+        print(color.RED + color.BOLD);
+        print("Could not write dot file " + dotFileName);
+        print sys.exc_info()[0];
+        print sys.exc_info()[1];
+        print sys.exc_info()[2];
+        print(color.END);
 
-    print("Saving graph image to: " + imageFileName + "... "),
-    ret = os.system("dot -Tpng " + dotFileName + " > " + imageFileName);
-    if (ret == 0):
-       print("Success!");
+    return (totalRecordsWritten, recID);
+
+def generateImageAndHTMLFilesFromDot(prefix, topHTMLFile):
+
+    global graphType;
+    global htmlDir;
+    global percentThreshold;
+
+    nameNoPostfix = htmlDir + "/" + \
+      prefix + "." + graphType + "."+ str(percentThreshold) + "."
+
+    dotFileName = nameNoPostfix + "dot";
+
+    try:
+        imageFileName = nameNoPostfix + graphFilePostfix;
+        mapFileName = nameNoPostfix + "cmapx";
+
+        print("Saving graph image to: " + imageFileName + "... "),
+        ret = os.system("dot -Tpng " + dotFileName + " > " + imageFileName);
+        if (ret == 0):
+            print("Success!");
+        else:
+            print("Failed...");
+
+        print("Saving image map to: " + mapFileName + "... "),
+        ret = os.system("dot -Tcmapx " + dotFileName + " > " + mapFileName);
+        if (ret == 0):
+            print("Success!");
+        else:
+            print("Failed...");
+
+        generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
+                                htmlDir, topHTMLFile);
+    except:
+        print(color.RED + color.BOLD);
+        print sys.exc_info()[0];
+        print sys.exc_info()[1];
+        print sys.exc_info()[2];
+        print(color.END);
+
+def subprocessParse(fname, recsProcessed, firstUnusedID):
+
+    global htmlDir;
+    global generateTextFiles;
+    global totalRecords;
+
+    retTuple = (0, 0);
+
+    prefix = getPrefix(fname);
+    print(color.BOLD + "Prefix is " + prefix + color.END);
+
+    # If this is a text trace, we simply parse the file.
+    # If this is a binary trace we spawn a subprocess to
+    # convert the text to binary and read the stdout of
+    # the child process.
+    #
+    if (looksLikeTextTrace(fname)):
+        try:
+            traceFile = open(fname, "r");
+        except:
+            print("Could not open " + fname + " for reading");
+            return;
+
+            retTuple = parse_file(traceFile, prefix, False,
+                                      firstUnusedID.value);
+
     else:
-       print("Failed...");
-    ret = os.system("dot -Tcmapx " + dotFileName + " > " + mapFileName);
-    if (ret == 0):
-       print("Saving image map to: " + mapFileName + "... "),
-       print("Success!");
-    else:
-       print("Failed...");
+        # Figure out the name of the script that will launch
+        # the binary-to-text converter.
+        #
+        argsList = getTextConverterCommand();
 
-#       print("Saving graph image to: " + imageFileName + "... "),
-#       aGraph.draw(imageFileName, prog = 'dot');
-#       print("Done.");
+        if (argsList is None):
+            sys.exit();
+        # Append the file to the argument list and
+        # create the subprocess
+        #
+        argsList.append(fname);
+        process = subprocess.Popen(argsList,
+                                       stdout=subprocess.PIPE);
+        if (process is None):
+            print("Could not create a process from arguments: "
+                      + str(argsList));
+            sys.exit();
 
-#       print("Saving image map to: " + mapFileName + "... "),
-#       aGraph.draw(mapFileName, prog = 'dot');
-#       print("Done.");
-#    except:
-#       print("Failed to save image files. The amount of memory needed by " +
-#             "the program could be too large. Try increasing the filtering " +
-#             "threshold.");
+        # Parse the file, reading from the standard out of the
+        # created process. That process will output text trace
+        # into its standard out.
+        #
+        retTuple = parse_file(process.stdout, prefix,
+                                  generateTextFiles, firstUnusedID.value);
 
-    generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
-                            htmlDir, topHTMLFile);
-
-    if (outputFile is not None):
-        outputFile.close();
-
-    if (summaryTxt):
-        generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
-                                locksSummaryRecords)
-    if (summaryCSV):
-        generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
-                                locksSummaryRecords)
+    recsProcessed.value = retTuple[0];
+    firstUnusedID.value = retTuple[1];
 
 
 def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
@@ -1461,6 +1480,7 @@ def findHTMLTemplate(htmlDir):
 #
 def createDBFileHead(dbFile):
 
+    print(color.RED + color.BOLD + "Calling createDBFileHead!" + color.END);
     # Write the commands to create the schema
     dbFile.write("CREATE TABLE traceTMP (id int, dir int, func varchar(255), "
                  "tid int, time bigint, duration bigint);\n");
@@ -1511,14 +1531,14 @@ def createDBFileTail(dbFile):
                 " and change \'COPY RECORDS\' to "
                 "\'COPY " + str(totalRecords) + " RECORDS\'");
 
+
 # Fix up the DBfile by inserting the number of records in the command
 # for reading the input.
-#
 # For MacOS use the command:
 # sed -i ' '  -e '1,/RECORDS/ s/RECORDS/<n> RECORDS/' dbFileName
-#
 # For Linux use command:
 # sed -i -e '0,/RECORDS/ s/RECORDS/<n> RECORDS/' dbFileName
+#
 def getCommand():
 
     macOrLinux = False;
@@ -1537,8 +1557,10 @@ def main():
     global dbFile;
     global dbFileName;
     global firstNodeName;
+    global generateTextFiles;
     global graphFilePostfix;
     global graphType;
+    global htmlDir;
     global htmlTemplate;
     global lastNodeName;
     global multipleAcquireWithoutRelease;
@@ -1549,6 +1571,7 @@ def main():
     global shortenFuncName;
     global summaryCSV;
     global summaryTxt;
+    global totalRecords;
     global treatLocksSpecially;
     global tryLockWarning;
     global verbose;
@@ -1630,8 +1653,10 @@ def main():
 
     args = parser.parse_args();
 
+    generateTextFiles = args.generateTextFiles;
     graphType = args.graphtype;
     graphFilePostfix = args.graphFilePostfix;
+    htmlDir = args.htmlDir;
     percentThreshold = args.percentThreshold;
     separator = args.separator;
     shortenFuncName = args.shortenFuncName;
@@ -1644,13 +1669,6 @@ def main():
     for key, value in vars(args).items():
         print ("\t" + key + ": " + str(value));
 
-    # Let's create the first part of the HTML file, which will contain
-    # all graph images linked to per-graph HTML files.
-    #
-    topHTMLFile = createTopHTML(args.htmlDir);
-    if (topHTMLFile is None):
-        return;
-
     # Make sure that we know where to find the HTML file templates
     # before we spend all the time parsing the traces only to fail later.
     #
@@ -1662,11 +1680,13 @@ def main():
         if (len(args.files) > 0):
             print("Regenerating the top HTML file for trace files: "
                       + str(args.files));
-            print(color.BOLD + "Contained per-file images, image maps "
+            print(color.BOLD + "Per-file images, image maps "
                       "and HTML files must be present in the HTML directory!" +
                       color.END);
-            regenerateHTML(topHTMLFile, args.files);
-            completeTopHTML(topHTMLFile);
+
+            topHTMLFile = generateTopHTML(args.files, htmlDir);
+            if (topHTMLFile is not None):
+                completeTopHTML(topHTMLFile);
             return;
         else:
             print("If asking to only regenerate the top HTML, please supply " +
@@ -1696,57 +1716,38 @@ def main():
         try:
             dbFile = open(dbFileName, "w+");
             createDBFileHead(dbFile);
+            dbFile.flush();
         except:
             print ("Warning: could not open " + dbFileName + " for writing");
             sys.exit();
 
+
+    lastIdUsed = Value('i', 0);
+    successfullyProcessedFiles = [];
+
     if (len(args.files) > 0):
         for fname in args.files:
+            recsProcessed = Value('i', 0);
+            p = Process(target=subprocessParse,
+                            args=(fname, recsProcessed, lastIdUsed));
+            p.start();
+            p.join();
+
+            if (recsProcessed.value > 0):
+                successfullyProcessedFiles.append(fname);
+
+            totalRecords += recsProcessed.value;
+
+    print("\n" + color.BOLD +
+              "ALMOST DONE! Generating images and HTML files." + color.END);
+
+    topHTMLFile = generateTopHTML(successfullyProcessedFiles, htmlDir);
+    if (topHTMLFile is not None):
+        for fname in successfullyProcessedFiles:
             prefix = getPrefix(fname);
-            print(color.BOLD + "Prefix is " + prefix + color.END);
+            generateImageAndHTMLFilesFromDot(prefix, topHTMLFile);
+        completeTopHTML(topHTMLFile);
 
-            # If this is a text trace, we simply parse the file.
-            # If this is a binary trace we spawn a subprocess to
-            # convert the text to binary and read the stdout of
-            # the child process.
-            #
-            if (looksLikeTextTrace(fname)):
-                try:
-                    traceFile = open(fname, "r");
-                except:
-                    print("Could not open " + fname + " for reading");
-                    continue;
-
-                parse_file(traceFile, prefix, topHTMLFile, args.htmlDir,
-                               False);
-
-            else:
-                # Figure out the name of the script that will launch
-                # the binary-to-text converter.
-                #
-                argsList = getTextConverterCommand();
-
-                if (argsList is None):
-                    sys.exit();
-                # Append the file to the argument list and
-                # create the subprocess
-                #
-                argsList.append(fname);
-                process = subprocess.Popen(argsList,
-                                               stdout=subprocess.PIPE);
-                if (process is None):
-                    print("Could not create a process from arguments: "
-                              + str(argsList));
-                    sys.exit();
-
-                # Parse the file, reading from the standard out of the
-                # created process. That process will output text trace
-                # into its standard out.
-                #
-                parse_file(process.stdout, prefix, topHTMLFile, args.htmlDir,
-                               args.generateTextFiles);
-
-    completeTopHTML(topHTMLFile);
     createDBFileTail(dbFile);
 
 if __name__ == '__main__':
