@@ -1247,21 +1247,35 @@ def parse_file(traceFile, prefix, topHTMLFile, htmlDir, createTextFile):
     imageFileName = nameNoPostfix + graphFilePostfix;
     mapFileName = nameNoPostfix + "cmapx";
     dotFileName = nameNoPostfix + "dot";
-    try:
-       print("Writing dot file to: " + dotFileName + " ... ");
-       aGraph.write(dotFileName);
 
-       print("Saving graph image to: " + imageFileName + "... "),
-       aGraph.draw(imageFileName, prog = 'dot');
-       print("Done.");
+    print("Writing dot file to: " + dotFileName + " ... ");
+    aGraph.write(dotFileName);
+    aGraph = None;
 
+    print("Saving graph image to: " + imageFileName + "... "),
+    ret = os.system("dot -Tpng " + dotFileName + " > " + imageFileName);
+    if (ret == 0):
+       print("Success!");
+    else:
+       print("Failed...");
+    ret = os.system("dot -Tcmapx " + dotFileName + " > " + mapFileName);
+    if (ret == 0):
        print("Saving image map to: " + mapFileName + "... "),
-       aGraph.draw(mapFileName, prog = 'dot');
-       print("Done.");
-    except:
-       print("Failed to save image files. The amount of memory needed by " +
-             "the program could be too large. Try increasing the filtering " +
-             "threshold.");
+       print("Success!");
+    else:
+       print("Failed...");
+
+#       print("Saving graph image to: " + imageFileName + "... "),
+#       aGraph.draw(imageFileName, prog = 'dot');
+#       print("Done.");
+
+#       print("Saving image map to: " + mapFileName + "... "),
+#       aGraph.draw(mapFileName, prog = 'dot');
+#       print("Done.");
+#    except:
+#       print("Failed to save image files. The amount of memory needed by " +
+#             "the program could be too large. Try increasing the filtering " +
+#             "threshold.");
 
     generatePerFileHTML(nameNoPostfix + "html", imageFileName, mapFileName,
                             htmlDir, topHTMLFile);
