@@ -950,7 +950,6 @@ def funcFiltered(func, funcSummaryRecords):
 def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
 
     filteredLogRecords = [];
-    numParsed = 0;
 
     while True:
         line = dbFile.readline();
@@ -958,10 +957,6 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
             break;
         if (line == ''):
             break;
-
-        numParsed += 1;
-        if (numParsed % 1000 == 0):
-            print(str(numParsed) + " done...");
 
         words = line.split("|");
         if (len(words) < 6):
