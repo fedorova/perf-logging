@@ -1416,15 +1416,19 @@ def getTextConverterCommand():
 
     return argsList;
 
-def createTopHTML(htmlDir):
+def createHTMLDir(htmlDir):
 
     if not os.path.exists(htmlDir):
         try:
             os.mkdir("./" + htmlDir);
             print("Directory " + htmlDir + " created");
+            return True;
         except:
             print("Could not create directory " + htmlDir);
-            return None;
+            return False;
+
+
+def createTopHTML(htmlDir):
 
     try:
         topHTML = open(htmlDir + "/index.html", "w");
@@ -1668,6 +1672,12 @@ def main():
     print("Running with the following parameters:");
     for key, value in vars(args).items():
         print ("\t" + key + ": " + str(value));
+
+    # Create the HTML directory
+    if (createHTMLDir(htmlDir) == False):
+        print("Could not create HTML directory " + htmlDir);
+        return;
+
 
     # Make sure that we know where to find the HTML file templates
     # before we spend all the time parsing the traces only to fail later.
