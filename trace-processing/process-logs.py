@@ -726,30 +726,6 @@ def decideWhichFuncsToFilter(funcSummaryRecords, traceStats):
             pdr.filtered = True;
 
 
-def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
-
-    numFiltered = 0;
-    decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
-    print("Filtering records...");
-
-    for rec in logRecords:
-
-        # A log may have no corresponding function record if we stopped
-        # logging before the function exit record was generated, as can
-        # be with functions that start threads.
-        #
-        if not funcSummaryRecords.has_key(rec.fullName()):
-            print("Warning: no performance record for function " +
-                  rec.func);
-            continue;
-
-        funcPDR = funcSummaryRecords[rec.fullName()];
-        if funcPDR.filtered:
-            rec.filtered = True;
-            numFiltered += 1;
-
-    print("Filtered " + str(numFiltered) + " records.");
-
 def transform_name(name, transformMode, CHAR_OPEN=None, CHAR_CLOSE=None):
     if transformMode == 'multiple lines':
         lineLength = 50
@@ -972,6 +948,59 @@ def funcFiltered(func, funcSummaryRecords):
     else:
         return False;
 
+def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
+
+    filteredLogRecords = [];
+    numParsed = 0;
+
+    print("Re-parsing and filtering data...");
+    while True:
+        line = dbFile.readline();
+        if (line is None):
+            break;
+        if (line == ''):
+            break;
+
+        numParsed += 1;
+        if (numParsed % 1000 == 0):
+            print(str(numParsed) + " done...");
+
+        words = line.split("|");
+        if (len(words) < 6):
+            print("Invalid record format in SQL file. " +
+                      "Your results may be incorrect.");
+            print(line);
+            continue;
+
+        if (words[1] == "0"):
+            op = "enter";
+        elif (words[1] == "1"):
+            op = "exit";
+        else:
+            print("Invalid record format in SQL file. " +
+                       "Your results may be incorrect.");
+            print(line);
+            continue;
+
+        func = words[2].strip('"');
+
+        # Let's see if we need this log record
+        if (funcFiltered(func, funcSummaryRecords)):
+            continue;
+
+        # If not, add it to the dictionary
+        try:
+            time = long(words[4]);
+        except:
+            print("Could not parse:");
+            print(line);
+            continue;
+
+        rec = LogRecord(func, op, 0, time, None);
+        filteredLogRecords.append(rec);
+
+    return sorted(filteredLogRecords, key=operator.attrgetter("time"));
+
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     global htmlDir;
@@ -985,7 +1014,6 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     graph = nx.DiGraph();
     lockStack = [];
     locksSummaryRecords = {}
-    logRecords = [];
     outputFile = None;
     recID = firstUnusedID;
     traceStats = TraceStats(prefix);
@@ -1064,9 +1092,6 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
             rec.setID(recID);
             recID = recID + 1;
 
-            # Add this log record to the per-file list of records
-            logRecords.append(rec);
-
             # If we are told to write the records to the output
             # file, do so.
             if(outputFile is not None):
@@ -1120,7 +1145,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
                     pdr = funcSummaryRecords[stackRec.fullName()];
                     pdr.update(runningTime, stackRec.time);
-                    found = True
+                    found = True;
 
                     # Full name is the name of the function, plus whatever other
                     # info was given to us, usually values of arguments. This
@@ -1130,7 +1155,6 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     #
                     rec.otherInfo = stackRec.otherInfo;
                     rec.setID(stackRec.id);
-                    logRecords.append(rec);
 
                     # Now that we know this function's duration we can write
                     # it's opening and closing record into the database
@@ -1170,8 +1194,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     if (outputFile is not None):
         outputFile.close();
 
-    print("Parsed " + str(len(logRecords)) + " records,"),
-    print("wrote " + str(totalRecordsWritten) + " to DB file.");
+    print("Wrote " + str(totalRecordsWritten) + " to DB file.");
 
     if (summaryTxt):
         generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
@@ -1180,7 +1203,9 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
         generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
                                 locksSummaryRecords)
 
-    filterLogRecords(logRecords, funcSummaryRecords, traceStats);
+    dbFile.seek(fileBeginPosition);
+    decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
+    filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
 
     # Dumping original function names if names were shortened
     if shortenFuncName:
@@ -1195,7 +1220,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     # Augment graph attributes to reflect performance characteristics
     print("Generating the FlowViz graph...");
-    graph = generate_graph(logRecords);
+    graph = generate_graph(filteredLogRecords);
     augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
     # Prepare the graph
