@@ -798,9 +798,8 @@ def dump_shortname_maps(filename):
     with open(filename, 'w') as fp:
         json.dump(shortnameMappings, fp);
         if (len(shortnameMappings) > 0):
-           print("Some function names may have been shortened for readability.\n"
-                 " The original function names and their shorthand equivalents"
-                 " were saved to " + filename);
+            print("Shorthand equivalents of the original function names "
+                    "were saved to " + filename);
 
 
 def generatePerFuncHTMLFiles(prefix, htmlDir,
@@ -953,7 +952,6 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
     filteredLogRecords = [];
     numParsed = 0;
 
-    print("Re-parsing and filtering data...");
     while True:
         line = dbFile.readline();
         if (line is None):
@@ -1194,7 +1192,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     if (outputFile is not None):
         outputFile.close();
 
-    print("Wrote " + str(totalRecordsWritten) + " to DB file.");
+    print("Wrote " + str(totalRecordsWritten) + " records to DB file.");
 
     if (summaryTxt):
         generateSummaryFile('.txt', prefix, traceStats, funcSummaryRecords,
@@ -1203,6 +1201,13 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
         generateSummaryFile('.csv', prefix, traceStats, funcSummaryRecords,
                                 locksSummaryRecords)
 
+    # Re-read the records from the DB file, filtering the ones not needed for
+    # the graph. By re-reading them from the file as opposed to keeping the
+    # records and filtering them in memory we dramatically reduce the size
+    # of the virtual address space and prevent out-of-memory errors for very
+    # large files.
+    #
+    print("Filtering records based on performance criteria...");
     dbFile.seek(fileBeginPosition);
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
     filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
