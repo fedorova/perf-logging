@@ -1484,7 +1484,6 @@ def findHTMLTemplate(htmlDir):
 #
 def createDBFileHead(dbFile):
 
-    print(color.RED + color.BOLD + "Calling createDBFileHead!" + color.END);
     # Write the commands to create the schema
     dbFile.write("CREATE TABLE traceTMP (id int, dir int, func varchar(255), "
                  "tid int, time bigint, duration bigint);\n");
