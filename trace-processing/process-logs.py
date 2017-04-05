@@ -62,14 +62,16 @@ class LogRecord:
         self.time = long(time);
         self.otherInfo = otherInfo;
         self.filtered = False;
-        #
+
+    def fullName(self):
+
         # otherInfo typically includes argument values. We append
         # it to the function name.
         #
-        if (otherInfo is not None):
-            self.fullName = func + "::" + otherInfo;
+        if (self.otherInfo is not None):
+            return self.func + "::" + self.otherInfo;
         else:
-            self.fullName = func;
+            return self.func;
 
     # Each log record has an id. The constraint is that the entry
     # and exit to the same function invocation must have the same id.
@@ -97,7 +99,7 @@ class LogRecord:
             file.write("1");
         file.write("|");
 
-        file.write("\"" + self.fullName + "\"" + "|");
+        file.write("\"" + self.fullName() + "\"" + "|");
         file.write(str(self.thread) + "|");
         file.write(str(self.time) + "|");
         file.write(str(duration) + "\n");
@@ -157,6 +159,8 @@ class TraceStats:
 
 class PerfData:
     def __init__(self, name, funcName, otherInfo, threadID):
+        global treatLocksSpecially;
+
         self.name = name;
         self.originalName = funcName;
         if shortenFuncName and (self.originalName in shortnameMappings):
@@ -165,7 +169,8 @@ class PerfData:
         # would contain the information for identifying
         # this lock.
         #
-        self.lockName = otherInfo;
+        if (treatLocksSpecially):
+            self.lockName = otherInfo;
         self.threadID = threadID;
         self.numCalls = 0;
         self.totalRunningTime = long(0);
@@ -247,10 +252,11 @@ class PerfData:
                            '{:,}'.format(self.maxRunningTime) +
                            " ns.\n");
             file.write("------------------\n");
-            if (self.lockName is not None):
-                if (self.lockName in locksSummaryRecords):
-                    lockData = locksSummaryRecords[self.lockName];
-                    lockData.printSelfHTML(file);
+            if (treatLocksSpecially):
+                if (self.lockName is not None):
+                    if (self.lockName in locksSummaryRecords):
+                        lockData = locksSummaryRecords[self.lockName];
+                        lockData.printSelfHTML(file);
 
 
 #
@@ -693,7 +699,7 @@ def generate_graph(logRecords):
         for logRec in logRecords:
             if (logRec.filtered):
                 continue;
-            nodeName = logRec.op + " " + logRec.fullName;
+            nodeName = logRec.op + " " + logRec.fullName();
             update_graph(graph, nodeName, prevNodeName);
             prevNodeName = nodeName;
 
@@ -732,12 +738,12 @@ def filterLogRecords(logRecords, funcSummaryRecords, traceStats):
         # logging before the function exit record was generated, as can
         # be with functions that start threads.
         #
-        if not funcSummaryRecords.has_key(rec.fullName):
+        if not funcSummaryRecords.has_key(rec.fullName()):
             print("Warning: no performance record for function " +
                   rec.func);
             continue;
 
-        funcPDR = funcSummaryRecords[rec.fullName];
+        funcPDR = funcSummaryRecords[rec.fullName()];
         if funcPDR.filtered:
             rec.filtered = True;
             numFiltered += 1;
@@ -1107,12 +1113,12 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
                     runningTime = long(rec.time) - long(stackRec.time);
 
-                    if(not funcSummaryRecords.has_key(stackRec.fullName)):
-                        newPDR = PerfData(stackRec.fullName, stackRec.func,
+                    if(not funcSummaryRecords.has_key(stackRec.fullName())):
+                        newPDR = PerfData(stackRec.fullName(), stackRec.func,
                                               otherInfo, thread);
-                        funcSummaryRecords[stackRec.fullName] = newPDR;
+                        funcSummaryRecords[stackRec.fullName()] = newPDR;
 
-                    pdr = funcSummaryRecords[stackRec.fullName];
+                    pdr = funcSummaryRecords[stackRec.fullName()];
                     pdr.update(runningTime, stackRec.time);
                     found = True
 
@@ -1122,7 +1128,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     # so if we are at the function exit record, we must copy
                     # that information from the corresponding entry record.
                     #
-                    rec.fullName = stackRec.fullName;
+                    rec.otherInfo = stackRec.otherInfo;
                     rec.setID(stackRec.id);
                     logRecords.append(rec);
 
