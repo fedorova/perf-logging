@@ -952,6 +952,9 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
     filteredLogRecords = [];
 
     while True:
+        otherInfo = None;
+        fullName = None;
+
         line = dbFile.readline();
         if (line is None):
             break;
@@ -989,7 +992,7 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
             print(line);
             continue;
 
-        rec = LogRecord(func, op, 0, time, None);
+        rec = LogRecord(func, op, 0, time, otherInfo);
         filteredLogRecords.append(rec);
 
     return sorted(filteredLogRecords, key=operator.attrgetter("time"));
@@ -1133,8 +1136,9 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
                     if(not funcSummaryRecords.has_key(stackRec.fullName())):
                         newPDR = PerfData(stackRec.fullName(), stackRec.func,
-                                              otherInfo, thread);
+                                              stackRec.otherInfo, thread);
                         funcSummaryRecords[stackRec.fullName()] = newPDR;
+                        print("Added pdr for name " + stackRec.fullName());
 
                     pdr = funcSummaryRecords[stackRec.fullName()];
                     pdr.update(runningTime, stackRec.time);
