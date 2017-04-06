@@ -999,6 +999,7 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
 
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
+    global dbFile;
     global htmlDir;
     global summaryCSV;
     global summaryTxt;
@@ -1021,11 +1022,9 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
 
-    if (dbFile is None):
-        print("Cannot proceed without an open dbFile");
-        return;
+    fileBeginPosition = dbFile.tell(); # Remember the position
+    print("Starting file position is " + str(fileBeginPosition));
 
-    fileBeginPosition = dbFile.tell();
 
     if (createTextFile):
         try:
@@ -1138,7 +1137,6 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                         newPDR = PerfData(stackRec.fullName(), stackRec.func,
                                               stackRec.otherInfo, thread);
                         funcSummaryRecords[stackRec.fullName()] = newPDR;
-                        print("Added pdr for name " + stackRec.fullName());
 
                     pdr = funcSummaryRecords[stackRec.fullName()];
                     pdr.update(runningTime, stackRec.time);
@@ -1207,9 +1205,11 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     # large files.
     #
     print("Filtering records based on performance criteria...");
-    dbFile.seek(fileBeginPosition);
+    dbFile.seek(fileBeginPosition, 0);
+    print("Current file position is " + str(dbFile.tell()));
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
     filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
+    dbFile.close();
 
     # Dumping original function names if names were shortened
     if shortenFuncName:
@@ -1793,6 +1793,7 @@ def main():
         completeTopHTML(topHTMLFile);
 
     createDBFileTail(dbFile);
+
 
 if __name__ == '__main__':
     main()
