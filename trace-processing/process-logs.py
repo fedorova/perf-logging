@@ -947,9 +947,10 @@ def funcFiltered(func, funcSummaryRecords):
     else:
         return False;
 
-def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
+def parseLogRecsFromDBFile(dbFile, funcSummaryRecords, totalRecordsExpected):
 
     filteredLogRecords = [];
+    totalProcessed = 0l;
 
     while True:
         otherInfo = None;
@@ -960,6 +961,13 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords):
             break;
         if (line == ''):
             break;
+
+        totalProcessed += 1;
+        if (totalProcessed > totalRecordsExpected):
+           print("Warning: processing more than expected: " +
+                 str(totalProcessed) + " vs " + str(totalRecordsExpected));
+           print("Will stop processing.");
+           break;
 
         words = line.split("|");
         if (len(words) < 6):
@@ -1006,7 +1014,8 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     global treatLocksSpecially;
 
     endTime = 0;
-    fileBeginPosition = -1;
+    fileBeginPosition = 0l;
+    fileEndPosition = 0l;
     funcSummaryRecords = {};
     graph = nx.DiGraph();
     lockStack = [];
@@ -1022,6 +1031,13 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
 
+    try:
+       dbFile = open(dbFileName, "r+");
+    except:
+       print("Could not open " + dbFileName + " for reading and writing.");
+       return;
+
+    dbFile.seek(0, 2);
     fileBeginPosition = dbFile.tell(); # Remember the position
     print("Starting file position is " + str(fileBeginPosition));
 
@@ -1204,11 +1220,16 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     # of the virtual address space and prevent out-of-memory errors for very
     # large files.
     #
-    print("Filtering records based on performance criteria...");
+    fileEndPosition = dbFile.tell();
+    print("Finished writing to file at position " + str(fileEndPosition));
     dbFile.seek(fileBeginPosition, 0);
-    print("Current file position is " + str(dbFile.tell()));
+    print("Rewound to position: " + str(dbFile.tell()));
+
+    print("Filtering records based on performance criteria...");
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
-    filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords);
+    filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords,
+                                                totalRecordsWritten);
+
     dbFile.close();
 
     # Dumping original function names if names were shortened
@@ -1760,7 +1781,7 @@ def main():
         try:
             dbFile = open(dbFileName, "w+");
             createDBFileHead(dbFile);
-            dbFile.flush();
+            dbFile.close();
         except:
             print ("Warning: could not open " + dbFileName + " for writing");
             sys.exit();
@@ -1792,8 +1813,14 @@ def main():
             generateImageAndHTMLFilesFromDot(prefix, topHTMLFile);
         completeTopHTML(topHTMLFile);
 
-    createDBFileTail(dbFile);
+    try:
+        dbFile = open(dbFileName, "r+");
+        dbFile.seek(0, 2);
+    except:
+        print("Could not open " + dbFileName + " for reading and writing");
 
+    createDBFileTail(dbFile);
+    dbFile.close();
 
 if __name__ == '__main__':
     main()
