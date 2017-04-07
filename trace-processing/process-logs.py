@@ -949,8 +949,16 @@ def funcFiltered(func, funcSummaryRecords):
 
 def parseLogRecsFromDBFile(dbFile, funcSummaryRecords, totalRecordsExpected):
 
+    global totalNodes;
+
     filteredLogRecords = [];
+    prevNodeName = "START";
+    totalNodes = 0;
     totalProcessed = 0l;
+
+    graph = nx.DiGraph();
+    graph.add_node("START", fontname="Helvetica");
+    graph.node["START"]['shape']='box';
 
     while True:
         otherInfo = None;
@@ -991,19 +999,17 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords, totalRecordsExpected):
         # Let's see if we need this log record
         if (funcFiltered(func, funcSummaryRecords)):
             continue;
+        else:
+            nodeName = op + " " + func;
+            update_graph(graph, nodeName, prevNodeName);
+            prevNodeName = nodeName;
 
-        # If not, add it to the dictionary
-        try:
-            time = long(words[4]);
-        except:
-            print("Could not parse:");
-            print(line);
-            continue;
+    graph.add_node("END", fontname="Helvetica");
+    graph.add_edge(prevNodeName, "END");
+    graph.node["END"]['shape']='diamond';
 
-        rec = LogRecord(func, op, 0, time, otherInfo);
-        filteredLogRecords.append(rec);
-
-    return sorted(filteredLogRecords, key=operator.attrgetter("time"));
+    print("Generated a FlowViz graph with " + str(totalNodes) + " nodes.");
+    return graph;
 
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
@@ -1103,6 +1109,10 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
             rec.setID(recID);
             recID = recID + 1;
 
+            if (dbFile is not None):
+                rec.writeToDBFile(dbFile, 0);
+                totalRecordsWritten += 1;
+
             # If we are told to write the records to the output
             # file, do so.
             if(outputFile is not None):
@@ -1172,9 +1182,8 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     # importable file.
                     #
                     if (dbFile is not None):
-                        stackRec.writeToDBFile(dbFile, runningTime);
                         rec.writeToDBFile(dbFile, runningTime);
-                        totalRecordsWritten += 2;
+                        totalRecordsWritten += 1;
 
                     # If this is a lock-related function, do lock-related
                     # processing. stackRec.otherInfo variable would contain
@@ -1227,25 +1236,13 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     print("Filtering records based on performance criteria...");
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
-    filteredLogRecords = parseLogRecsFromDBFile(dbFile, funcSummaryRecords,
-                                                totalRecordsWritten);
 
+    # Re-parse the needed records and generate the graph
+    graph = parseLogRecsFromDBFile(dbFile, funcSummaryRecords,
+                                                totalRecordsWritten);
     dbFile.close();
 
-    # Dumping original function names if names were shortened
-    if shortenFuncName:
-        shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
-        dump_shortname_maps(shortnameMapsFilename)
-
-    # Generate HTML files summarizing function stats for all functions that
-    # were not filtered.
-    print("Generating per-function HTML file...");
-    generatePerFuncHTMLFiles(prefix, htmlDir,
-                                 funcSummaryRecords, locksSummaryRecords);
-
     # Augment graph attributes to reflect performance characteristics
-    print("Generating the FlowViz graph...");
-    graph = generate_graph(filteredLogRecords);
     augment_graph(graph, funcSummaryRecords, traceStats, prefix, htmlDir);
 
     # Prepare the graph
@@ -1269,6 +1266,17 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
         print sys.exc_info()[1];
         print sys.exc_info()[2];
         print(color.END);
+
+    # Dumping original function names if names were shortened
+    if shortenFuncName:
+        shortnameMapsFilename = 'shortname_maps.{}.json'.format(prefix)
+        dump_shortname_maps(shortnameMapsFilename)
+
+    # Generate HTML files summarizing function stats for all functions that
+    # were not filtered.
+    print("Generating per-function HTML file...");
+    generatePerFuncHTMLFiles(prefix, htmlDir,
+                                 funcSummaryRecords, locksSummaryRecords);
 
     return (totalRecordsWritten, recID);
 
