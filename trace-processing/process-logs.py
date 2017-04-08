@@ -1549,8 +1549,9 @@ def findHTMLTemplate(htmlDir):
 def createDBFileHead(dbFile):
 
     # Write the commands to create the schema
-    dbFile.write("CREATE TABLE traceTMP (id int, dir int, func varchar(255), "
-                 "tid int, time bigint, duration bigint);\n");
+    dbFile.write("CREATE TABLE traceTMP (id int, dir tinyint, "
+                     "func varchar(255), "
+                     "tid smallint, time bigint, duration bigint);\n");
 
     # Write the command to import the records
     dbFile.write("COPY RECORDS INTO traceTMP FROM STDIN "
@@ -1570,17 +1571,19 @@ def createDBFileTail(dbFile):
     # deviations.
     dbFile.write("CREATE TABLE avg_stdev AS SELECT func, "
                     "stddev_pop(duration) AS stdev, avg(duration) AS avg "
-                    "FROM trace GROUP BY func;\n");
+                    "FROM trace WHERE trace.dir = 1 GROUP BY func;\n");
 
     # Create a table with outliers: functions whose duration was greater than
     # two standard deviations higher than the average.
     #
     dbFile.write("CREATE TABLE outliers as (WITH with_stats as "
-                    "(SELECT trace.id, trace.dir, trace.func, trace.time, "
-                    "trace.duration, avg_stdev.avg, avg_stdev.stdev FROM "
-                    "trace INNER JOIN avg_stdev on trace.func=avg_stdev.func) "
-                    "SELECT id, func, time, duration FROM with_stats "
-                    "WHERE dir = 0 AND duration >= avg + 2 *stdev);\n");
+                    "(SELECT trace.id, trace.duration, avg_stdev.avg, "
+                    "avg_stdev.stdev FROM "
+                    "trace INNER JOIN avg_stdev ON trace.func=avg_stdev.func "
+                    "WHERE trace.dir=1 AND duration > avg + 2 * stdev) "
+                    "SELECT trace.id, dir, func, tid, time, "
+                    "with_stats.duration, avg, stdev FROM trace INNER JOIN "
+                    "with_stats ON trace.id=with_stats.id WHERE dir = 0);\n");
 
     dbFile.close();
 
