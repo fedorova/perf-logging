@@ -1694,7 +1694,7 @@ def main():
     parser.add_argument('-r', '--regenHTML', dest='regenHTML',
                             action='store_true');
 
-    parser.add_argument('-s', '--separator', dest='separator', default=' ');
+    parser.add_argument('-s', '--separator', dest='separator', default=';');
     parser.add_argument('--shorten_func_name', dest='shortenFuncName',
                             type=bool, default=True);
 
