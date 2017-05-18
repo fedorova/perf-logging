@@ -1686,7 +1686,7 @@ def main():
 
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
                         type=float, default = 2.0,
-                        help='Default=2.0%; \
+                        help='Default=2.0 percent.\
                         When we compute the execution flow graph, we will not \
                         include any functions, whose percent execution time   \
                         is smaller that value.');
