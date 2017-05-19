@@ -111,10 +111,10 @@ class LogRecord:
             file.write("<--");
         else:
             file.write(self.op);
-        file.write(" " + self.func + " " + str(self.thread) +
-                       " " + str(self.time));
+        file.write(separator + self.func + separator + str(self.thread) +
+                       separator + str(self.time));
         if (self.otherInfo is not None):
-            file.write(" " + self.otherInfo);
+            file.write(separator + self.otherInfo);
 
 #
 # LockRecord contains temporary information for generating lock-held times
@@ -1011,6 +1011,79 @@ def parseLogRecsFromDBFile(dbFile, funcSummaryRecords, totalRecordsExpected):
     print("Generated a FlowViz graph with " + str(totalNodes) + " nodes.");
     return graph;
 
+# We don't properly support this use case.
+# Return 0, meaning that we can't put the resulting
+# sub-traces into the final trace.sql, as their internal
+# IDs will clash.
+#
+def getNewIDForText(fname, lastUsedID):
+
+    command = [];
+    numRecords = 0;
+
+    # Find out the number of lines in the file
+    try:
+        command.append("wc");
+        command.append("-l");
+        command.append(fname);
+        x = subprocess.check_output([command]);
+        numRecords = int(x);
+    except:
+        print(color.RED + color.BOLD);
+        print("Warning: could not find the number of lines in " + fname +
+              " using command \'" + str(command) + "\'");
+        print(color.END);
+
+    return lastUsedID + numRecords;
+
+traceRecordSize = 0;
+def getNewIDForBinary(fname, lastUsedID):
+
+    global traceRecordSize;
+
+    if (traceRecordSize == 0):
+        # Try to query the trace parser
+        #try:
+        try:
+            parserLocation = os.environ["DINAMITE_TRACE_PARSER"];
+            command = [];
+            command.append(parserLocation);
+            command.append("-s");
+            print(command);
+            x = subprocess.check_output(command);
+            traceRecordSize = int(x);
+            print("Trace record size is " + str(traceRecordSize));
+        except:
+            # If unsuccessful, assume a reasonable small value
+            print(color.RED + color.BOLD);
+            print("Warning, could not query the trace parser for the " +
+                  "size of the binary record. Assuming 28 bytes.");
+            traceRecordSize = 28;
+            print(color.END);
+
+    try:
+        fsize = os.path.getsize(fname);
+        numRecords = fsize / traceRecordSize + 1;
+        return lastUsedID + numRecords;
+    except:
+        return lastUsedID;
+
+lastUsedID = 0;
+def getFirstUnusedId(fname):
+
+    global lastUsedID;
+    global traceRecordSize;
+
+    oldLastUsedID = lastUsedID;
+
+    if (looksLikeTextTrace(fname)):
+        lastUsedID = getNewIDForText(fname, lastUsedID);
+    else:
+        lastUsedID = getNewIDForBinary(fname, lastUsedID);
+
+    print("For first ID returning " + str(oldLastUsedID));
+    return oldLastUsedID;
+
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     global dbFile;
@@ -1032,21 +1105,19 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     totalRecordsWritten = 0;
     stack = [];
     startTime = 0;
+    tempDBFileName = prefix + ".sql";
 
     graph.add_node("START", fontname="Helvetica");
     graph.node["START"]['shape']='box'
     prevNodeName = "START";
 
     try:
-       dbFile = open(dbFileName, "r+");
+       dbFile = open(tempDBFileName, "w+");
     except:
-       print("Could not open " + dbFileName + " for reading and writing.");
+       print("Could not open " + tempDBFileName + " for reading and writing.");
        return;
 
-    dbFile.seek(0, 2);
-    fileBeginPosition = dbFile.tell(); # Remember the position
-    print("Starting file position is " + str(fileBeginPosition));
-
+    print("Saving data to file " + tempDBFileName);
 
     if (createTextFile):
         try:
@@ -1058,6 +1129,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     while True:
         line = traceFile.readline();
+        print("read " + line);
         if (line is None):
             break;
         if (line == ''):
@@ -1196,7 +1268,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
                     if(stackRec.otherInfo is not None and
                                outputFile is not None):
-                            outputFile.write(" " + stackRec.otherInfo);
+                            outputFile.write(separator + stackRec.otherInfo);
                     break;
             if (not found):
                 print("Could not find matching function entrance for line: \n"
@@ -1229,15 +1301,11 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     # of the virtual address space and prevent out-of-memory errors for very
     # large files.
     #
-    fileEndPosition = dbFile.tell();
-    print("Finished writing to file at position " + str(fileEndPosition));
-    dbFile.seek(fileBeginPosition, 0);
-    print("Rewound to position: " + str(dbFile.tell()));
-
     print("Filtering records based on performance criteria...");
     decideWhichFuncsToFilter(funcSummaryRecords, traceStats);
 
     # Re-parse the needed records and generate the graph
+    dbFile.seek(0, 0);
     graph = parseLogRecsFromDBFile(dbFile, funcSummaryRecords,
                                                 totalRecordsWritten);
     dbFile.close();
@@ -1278,7 +1346,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     generatePerFuncHTMLFiles(prefix, htmlDir,
                                  funcSummaryRecords, locksSummaryRecords);
 
-    return (totalRecordsWritten, recID);
+    return totalRecordsWritten;
 
 def generateImageAndHTMLFilesFromDot(prefix, topHTMLFile):
 
@@ -1325,8 +1393,8 @@ def subprocessParse(fname, recsProcessed, firstUnusedID):
     global totalRecords;
 
     retTuple = (0, 0);
-
     prefix = getPrefix(fname);
+
     print(color.BOLD + "Prefix is " + prefix + color.END);
 
     # If this is a text trace, we simply parse the file.
@@ -1341,8 +1409,8 @@ def subprocessParse(fname, recsProcessed, firstUnusedID):
             print("Could not open " + fname + " for reading");
             return;
 
-            retTuple = parse_file(traceFile, prefix, False,
-                                      firstUnusedID.value);
+        recs = parse_file(traceFile, prefix, False,
+                                      firstUnusedID);
 
     else:
         # Figure out the name of the script that will launch
@@ -1367,11 +1435,10 @@ def subprocessParse(fname, recsProcessed, firstUnusedID):
         # created process. That process will output text trace
         # into its standard out.
         #
-        retTuple = parse_file(process.stdout, prefix,
-                                  generateTextFiles, firstUnusedID.value);
+        recs = parse_file(process.stdout, prefix,
+                                  generateTextFiles, firstUnusedID);
 
-    recsProcessed.value = retTuple[0];
-    firstUnusedID.value = retTuple[1];
+    recsProcessed.value = recs;
 
 
 def generateSummaryFile(fileType, prefix, traceStats, funcSummaryRecords,
@@ -1546,7 +1613,7 @@ def findHTMLTemplate(htmlDir):
 # to be imported into a SQL database. We use default delimiters for
 # MonetDB.
 #
-def createDBFileHead(dbFile):
+def createDBFileHead(dbFile, numRecs):
 
     # Write the commands to create the schema
     dbFile.write("CREATE TABLE traceTMP (id int, dir tinyint, "
@@ -1554,7 +1621,7 @@ def createDBFileHead(dbFile):
                      "tid smallint, time bigint, duration bigint);\n");
 
     # Write the command to import the records
-    dbFile.write("COPY RECORDS INTO traceTMP FROM STDIN "
+    dbFile.write("COPY " + str(numRecs) + " RECORDS INTO traceTMP FROM STDIN "
                  "USING DELIMITERS '|','\\n','\"' NULL AS '';\n");
 
 def createDBFileTail(dbFile):
@@ -1587,40 +1654,16 @@ def createDBFileTail(dbFile):
 
     dbFile.close();
 
-    # Now that we know how many records there are in the file, fix the
-    # import SQL command to include the number of records.
-    print("Processed a total of " + str(totalRecords) + " records...");
-    print("Fixing up the " + dbFileName + " file...");
+def appendAllTraceRecords(dbFileName, intermediateFileNames):
 
-    command = getCommand();
-    print("Using command: " + command);
+    for name in intermediateFileNames:
+        fname = getPrefix(name) + ".sql";
+        print("Appending data from " + fname + "...");
+        command = "cat " + fname + " >> " + dbFileName;
 
-    if (command is None or os.system(command)):
-        print("Could not fix the file for your platform " + platform.system());
-        print("Please open the file " + dbFileName +
-                " and change \'COPY RECORDS\' to "
-                "\'COPY " + str(totalRecords) + " RECORDS\'");
-
-
-# Fix up the DBfile by inserting the number of records in the command
-# for reading the input.
-# For MacOS use the command:
-# sed -i ' '  -e '1,/RECORDS/ s/RECORDS/<n> RECORDS/' dbFileName
-# For Linux use command:
-# sed -i -e '0,/RECORDS/ s/RECORDS/<n> RECORDS/' dbFileName
-#
-def getCommand():
-
-    macOrLinux = False;
-    if (platform.system() == "darwin" or platform.system() == "Darwin"):
-        command = "sed -i \'\' -e \'1,/RECORDS/ s/RECORDS/";
-    elif ("Linux" in platform.system() or "linux" in platform.system()):
-        command = "sed -i -e \'0,/RECORDS/ s/RECORDS/";
-    else:
-        return None;
-
-    command += str(totalRecords) + " RECORDS/\' " + dbFileName;
-    return command;
+        if (os.system(command)):
+            print("Could not append data from file " + fname +
+                  " to " + dbFileName);
 
 def main():
 
@@ -1785,37 +1828,51 @@ def main():
         except:
             print ("Warning: could not open outliers.txt for writing");
 
-    # Create a file for dumping the data in a database-importable format,
-    # unless the user opted out.
-    #
-    if (args.dumpdbfile == True):
-        try:
-            dbFile = open(dbFileName, "w+");
-            createDBFileHead(dbFile);
-            dbFile.close();
-        except:
-            print ("Warning: could not open " + dbFileName + " for writing");
-            sys.exit();
-
-
-    lastIdUsed = Value('i', 0);
+    returnValues = [];
+    spawnedProcesses = [];
     successfullyProcessedFiles = [];
 
     if (len(args.files) > 0):
         for fname in args.files:
+            firstUnusedId = getFirstUnusedId(fname);
             recsProcessed = Value('i', 0);
             p = Process(target=subprocessParse,
-                            args=(fname, recsProcessed, lastIdUsed));
+                            args=(fname, recsProcessed, firstUnusedId));
             p.start();
-            p.join();
+            spawnedProcesses.append(p);
+            returnValues.append(recsProcessed);
 
-            if (recsProcessed.value > 0):
-                successfullyProcessedFiles.append(fname);
+    for p, retval, fname in zip(spawnedProcesses, returnValues, args.files):
+        p.join();
+        if (retval.value > 0):
+            successfullyProcessedFiles.append(fname);
 
-            totalRecords += recsProcessed.value;
+        totalRecords += retval.value;
+
 
     print("\n" + color.BOLD +
-              "ALMOST DONE! Generating images and HTML files." + color.END);
+          "ALMOST DONE! Generating images and HTML files." + color.END);
+
+    # Create a file for dumping the data in a database-importable format,
+    # unless the user opted out.
+    #
+    if (args.dumpdbfile == True):
+        print("Concatenating intermediate data files into one...");
+        try:
+            dbFile = open(dbFileName, "w+");
+            createDBFileHead(dbFile, totalRecords);
+            dbFile.close();
+
+            appendAllTraceRecords(dbFileName, successfullyProcessedFiles);
+
+            dbFile = open(dbFileName, "r+");
+            dbFile.seek(0, 2); # Seek to the end
+            createDBFileTail(dbFile);
+            dbFile.close();
+        except:
+            print ("Warning: could not open " + dbFileName + " for writing");
+
+
 
     topHTMLFile = generateTopHTML(successfullyProcessedFiles, htmlDir);
     if (topHTMLFile is not None):
@@ -1824,14 +1881,7 @@ def main():
             generateImageAndHTMLFilesFromDot(prefix, topHTMLFile);
         completeTopHTML(topHTMLFile);
 
-    try:
-        dbFile = open(dbFileName, "r+");
-        dbFile.seek(0, 2);
-    except:
-        print("Could not open " + dbFileName + " for reading and writing");
 
-    createDBFileTail(dbFile);
-    dbFile.close();
 
 if __name__ == '__main__':
     main()
