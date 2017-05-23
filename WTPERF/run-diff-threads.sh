@@ -33,7 +33,7 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 WORKLOAD="many-table-stress.wtperf"
 
 #DINAMITE_TRACE_DIR="/mnt/fast/sasha"
-DINAMITE_TRACE_DIR="/dev/shm"
+DINAMITE_TRACE_DIR="/mnt/fast/sasha/MANY-TABLE-STRESS"
 #DINAMITE_TRACE_DIR="/tmp"
 #EXCLUDE_TID=""
 NAME="dinamite"
