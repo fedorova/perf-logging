@@ -28,7 +28,8 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="evict-btree.wtperf"
 #WORKLOAD="evict-lsm-readonly.wtperf"
 #WORKLOAD="small-btree-run.wtperf"
-WORKLOAD="medium-multi-lsm-run.wtperf"
+#WORKLOAD="medium-multi-lsm-run.wtperf"
+WORKLOAD="medium-multi-btree-log-run.wtperf"
 
 #DINAMITE_TRACE_DIR="/mnt/fast/sasha"
 DINAMITE_TRACE_DIR="/dev/shm"

@@ -1129,7 +1129,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     while True:
         line = traceFile.readline();
-        print("read " + line);
+
         if (line is None):
             break;
         if (line == ''):
