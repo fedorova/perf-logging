@@ -807,7 +807,8 @@ def generatePerFuncHTMLFiles(prefix, htmlDir,
     if not os.path.exists(dirname):
         try:
             os.mkdir("./" + dirname);
-            print("Directory " + dirname + " created");
+            print(color.BOLD + prefix + ": " +  color.END +
+                  "Directory " + dirname + " created");
         except:
             print("Could not create directory " + dirname);
             return;
