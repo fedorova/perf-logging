@@ -9,7 +9,7 @@ range_partition=true
 report_interval=5
 create=false
 
-run_time=30
+run_time=15
 threads=((count=20,reads=1))
 
 # Warn if a latency over 1 second is seen
