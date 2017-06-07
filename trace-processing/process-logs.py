@@ -1037,6 +1037,7 @@ def getNewIDForText(fname, lastUsedID):
     return lastUsedID + numRecords;
 
 traceRecordSize = 0;
+
 def getNewIDForBinary(fname, lastUsedID):
 
     global traceRecordSize;
@@ -1048,6 +1049,8 @@ def getNewIDForBinary(fname, lastUsedID):
             parserLocation = os.environ["DINAMITE_TRACE_PARSER"];
             command = [];
             command.append(parserLocation);
+            command.append("-p");
+            command.append("fastfunc");
             command.append("-s");
             print(command);
             x = subprocess.check_output(command);
@@ -1058,7 +1061,7 @@ def getNewIDForBinary(fname, lastUsedID):
             print(color.RED + color.BOLD);
             print("Warning, could not query the trace parser for the " +
                   "size of the binary record. Assuming 28 bytes.");
-            traceRecordSize = 28;
+            traceRecordSize = 24;
             print(color.END);
 
     try:
@@ -1539,9 +1542,7 @@ def getTextConverterCommand():
     # binary.
     argsList.append(parserLocation);
     argsList.append("-p");
-    argsList.append("print");
-    argsList.append("-a");
-    argsList.append("ac_short");
+    argsList.append("fastfunc");
     argsList.append("-m");
     argsList.append("./");
 
