@@ -7,6 +7,7 @@ import gc
 import json
 import math
 from multiprocessing import Process, Queue, Value
+import multiprocessing
 import networkx as nx
 import operator
 import os
@@ -16,6 +17,7 @@ import re
 import resource
 import subprocess
 import sys
+import time
 
 dbFile = None;
 dbFileName = "trace.sql";
@@ -1403,7 +1405,8 @@ def subprocessParse(fname, recsProcessed, firstUnusedID):
     retTuple = (0, 0);
     prefix = getPrefix(fname);
 
-    print(color.BOLD + "Prefix is " + prefix + color.END);
+    print(color.BOLD + color.BLUE +
+          "Processing file with prefix " + prefix + color.END);
 
     # If this is a text trace, we simply parse the file.
     # If this is a binary trace we spawn a subprocess to
@@ -1666,6 +1669,21 @@ def appendAllTraceRecords(dbFileName, intermediateFileNames):
             print("Could not append data from file " + fname +
                   " to " + dbFileName);
 
+
+def waitOnOneProcess(runningProcesses):
+
+    success = False;
+    for fname, p in runningProcesses.items():
+        if (not p.is_alive()):
+            del runningProcesses[fname];
+            print("Process for " + color.BOLD + fname + color.END +
+                  " terminated.");
+            success = True;
+
+    # If we have not found a terminated process, sleep for a while
+    if (not success):
+        time.sleep(5);
+
 def main():
 
     global dbFile;
@@ -1720,6 +1738,9 @@ def main():
 
     parser.add_argument('--htmlDir', dest='htmlDir', type=str,
                             default='HTML');
+
+    parser.add_argument('-j', dest='jobParallelism', type=int,
+                        default='0');
 
     parser.add_argument('-o', '--outliersFile',
                             dest='outliersFile',
@@ -1776,6 +1797,7 @@ def main():
     shortenFuncName = args.shortenFuncName;
     summaryCSV = args.summaryCSV;
     summmaryTxt = args.summaryTxt;
+    targetParallelism = args.jobParallelism;
     treatLocksSpecially = args.treatLocksSpecially;
     verbose = args.verbose;
 
@@ -1829,30 +1851,61 @@ def main():
         except:
             print ("Warning: could not open outliers.txt for writing");
 
-    returnValues = [];
-    spawnedProcesses = [];
+    runnableProcesses = {};
+    returnValues = {};
+    spawnedProcesses = {};
     successfullyProcessedFiles = [];
+    terminatedProcesses = {};
 
+    # Prepare processes that will parse files, one per file
     if (len(args.files) > 0):
         for fname in args.files:
             firstUnusedId = getFirstUnusedId(fname);
             recsProcessed = Value('i', 0);
             p = Process(target=subprocessParse,
                             args=(fname, recsProcessed, firstUnusedId));
-            p.start();
-            spawnedProcesses.append(p);
-            returnValues.append(recsProcessed);
+            runnableProcesses[fname] = p;
+            returnValues[fname] = recsProcessed;
 
-    for p, retval, fname in zip(spawnedProcesses, returnValues, args.files):
-        p.join();
+    # Determine the target job parallelism
+    if (targetParallelism == 0):
+        targetParallelism = multiprocessing.cpu_count();
+        if (targetParallelism == 0):
+            targetParallelism = len(args.files);
+
+    print(color.BOLD + color.BLUE + "WILL RUN " + str(targetParallelism)
+          + " JOBS IN PARALLEL." + color.END);
+    print(color.BOLD + color.RED + "Reduce parallelism using -j option "
+          + "if the script is killed by the OS." + color.END);
+
+    # Spawn these processes, not exceeding the desired parallelism
+    while (len(runnableProcesses) > 0):
+        while (len(spawnedProcesses) < targetParallelism
+               and len(runnableProcesses) > 0):
+
+            fname, p = runnableProcesses.popitem();
+            p.start();
+            spawnedProcesses[fname] = p;
+            print("Started process for " + color.BOLD + fname + color.END);
+
+        # Find at least one terminated process
+        waitOnOneProcess(spawnedProcesses);
+
+    # Wait for all processes to terminate
+    while (len(spawnedProcesses) > 0):
+        waitOnOneProcess(spawnedProcesses);
+
+    # Gather their return values
+    for fname, retval in returnValues.items():
         if (retval.value > 0):
             successfullyProcessedFiles.append(fname);
-
         totalRecords += retval.value;
 
 
     print("\n" + color.BOLD +
           "ALMOST DONE! Generating images and HTML files." + color.END);
+
+    successfullyProcessedFiles = sorted(successfullyProcessedFiles);
 
     # Create a file for dumping the data in a database-importable format,
     # unless the user opted out.
