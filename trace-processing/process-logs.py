@@ -3,7 +3,7 @@
 import argparse
 import colorsys
 import errno
-import gc
+import gzip
 import json
 import math
 from multiprocessing import Process, Queue, Value
@@ -15,9 +15,11 @@ import os.path
 import platform
 import re
 import resource
+import shutil
 import subprocess
 import sys
 import time
+import traceback
 
 dbFile = None;
 dbFileName = "trace.sql";
@@ -1658,6 +1660,20 @@ def createDBFileTail(dbFile):
 
     dbFile.close();
 
+def appendAllTraceRecordsGzipped(dbFileName, intermediateFileNames):
+
+    gzippedFile = gzip.open(dbFileName, 'ab');
+
+    for name in intermediateFileNames:
+        fname = getPrefix(name) + ".sql";
+        file = open(fname, "r");
+        print("Appending data from " + fname + "...");
+
+        shutil.copyfileobj(file, gzippedFile);
+
+    gzippedFile.close();
+
+
 def appendAllTraceRecords(dbFileName, intermediateFileNames):
 
     for name in intermediateFileNames:
@@ -1683,6 +1699,34 @@ def waitOnOneProcess(runningProcesses):
     # If we have not found a terminated process, sleep for a while
     if (not success):
         time.sleep(5);
+
+
+def createRegularDbFile(dbFileName, totalRecords, successfullyProcessedFiles):
+
+    dbFile = open(dbFileName, "w+");
+    createDBFileHead(dbFile, totalRecords);
+    dbFile.close();
+
+    appendAllTraceRecords(dbFileName, successfullyProcessedFiles);
+
+    dbFile = open(dbFileName, "r+");
+    dbFile.seek(0, 2); # Seek to the end
+    createDBFileTail(dbFile);
+    dbFile.close();
+
+def createGzippedDbFile(dbFileName, totalRecords, successfullyProcessedFiles):
+
+    fname = dbFileName + ".gz";
+
+    dbFile = gzip.open(fname, 'wb');
+    createDBFileHead(dbFile, totalRecords);
+    dbFile.close();
+
+    appendAllTraceRecordsGzipped(fname, successfullyProcessedFiles);
+
+    dbFile = gzip.open(fname, 'ab');
+    createDBFileTail(dbFile);
+    dbFile.close();
 
 def main():
 
@@ -1785,6 +1829,9 @@ def main():
                             threads.');
 
     parser.add_argument('--verbose', dest='verbose', action='store_true');
+    parser.add_argument('-z', dest='gzipDbFile',
+                        default=True, action='store_false',
+                        help="Do not gzip the final trace.sql file");
 
     args = parser.parse_args();
 
@@ -1913,20 +1960,17 @@ def main():
     if (args.dumpdbfile == True):
         print("Concatenating intermediate data files into one...");
         try:
-            dbFile = open(dbFileName, "w+");
-            createDBFileHead(dbFile, totalRecords);
-            dbFile.close();
-
-            appendAllTraceRecords(dbFileName, successfullyProcessedFiles);
-
-            dbFile = open(dbFileName, "r+");
-            dbFile.seek(0, 2); # Seek to the end
-            createDBFileTail(dbFile);
-            dbFile.close();
+            if (args.gzipDbFile):
+                createGzippedDbFile(dbFileName, totalRecords,
+                                    successfullyProcessedFiles);
+            else:
+                createRegularDbFile(dbFileName, totalRecords,
+                                    successfullyProcessedFiles);
         except:
-            print ("Warning: could not open " + dbFileName + " for writing");
-
-
+            print(color.RED + color.BOLD + "WARNING: Something went wrong");
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback.print_exception(exc_type, exc_value, exc_traceback);
+            print(color.END);
 
     topHTMLFile = generateTopHTML(successfullyProcessedFiles, htmlDir);
     if (topHTMLFile is not None):
