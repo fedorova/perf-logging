@@ -141,18 +141,97 @@ class LockRecord:
 # A pattern is a complete callstack and its metadata: how many
 # times it was encountered and the starting positions in the trace.
 #
+# A pattern could be in two states: in-flux and finalized. A pattern
+# that is in-flux still has functions being added to it and periodically
+# compressed. It also has a starting time.
+#
+# A pattern that is finalized has its metadata: position and trace and
+# duration added to the 'tracePositions' and 'durations' lists.
+# Variables startTime and endTime are no longer meaningful for a finalized
+# pattern. A finalized pattern will no longer be compressed.
+#
 
 class Pattern:
 
-    def __init__(self, pattern):
-        self.pattern = pattern;
-        self.tracePositions = [];
-        self.isSingleton = True;
+    def __init__(self, sequence):
+        self.sequence = sequence.sequence;
+        self.tracePositions = []
+        self.durations = [];
 
+    def addPosition(self, startTime, endTime):
+        self.tracePositions.append(startTime);
+        self.durations.append(endTime - startTime);
+
+    # Check if the new sequence is the same as the
+    # sequence contained within the pattern
+    #
+    def same(self, newSequence):
+
+        if (len(newSequence) != len(self.sequence)):
+            return False;
+
+        for (i in range(len(newSequence))):
+            if (newSequence[i] != self.sequence[i]):
+                return False;
+
+        return True;
+
+# A sequence is a list of functions and patterns. A sequence has a start time
+# and an end time. A sequence is usually in-flux: functions are being added to
+# it, and it is being periodically compressed.
 #
+# Once the sequence has ended, which happens when we go down a stack level,
+# we turn the sequence into a pattern.
+#
+class Sequence:
+
+    def __init__(self, time):
+        self.sequence = [];
+        self.startTime = time;
+        self.endTime = 0;
+
+    def add(self, funcID, time):
+        self.sequence.append(funcID);
+        self.endTime = time;
+        self.compress();
+
+    # A sequence is just a list of numbers. We use very simple
+    # compression heuristics to encode repeating numbers or
+    # repeating groups of numbers. To indicate that a previous number or a group
+    # repeats, we use negative numbers. The magnitude of the number
+    # corresponds to the length of the sequence. For instance, if
+    # the number "4" repeats at least twice, we insert '-1' after 4.
+    # If the sequence "4,5" repeats, we insert '-2' after that group.
+    #
+    def compress(self):
+        # Do nothing for now.
+        return 0;
+
+    # Add to the dictionary of patterns
+    def finalize(self):
+        global patterns;
+
+        print("Finalize:");
+
+        for key, pattern in patterns.items():
+            if (pattern.same(self)):
+                pattern.addPosition(self.startTime, self.endTime);
+                print("Found pattern for sequence at key " +
+                      str(key) + "  --- " + str(self));
+                return key;
+
+        newPattern = Pattern(self);
+        newPattern.addPosition(self.startTime, self.endTime);
+        patternID = len(patterns);
+        patterns[patternID] = newPattern;
+        print("Created new pattern for sequence at key " +
+              str(patternID) + " --- " + str(self));
+        return patternID;
+
+
 # TraceStats class holds attributes pertaining to the performance
 # trace.
-
+#
 class TraceStats:
     def __init__(self, name):
         self.name = name;
@@ -1103,40 +1182,57 @@ def getFirstUnusedId(fname):
 
     return oldLastUsedID;
 
+# Get the number corresponding to the current function.
+# We encode functions as numbers to save space used for
+# storing patterns.
+
+funcToID = {};
+
+def funcNameToID(funcName):
+
+    global funcToID;
+
+    if (not funcToID.has_key(funcName)):
+        funcToID[funcName] = len(funcToID);
+
+    print(funcName + " --> " + str(funcToID[funcName]));
+    return funcToID[funcName];
+
 
 currentStackLevel = 0;
-currentPattern = [];
-def minePatterns(funcName, stackLevel):
+currentSequence = None;
+sequenceForLevel = {};
+
+def minePatterns(funcName, stackLevel, startTime, endTime):
 
     global currentStackLevel;
-    global currentPattern;
-
+    global currentSequence;
 
     funcID = funcNameToID(stackRec.fullName());
-
 
     # We are going up a stack level. Let's stash the current pattern.
     # We will use it later once we are back at this stack level.
     #
     if (stackLevel > currentStackLevel):
-        if (stackLevel - currentStackLevel > 1 and currentStackLevel != 0):
-            print("Warning: jumping up more than one stack level");
-            print(funcName + ": stack level is " + str(stackLevel) +
-                  ", previous stack level was " + str(currentStackLevel));
-            return;
+        print("Changing stack level");
+        print(funcName + ": stack level is " + str(stackLevel) +
+              ", previous stack level was " + str(currentStackLevel));
 
-        # Stash the current pattern
-        if (len(currentPattern) > 0):
-            runningPatternForLevel[currentStackLevel] = currentPattern;
-            currentPattern = [];
+        # Stash the current sequence
+        if (currentSequence is not None):
+            sequenceForLevel[currentStackLevel] = currentSequence;
+            print("stashing sequence " + str(currentSequence));
+
+        currentSequence = Sequence(startTime);
+        currentStackLevel = stackLevel;
 
     # We have encountered a completed function at the same level as
     # we were previously. Let's see if we can compress the remembered
     # pattern for the current level on the fly.
     #
     if (stackLevel == currentStackLevel):
-        currentPattern.append(funcID);
-        currentPattern = compressAndReencode(currentPattern);
+        currentSequence.add(funcID, endTime);
+        print("added to sequence " + str(currentSequence));
 
     # We are going down the stack level. This means that the parent of
     # the completed functions we have just processed has completed.
@@ -1150,23 +1246,18 @@ def minePatterns(funcName, stackLevel):
                   ", previous stack level was " + str(currentStackLevel));
             return;
 
-        childPattern = finalizeCurrentPattern(currentPattern);
+        childPatternID = currentSequence.finalize();
         currentStackLevel = stackLevel;
 
-        if (runningPatternForLevel.has_key(currentStackLevel)):
-            currentPattern = runningPatternForLevel[currentStackLevel];
-            if (currentPattern is None):
-                print("Warning: retrieved a null current pattern");
-            if (len(currentPattern) == 0):
-                print("Warning: retrieved a current pattern of zero length");
+        if (sequenceForLevel.has_key(currentStackLevel)):
+            currentSequence = sequenceForLevel[currentStackLevel];
+            if (currentSequence is None):
+                print("Warning: retrieved a null current sequence");
         else:
-            currentPattern = [];
+            currentSequence = Sequence(startTime);
 
-        currentPattern.append(funcID);
-        currentPattern.append(childPattern);
-        currentPattern = compressAndReencode(currentPattern);
-
-
+        currentPattern.add(funcID, endTime);
+        currentPattern.add(childPattern, endTime);
 
 
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
@@ -1335,7 +1426,8 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     rec.otherInfo = stackRec.otherInfo;
                     rec.setID(stackRec.id);
 
-                    minePatterns(stackRec.fullName(), len(stack));
+                    minePatterns(stackRec.fullName(), len(stack),
+                                 stackRec.time, rec.time);
 
                     # Now that we know this function's duration we can write
                     # it's opening and closing record into the database
