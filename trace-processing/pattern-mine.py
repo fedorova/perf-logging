@@ -150,6 +150,7 @@ class LockRecord:
 # Variables startTime and endTime are no longer meaningful for a finalized
 # pattern. A finalized pattern will no longer be compressed.
 #
+PATTERN_FLOOR = 1000000;
 
 class Pattern:
 
@@ -167,11 +168,11 @@ class Pattern:
     #
     def same(self, newSequence):
 
-        if (len(newSequence) != len(self.sequence)):
+        if (len(newSequence.sequence) != len(self.sequence)):
             return False;
 
-        for (i in range(len(newSequence))):
-            if (newSequence[i] != self.sequence[i]):
+        for i in range(len(newSequence.sequence)):
+            if (newSequence.sequence[i] != self.sequence[i]):
                 return False;
 
         return True;
@@ -211,22 +212,37 @@ class Sequence:
     def finalize(self):
         global patterns;
 
+        # The reason for having a pattern floor is because we want
+        # to distinguish between functions and patterns, both of which
+        # are encoded using numbers. By using a pattern floor, we
+        # ensure that these numbers come from different name spaces.
+        # Functions will be encoded as numbers smaller than PATTERN_FLOOR.
+        # Patterns will be encoded as numbers equal to or larger than
+        # PATTERN_FLOOR. PATTERN_FLOOR has to be large enough to encode
+        # all unique function names.
+        #
+        global PATTERN_FLOOR;
+
         print("Finalize:");
 
         for key, pattern in patterns.items():
             if (pattern.same(self)):
                 pattern.addPosition(self.startTime, self.endTime);
-                print("Found pattern for sequence at key " +
-                      str(key) + "  --- " + str(self));
+                print("Found pattern for sequence at key " + str(key));
+                self.printMe();
                 return key;
 
         newPattern = Pattern(self);
         newPattern.addPosition(self.startTime, self.endTime);
-        patternID = len(patterns);
+        patternID = len(patterns) + PATTERN_FLOOR;
         patterns[patternID] = newPattern;
-        print("Created new pattern for sequence at key " +
-              str(patternID) + " --- " + str(self));
+        print("Created new pattern for sequence at key " + str(patternID));
+        self.printMe();
         return patternID;
+
+    def printMe(self):
+        print("SEQ: start=" + str(self.startTime) + ", end=" + str(self.endTime)
+              + str(self.sequence));
 
 
 # TraceStats class holds attributes pertaining to the performance
@@ -1187,6 +1203,7 @@ def getFirstUnusedId(fname):
 # storing patterns.
 
 funcToID = {};
+idToFunc = None;
 
 def funcNameToID(funcName):
 
@@ -1198,6 +1215,15 @@ def funcNameToID(funcName):
     print(funcName + " --> " + str(funcToID[funcName]));
     return funcToID[funcName];
 
+def funcNameFromID(id):
+
+    global funcToID;
+    global idToFunc;
+
+    if (idToFunc is None):
+        idToFunc = {v: k for k, v in funcToID.iteritems()}
+
+    return idToFunc[id];
 
 currentStackLevel = 0;
 currentSequence = None;
@@ -1208,7 +1234,7 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     global currentStackLevel;
     global currentSequence;
 
-    funcID = funcNameToID(stackRec.fullName());
+    funcID = funcNameToID(funcName);
 
     # We are going up a stack level. Let's stash the current pattern.
     # We will use it later once we are back at this stack level.
@@ -1221,7 +1247,8 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
         # Stash the current sequence
         if (currentSequence is not None):
             sequenceForLevel[currentStackLevel] = currentSequence;
-            print("stashing sequence " + str(currentSequence));
+            print("stashing sequence");
+            currentSequence.printMe();
 
         currentSequence = Sequence(startTime);
         currentStackLevel = stackLevel;
@@ -1232,7 +1259,8 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     #
     if (stackLevel == currentStackLevel):
         currentSequence.add(funcID, endTime);
-        print("added to sequence " + str(currentSequence));
+        print("added to sequence ");
+        currentSequence.printMe();
 
     # We are going down the stack level. This means that the parent of
     # the completed functions we have just processed has completed.
@@ -1255,10 +1283,51 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
                 print("Warning: retrieved a null current sequence");
         else:
             currentSequence = Sequence(startTime);
+            print("Started new sequence for level " + str(currentStackLevel));
 
-        currentPattern.add(funcID, endTime);
-        currentPattern.add(childPattern, endTime);
+        currentSequence.add(funcID, endTime);
+        currentSequence.add(childPatternID, endTime);
+        currentSequence.printMe();
 
+# We reached the end of the trace. We need to finalize the current sequence.
+#
+def finalizePatterns(endTime):
+
+    global currentSequence;
+
+    currentSequence.endTime = endTime;
+    lastPatternID = currentSequence.finalize();
+
+    # For testing purposes.
+    unrollTrace(lastPatternID);
+
+# Using the encoded patterns, unroll the trace, so that we can verify
+# that we did not miss anything. To unroll the entire trace, we need to
+# start the processes with the ID of the last encoded pattern.
+#
+def unrollTrace(patternID):
+
+    prevFuncName = None;
+    p = patterns[patternID];
+
+    # Go over every entry in the sequence for this pattern.
+    # If we encounter another pattern, recursively call this
+    # function to unroll the pattern.
+    #
+    s = p.sequence;
+
+    for i in range(len(s)):
+        if (s[i] < PATTERN_FLOOR):
+            if (prevFuncName is not None):
+                print("<-- " + prevFuncName);
+
+            funcName = funcNameFromID(s[i]);
+            print("--> " + funcName);
+            prevFuncName = funcName;
+        else:
+            unrollTrace(s[i]);
+
+    print("<-- " + prevFuncName);
 
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
@@ -1459,6 +1528,8 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     traceStats.setStartTime(startTime);
     traceStats.setEndTime(endTime);
+
+    finalizePatterns(endTime);
 
     if (dbFile is not None):
        dbFile.flush();
