@@ -138,18 +138,11 @@ class LockRecord:
               str(self.timeAcquired) + "\n");
 
 #
-# A pattern is a complete callstack and its metadata: how many
-# times it was encountered and the starting positions in the trace.
+# A pattern is a complete callstack and its metadata: the locations in
+# the trace where the pattern is encountered (measured in time units) and
+# the duration of the pattern's sequence (also measured in time units).
 #
-# A pattern could be in two states: in-flux and finalized. A pattern
-# that is in-flux still has functions being added to it and periodically
-# compressed. It also has a starting time.
-#
-# A pattern that is finalized has its metadata: position and trace and
-# duration added to the 'tracePositions' and 'durations' lists.
-# Variables startTime and endTime are no longer meaningful for a finalized
-# pattern. A finalized pattern will no longer be compressed.
-#
+
 PATTERN_FLOOR = 1000000;
 
 class Pattern:
@@ -194,19 +187,72 @@ class Sequence:
     def add(self, funcID, time):
         self.sequence.append(funcID);
         self.endTime = time;
-        self.compress();
+        print("Before compression:"); self.printMe();
+        success = self.compress();
+        while (success):
+            success = self.compress();
+        print("After FINAL compression:"); self.printMe();
 
-    # A sequence is just a list of numbers. We use very simple
-    # compression heuristics to encode repeating numbers or
+    # A sequence is just a list of numbers. We use a very simple lossy
+    # compression method to encode repeating numbers or
     # repeating groups of numbers. To indicate that a previous number or a group
     # repeats, we use negative numbers. The magnitude of the number
     # corresponds to the length of the sequence. For instance, if
     # the number "4" repeats at least twice, we insert '-1' after 4.
-    # If the sequence "4,5" repeats, we insert '-2' after that group.
+    # If the sequence "4,5" repeats, we insert '-2' before that group.
     #
     def compress(self):
-        # Do nothing for now.
-        return 0;
+
+        lastFuncIdx = len(self.sequence) - 1;
+        lastFuncID = self.sequence[lastFuncIdx];
+
+        print("Last func idx: " + str(lastFuncIdx));
+        print("Last func ID: " + str(lastFuncID));
+
+        # Search for the same function ID.
+        for i in range(lastFuncIdx - 1, 0, -1):
+            print("i = " + str(i));
+            if (self.sequence[i] == lastFuncID):
+                candidateListLength = lastFuncIdx - i;
+
+                print("Got a match at index " + str(i));
+                print("Candidate list length is " + str(candidateListLength));
+
+                if ((i+1) - candidateListLength < 0):
+                    return;
+
+                sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
+                sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
+
+                print("Will compare these lists");
+                print(str(sublist1));
+                print(str(sublist2));
+
+                if (cmp(sublist1, sublist2) != 0):
+                    return False;
+
+                if (i-candidateListLength >= 0 and
+                    self.sequence[i-candidateListLength] >= 0):
+                    self.sequence.insert(i-candidateListLength+1,
+                                         -candidateListLength);
+                elif (i-candidateListLength == -1):
+                    self.sequence.insert(0, -candidateListLength);
+                else:
+                    if (self.sequence[i-candidateListLength] !=
+                        -candidateListLength):
+                        print("Unexpected encoding at index " +
+                              str(i-candidateListLength) +
+                              ". Expecting " + str(-candidateListLength));
+                        return False;
+
+                # The final sequence is already encoded. Remove it.
+                del self.sequence[(i+1):(lastFuncIdx + 1)];
+
+                print("After compression:");
+                self.printMe();
+
+                return True;
+
 
     # Add to the dictionary of patterns
     def finalize(self):
@@ -1299,7 +1345,7 @@ def finalizePatterns(endTime):
     lastPatternID = currentSequence.finalize();
 
     # For testing purposes.
-    unrollTrace(lastPatternID);
+    # unrollTrace(lastPatternID);
 
 # Using the encoded patterns, unroll the trace, so that we can verify
 # that we did not miss anything. To unroll the entire trace, we need to
