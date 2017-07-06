@@ -211,12 +211,11 @@ class Sequence:
 
         # Search for the same function ID.
         for i in range(lastFuncIdx - 1, 0, -1):
-            print("i = " + str(i));
+
             if (self.sequence[i] == lastFuncID):
                 candidateListLength = lastFuncIdx - i;
 
                 print("Got a match at index " + str(i));
-                print("Candidate list length is " + str(candidateListLength));
 
                 if ((i+1) - candidateListLength < 0):
                     return;
@@ -231,12 +230,26 @@ class Sequence:
                 if (cmp(sublist1, sublist2) != 0):
                     return False;
 
+                # A part of a compressed sequence can be
+                # compressed again later. Compression inserts a
+                # negative number in the sequence, increasing its
+                # length. We don't want to go back and fix the
+                # length of a sequence that has already been
+                # encoded if we are re-encoding part of that
+                # sequence. So the length of the encoded sequence
+                # will always indicate only the number of positive
+                # elements. This way, no matter how many negative
+                # numbers we insert, we don't have to go back and
+                # make any fixes.
+                #
+                nonNegativeLength = countNonNegativeNumbers(sublist1);
+
                 if (i-candidateListLength >= 0 and
                     self.sequence[i-candidateListLength] >= 0):
                     self.sequence.insert(i-candidateListLength+1,
-                                         -candidateListLength);
+                                         -nonNegativeLength);
                 elif (i-candidateListLength == -1):
-                    self.sequence.insert(0, -candidateListLength);
+                    self.sequence.insert(0, -nonNegativeLength);
                 else:
                     if (self.sequence[i-candidateListLength] !=
                         -candidateListLength):
@@ -496,6 +509,15 @@ def mem():
     print('Memory usage         : % 2.2f MB' % round(
         resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0,1)
     )
+
+def countNonNegativeNumbers(list):
+
+    count = 0;
+
+    for number in list:
+        if (number >= 0):
+            count += 1;
+    return count;
 
 #
 # The following data structures and functions help us decide what
@@ -1305,7 +1327,7 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     #
     if (stackLevel == currentStackLevel):
         currentSequence.add(funcID, endTime);
-        print("added to sequence ");
+        print("After addition, the sequence looks like this:");
         currentSequence.printMe();
 
     # We are going down the stack level. This means that the parent of
@@ -1333,6 +1355,7 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
 
         currentSequence.add(funcID, endTime);
         currentSequence.add(childPatternID, endTime);
+        print("After addition, the sequence looks like this:");
         currentSequence.printMe();
 
 # We reached the end of the trace. We need to finalize the current sequence.
