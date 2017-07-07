@@ -267,7 +267,8 @@ class Sequence:
                                self.sequence[j] != -nonNegativeLength):
                             j -= 1;
                         if (j < 0): j = 0;
-                        self.sequence.insert(j, -nonNegativeLength);
+                        if (self.sequence[j] != -nonNegativeLength):
+                            self.sequence.insert(j, -nonNegativeLength);
 
                 elif (i-candidateListLength == -1):
                     self.sequence.insert(0, -nonNegativeLength);
