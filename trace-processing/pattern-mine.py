@@ -203,11 +203,11 @@ class Sequence:
     def add(self, funcID, time):
         self.sequence.append(funcID);
         self.endTime = time;
-        print("Before compression:"); self.printMe();
+
         success = self.compress();
         while (success):
             success = self.compress();
-        print("After FINAL compression:"); self.printMe();
+
 
     # A sequence is just a list of numbers. We use a very simple lossy
     # compression method to encode repeating numbers or
@@ -222,26 +222,17 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
-        print("Last func idx: " + str(lastFuncIdx));
-        print("Last func ID: " + str(lastFuncID));
-
         # Search for the same function ID.
         for i in range(lastFuncIdx - 1, 0, -1):
 
             if (self.sequence[i] == lastFuncID):
                 candidateListLength = lastFuncIdx - i;
 
-                print("Got a match at index " + str(i));
-
                 if ((i+1) - candidateListLength < 0):
                     return;
 
                 sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
                 sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
-
-                print("Will compare these lists");
-                print(str(sublist1));
-                print(str(sublist2));
 
                 if (cmp(sublist1, sublist2) != 0):
                     return False;
@@ -266,13 +257,6 @@ class Sequence:
                                              -nonNegativeLength);
                     elif (self.sequence[i-candidateListLength] !=
                           -nonNegativeLength):
-                        print("Recursive encoding...");
-                        self.printMe();
-                        print("Expecting " + str(-nonNegativeLength) +
-                              " at index " + str(i-candidateListLength) +
-                              ", but saw " +
-                              str(self.sequence[i-candidateListLength]));
-
                         # The sequence we are trying to encode contains
                         # encoded sub-sequences. We have to insert the
                         # length of the current repeated sequence prior
@@ -284,8 +268,6 @@ class Sequence:
                             j -= 1;
                         if (j < 0): j = 0;
                         self.sequence.insert(j, -nonNegativeLength);
-                        print("Inserted " +  str(-nonNegativeLength) +
-                              " at index " + str(j));
 
                 elif (i-candidateListLength == -1):
                     self.sequence.insert(0, -nonNegativeLength);
@@ -297,9 +279,6 @@ class Sequence:
 
                 # The final sequence is already encoded. Remove it.
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
-
-                print("After compression:");
-                self.printMe();
 
                 return True;
 
@@ -319,21 +298,15 @@ class Sequence:
         #
         global PATTERN_FLOOR;
 
-        print("Finalize:");
-
         for key, pattern in patterns.items():
             if (pattern.same(self)):
                 pattern.addPosition(self.startTime, self.endTime);
-                print("Found pattern for sequence at key " + str(key));
-                self.printMe();
                 return key;
 
         newPattern = Pattern(self);
         newPattern.addPosition(self.startTime, self.endTime);
         patternID = len(patterns) + PATTERN_FLOOR;
         patterns[patternID] = newPattern;
-        print("Created new pattern for sequence at key " + str(patternID));
-        self.printMe();
         return patternID;
 
     def printMe(self):
@@ -1308,7 +1281,6 @@ def funcNameToID(funcName):
     if (not funcToID.has_key(funcName)):
         funcToID[funcName] = len(funcToID);
 
-    print(funcName + " --> " + str(funcToID[funcName]));
     return funcToID[funcName];
 
 def funcNameFromID(id):
@@ -1336,15 +1308,10 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     # We will use it later once we are back at this stack level.
     #
     if (stackLevel > currentStackLevel):
-        print("Changing stack level");
-        print(funcName + ": stack level is " + str(stackLevel) +
-              ", previous stack level was " + str(currentStackLevel));
 
         # Stash the current sequence
         if (currentSequence is not None):
             sequenceForLevel[currentStackLevel] = currentSequence;
-            print("stashing sequence");
-            currentSequence.printMe();
 
         currentSequence = Sequence(startTime);
         currentStackLevel = stackLevel;
@@ -1355,8 +1322,6 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     #
     if (stackLevel == currentStackLevel):
         currentSequence.add(funcID, endTime);
-        print("After addition, the sequence looks like this:");
-        currentSequence.printMe();
 
     # We are going down the stack level. This means that the parent of
     # the completed functions we have just processed has completed.
@@ -1365,9 +1330,11 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     #
     if (stackLevel < currentStackLevel):
         if (currentStackLevel - stackLevel > 1):
-            print("Warning: jumping down more than one stack level");
+            print(color.BOLD + color.RED +
+                  "Warning: jumping down more than one stack level.");
             print(funcName + ": stack level is " + str(stackLevel) +
                   ", previous stack level was " + str(currentStackLevel));
+            print(color.END);
             return;
 
         childPatternID = currentSequence.finalize();
@@ -1376,15 +1343,14 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
         if (sequenceForLevel.has_key(currentStackLevel)):
             currentSequence = sequenceForLevel[currentStackLevel];
             if (currentSequence is None):
+                print(color.BOLD + color.RED);
                 print("Warning: retrieved a null current sequence");
+                print(color.END);
         else:
             currentSequence = Sequence(startTime);
-            print("Started new sequence for level " + str(currentStackLevel));
 
         currentSequence.add(funcID, endTime);
         currentSequence.add(childPatternID, endTime);
-        print("After addition, the sequence looks like this:");
-        currentSequence.printMe();
 
 # We reached the end of the trace. We need to finalize the current sequence.
 #
