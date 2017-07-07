@@ -23,7 +23,6 @@ import traceback
 
 dbFile = None;
 dbFileName = "trace.sql";
-funcToId = {};
 generateTextFiles = False;
 graphFilePostfix = None;
 graphType = None;
@@ -31,7 +30,6 @@ htmlDir = "./";
 htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
-outliersFile = None;
 patterns = {};
 percentThreshold = 0.0;
 recID = 0;
@@ -170,6 +168,24 @@ class Pattern:
 
         return True;
 
+    def printMe(self, file):
+
+        file.write(str(self.sequence) + "\n");
+
+        if (len(self.tracePositions) !=
+            len(self.durations)):
+            print(color.RED + color.BOLD + "Mismatch in lengths of " +
+                  " trace positions and durations arrays.");
+
+        length = len(self.tracePositions);
+        if (len(self.durations) > length):
+            length = len(self.durations);
+
+        file.write(str(length) + " OCCURRENCES.\n");
+        for i in range(length):
+            file.write(str(self.tracePositions[i]) + " : "
+                       + str(self.durations[i]) + "\n");
+
 # A sequence is a list of functions and patterns. A sequence has a start time
 # and an end time. A sequence is usually in-flux: functions are being added to
 # it, and it is being periodically compressed.
@@ -244,19 +260,40 @@ class Sequence:
                 #
                 nonNegativeLength = countNonNegativeNumbers(sublist1);
 
-                if (i-candidateListLength >= 0 and
-                    self.sequence[i-candidateListLength] >= 0):
-                    self.sequence.insert(i-candidateListLength+1,
-                                         -nonNegativeLength);
+                if (i-candidateListLength >= 0):
+                    if (self.sequence[i-candidateListLength] >= 0):
+                        self.sequence.insert(i-candidateListLength+1,
+                                             -nonNegativeLength);
+                    elif (self.sequence[i-candidateListLength] !=
+                          -nonNegativeLength):
+                        print("Recursive encoding...");
+                        self.printMe();
+                        print("Expecting " + str(-nonNegativeLength) +
+                              " at index " + str(i-candidateListLength) +
+                              ", but saw " +
+                              str(self.sequence[i-candidateListLength]));
+
+                        # The sequence we are trying to encode contains
+                        # encoded sub-sequences. We have to insert the
+                        # length of the current repeated sequence prior
+                        # to any other length we encounter
+                        #
+                        j = i - candidateListLength - 1;
+                        while (j >= 0 and self.sequence[j] < 0 and
+                               self.sequence[j] != -nonNegativeLength):
+                            j -= 1;
+                        if (j < 0): j = 0;
+                        self.sequence.insert(j, -nonNegativeLength);
+                        print("Inserted " +  str(-nonNegativeLength) +
+                              " at index " + str(j));
+
                 elif (i-candidateListLength == -1):
                     self.sequence.insert(0, -nonNegativeLength);
                 else:
-                    if (self.sequence[i-candidateListLength] !=
-                        -candidateListLength):
-                        print("Unexpected encoding at index " +
-                              str(i-candidateListLength) +
-                              ". Expecting " + str(-candidateListLength));
-                        return False;
+                    print(color.BOLD + color.RED +
+                          "WARNING: unexpected condition during encoding"
+                          + color.END);
+
 
                 # The final sequence is already encoded. Remove it.
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
@@ -300,7 +337,8 @@ class Sequence:
         return patternID;
 
     def printMe(self):
-        print("SEQ: start=" + str(self.startTime) + ", end=" + str(self.endTime)
+        print("SEQ: start=" + str(self.startTime) + ", end="
+              + str(self.endTime)
               + str(self.sequence));
 
 
@@ -352,7 +390,6 @@ class PerfData:
         self.cumSumSquares = 0.0;
 
     def update(self, runningTime, beginTime):
-        global outliersFile;
 
         self.totalRunningTime = self.totalRunningTime + runningTime;
         self.numCalls = self.numCalls + 1;
@@ -361,19 +398,10 @@ class PerfData:
             self.maxRunningTime = runningTime;
             self.maxRunningTimeTimeStamp = beginTime;
 
-        # Update cumulative variance, so we can signal outliers
-        # on the fly.
-        #
+        # Update cumulative variance
         cumMean = float(self.totalRunningTime) / float(self.numCalls);
         self.cumSumSquares = self.cumSumSquares + \
           math.pow(float(runningTime) - cumMean, 2);
-
-        if (outliersFile is not None):
-            if (runningTime > cumMean + 2 * self.getStandardDeviation()):
-                outliersFile.write("T" + str(self.threadID) + ": " + self.name
-                                       + " took "
-                                       + str(runningTime) +
-                                       " ns at time " + str(beginTime) + "\n");
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -1360,12 +1388,14 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
 
 # We reached the end of the trace. We need to finalize the current sequence.
 #
-def finalizePatterns(endTime):
+def finalizePatterns(endTime, prefix):
 
     global currentSequence;
 
     currentSequence.endTime = endTime;
     lastPatternID = currentSequence.finalize();
+
+    dumpPatterns(prefix);
 
     # For testing purposes.
     # unrollTrace(lastPatternID);
@@ -1389,14 +1419,52 @@ def unrollTrace(patternID):
         if (s[i] < PATTERN_FLOOR):
             if (prevFuncName is not None):
                 print("<-- " + prevFuncName);
+                prevFuncName = None;
 
-            funcName = funcNameFromID(s[i]);
-            print("--> " + funcName);
-            prevFuncName = funcName;
+            if (s[i] >=0):
+                funcName = funcNameFromID(s[i]);
+                print("--> " + funcName);
+                prevFuncName = funcName;
+            else:
+                print("Next sequence of " + str(-s[i]) + " functions " +
+                      "repeats at least twice.");
         else:
             unrollTrace(s[i]);
 
     print("<-- " + prevFuncName);
+
+def dumpPatterns(prefix):
+
+    # Create the patterns file for this trace file.
+    try:
+        file = open(prefix + ".patterns", "w");
+    except:
+        print(color.RED + color.BOLD + "Could not open " +
+              prefix + ".patterns for writing.");
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback);
+        print(color.END);
+        return;
+
+    # Dump function encoding
+    file.write("Mapping between function IDs and maps:\n");
+    sortedByID = sorted(funcToID.items(),
+                        key=operator.itemgetter(1));
+
+    for idFuncTuple in sortedByID:
+        file.write(str(idFuncTuple[1]) + "\t" + idFuncTuple[0] + "\n");
+
+    file.write("\n");
+    file.write("Detected " + str(len(patterns)) + " patterns.\n");
+
+    # Dump patterns and their occurrences in the trace
+    for patID, pattern in patterns.items():
+        file.write("#############\n");
+        file.write(str(patID) + ":\n");
+        pattern.printMe(file);
+
+    # Close the file
+    file.close();
 
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
@@ -1598,7 +1666,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     traceStats.setStartTime(startTime);
     traceStats.setEndTime(endTime);
 
-    finalizePatterns(endTime);
+    finalizePatterns(endTime, prefix);
 
     if (dbFile is not None):
        dbFile.flush();
@@ -2054,7 +2122,6 @@ def main():
     global lastNodeName;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
-    global outliersFile;
     global percentThreshold;
     global separator;
     global shortenFuncName;
@@ -2098,13 +2165,6 @@ def main():
 
     parser.add_argument('-j', dest='jobParallelism', type=int,
                         default='0');
-
-    parser.add_argument('-o', '--outliersFile',
-                            dest='outliersFile',
-                            default=False, action='store_true',
-                            help='Default: False. Generate the file with all \
-                            function records whose duration was greater than \
-                            two standard deviations above the average.');
 
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
                         type=float, default = 2.0,
@@ -2202,14 +2262,6 @@ def main():
                   "% of total.\n To avoid filtering or change the default "
                   "value, use --percent-threshold argument.\n Example: "
                   "--percent-threshold=0.0" + color.END);
-
-    # Create the file for dumping info about outliers
-    #
-    if (args.outliersFile):
-        try:
-            outliersFile = open("outliers.txt", "w");
-        except:
-            print ("Warning: could not open outliers.txt for writing");
 
     runnableProcesses = {};
     returnValues = {};
