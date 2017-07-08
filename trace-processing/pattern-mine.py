@@ -223,13 +223,13 @@ class Sequence:
         lastFuncID = self.sequence[lastFuncIdx];
 
         # Search for the same function ID.
-        for i in range(lastFuncIdx - 1, 0, -1):
+        for i in range(lastFuncIdx - 1, -1, -1):
 
             if (self.sequence[i] == lastFuncID):
                 candidateListLength = lastFuncIdx - i;
 
                 if ((i+1) - candidateListLength < 0):
-                    return;
+                    return False;
 
                 sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
                 sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
@@ -255,6 +255,7 @@ class Sequence:
                     if (self.sequence[i-candidateListLength] >= 0):
                         self.sequence.insert(i-candidateListLength+1,
                                              -nonNegativeLength);
+
                     elif (self.sequence[i-candidateListLength] !=
                           -nonNegativeLength):
                         # The sequence we are trying to encode contains
@@ -267,16 +268,18 @@ class Sequence:
                                self.sequence[j] != -nonNegativeLength):
                             j -= 1;
                         if (j < 0): j = 0;
+
                         if (self.sequence[j] != -nonNegativeLength):
+                            j+=1;
                             self.sequence.insert(j, -nonNegativeLength);
 
                 elif (i-candidateListLength == -1):
                     self.sequence.insert(0, -nonNegativeLength);
+
                 else:
                     print(color.BOLD + color.RED +
                           "WARNING: unexpected condition during encoding"
                           + color.END);
-
 
                 # The final sequence is already encoded. Remove it.
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
