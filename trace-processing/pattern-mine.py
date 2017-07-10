@@ -23,7 +23,7 @@ import traceback
 
 dbFile = None;
 dbFileName = "trace.sql";
-compressPatterns = False;
+dontCompressPatterns = False;
 generateTextFiles = False;
 graphFilePostfix = None;
 graphType = None;
@@ -202,19 +202,17 @@ class Sequence:
         self.endTime = 0;
 
     def add(self, funcID, time):
-        global compressPatterns;
+        global dontCompressPatterns;
 
         self.sequence.append(funcID);
         self.endTime = time;
 
-        if (compressPatterns):
-            times = 0;
+        if (dontCompressPatterns):
+            return;
+
+        success = self.compress();
+        while (success):
             success = self.compress();
-            while (success):
-                success = self.compress();
-                times += 1;
-                if (times > 20):
-                    print("Warning: compress loop ran more than 20 times");
 
 
     # A sequence is just a list of numbers. We use a very simple lossy
@@ -1610,7 +1608,7 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     rec.otherInfo = stackRec.otherInfo;
                     rec.setID(stackRec.id);
 
-                    minePatterns(stackRec.fullName(), len(stack),
+                    minePatterns(stackRec.func, len(stack),
                                  stackRec.time, rec.time);
 
                     # Now that we know this function's duration we can write
@@ -2123,7 +2121,7 @@ def main():
     parser.add_argument('files', type=str, nargs='*',
                     help='log files to process');
 
-    parser.add_argument('-c', dest='compressPatterns',
+    parser.add_argument('-c', dest='dontCompressPatterns',
                         action='store_true');
 
     parser.add_argument('-d', '--dumpdbfile', dest='dumpdbfile', type=bool,
@@ -2190,7 +2188,7 @@ def main():
 
     args = parser.parse_args();
 
-    compressPatterns = args.compressPatterns;
+    dontCompressPatterns = args.dontCompressPatterns;
     generateTextFiles = args.generateTextFiles;
     graphType = args.graphtype;
     graphFilePostfix = args.graphFilePostfix;
