@@ -23,6 +23,8 @@ import traceback
 
 dbFile = None;
 dbFileName = "trace.sql";
+dontCompressPatterns = False;
+dontMinePatterns = False;
 generateTextFiles = False;
 graphFilePostfix = None;
 graphType = None;
@@ -30,7 +32,7 @@ htmlDir = "./";
 htmlTemplate = None;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
-outliersFile = None;
+patterns = {};
 percentThreshold = 0.0;
 recID = 0;
 separator = ";";
@@ -135,11 +137,231 @@ class LockRecord:
         print(self.name + ": [" + str(self.thread) + "] " +
               str(self.timeAcquired) + "\n");
 
-
 #
+# A pattern is a complete callstack and its metadata: the locations in
+# the trace where the pattern is encountered (measured in time units) and
+# the duration of the pattern's sequence (also measured in time units).
+#
+
+PATTERN_FLOOR = 1000000;
+
+class Pattern:
+
+    def __init__(self, sequence):
+        self.sequence = sequence.sequence;
+        self.tracePositions = []
+        self.durations = [];
+
+    def addPosition(self, startTime, endTime):
+        self.tracePositions.append(startTime);
+        self.durations.append(endTime - startTime);
+
+    # When comparing patterns, we skip negative numbers,
+    # as they represent repetitions. We compare only
+    # positive numbers. Also, with this comparison function,
+    # if a shorter pattern is a prefix of a longer pattern,
+    # the shorter pattern will be deemed the same as the longer
+    # pattern.
+    #
+    def sameNonRepeating(self, newSequence):
+
+        j = 0;
+        i = 0;
+
+        while (i < len(self.sequence) and j < len(newSequence.sequence)):
+            # Find the next positive element of each sequence
+            old_curElement = self.sequence[i];
+            while(old_curElement < 0 and i < len(self.sequence)):
+                i += 1;
+                old_curElement = self.sequence[i];
+
+            new_curElement = newSequence.sequence[j];
+            while(new_curElement < 0 and j < len(newSequence.sequence)):
+                j += 1;
+                new_curElement =  newSequence.sequence[j];
+
+            # Compare them
+            if (old_curElement != new_curElement):
+                return False;
+            else:
+                i += 1;
+                j += 1;
+
+        return True;
+
+    # Check if the new sequence is the same as the
+    # sequence contained within the pattern.
+    #
+    def same(self, newSequence):
+
+        if (len(newSequence.sequence) != len(self.sequence)):
+            return False;
+
+        for i in range(len(newSequence.sequence)):
+            if (newSequence.sequence[i] != self.sequence[i]):
+                return False;
+
+        return True;
+
+    def printMe(self, file):
+
+        file.write(str(self.sequence) + "\n");
+
+        if (len(self.tracePositions) !=
+            len(self.durations)):
+            print(color.RED + color.BOLD + "Mismatch in lengths of " +
+                  " trace positions and durations arrays.");
+
+        length = len(self.tracePositions);
+        if (len(self.durations) > length):
+            length = len(self.durations);
+
+        file.write(str(length) + " OCCURRENCES.\n");
+        for i in range(length):
+            file.write(str(self.tracePositions[i]) + " : "
+                       + str(self.durations[i]) + "\n");
+
+# A sequence is a list of functions and patterns. A sequence has a start time
+# and an end time. A sequence is usually in-flux: functions are being added to
+# it, and it is being periodically compressed.
+#
+# Once the sequence has ended, which happens when we go down a stack level,
+# we turn the sequence into a pattern.
+#
+class Sequence:
+
+    def __init__(self, time):
+        self.sequence = [];
+        self.startTime = time;
+        self.endTime = 0;
+
+    def add(self, funcID, time):
+        global dontCompressPatterns;
+
+        self.sequence.append(funcID);
+        self.endTime = time;
+
+        if (dontCompressPatterns):
+            return;
+
+        success = self.compress();
+        while (success):
+            success = self.compress();
+
+
+    # A sequence is just a list of numbers. We use a very simple lossy
+    # compression method to encode repeating numbers or
+    # repeating groups of numbers. To indicate that a previous number or a group
+    # repeats, we use negative numbers. The magnitude of the number
+    # corresponds to the length of the sequence. For instance, if
+    # the number "4" repeats at least twice, we insert '-1' after 4.
+    # If the sequence "4,5" repeats, we insert '-2' before that group.
+    #
+    def compress(self):
+
+        lastFuncIdx = len(self.sequence) - 1;
+        lastFuncID = self.sequence[lastFuncIdx];
+
+        # Search for the same function ID.
+        for i in range(lastFuncIdx - 1, -1, -1):
+
+            if (self.sequence[i] == lastFuncID):
+                candidateListLength = lastFuncIdx - i;
+
+                if ((i+1) - candidateListLength < 0):
+                    return False;
+
+                sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
+                sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
+
+                if (cmp(sublist1, sublist2) != 0):
+                    return False;
+
+                # A part of a compressed sequence can be
+                # compressed again later. Compression inserts a
+                # negative number in the sequence, increasing its
+                # length. We don't want to go back and fix the
+                # length of a sequence that has already been
+                # encoded if we are re-encoding part of that
+                # sequence. So the length of the encoded sequence
+                # will always indicate only the number of positive
+                # elements. This way, no matter how many negative
+                # numbers we insert, we don't have to go back and
+                # make any fixes.
+                #
+                nonNegativeLength = countNonNegativeNumbers(sublist1);
+
+                if (i-candidateListLength >= 0):
+                    if (self.sequence[i-candidateListLength] >= 0):
+                        self.sequence.insert(i-candidateListLength+1,
+                                             -nonNegativeLength);
+
+                    elif (self.sequence[i-candidateListLength] !=
+                          -nonNegativeLength):
+                        # The sequence we are trying to encode contains
+                        # encoded sub-sequences. We have to insert the
+                        # length of the current repeated sequence prior
+                        # to any other length we encounter
+                        #
+                        j = i - candidateListLength - 1;
+                        while (j >= 0 and self.sequence[j] < 0 and
+                               self.sequence[j] != -nonNegativeLength):
+                            j -= 1;
+                        if (j < 0): j = 0;
+
+                        if (self.sequence[j] != -nonNegativeLength):
+                            j+=1;
+                            self.sequence.insert(j, -nonNegativeLength);
+
+                elif (i-candidateListLength == -1):
+                    self.sequence.insert(0, -nonNegativeLength);
+
+                else:
+                    print(color.BOLD + color.RED +
+                          "WARNING: unexpected condition during encoding"
+                          + color.END);
+
+                # The final sequence is already encoded. Remove it.
+                del self.sequence[(i+1):(lastFuncIdx + 1)];
+
+                return True;
+
+
+    # Add to the dictionary of patterns
+    def finalize(self):
+        global patterns;
+
+        # The reason for having a pattern floor is because we want
+        # to distinguish between functions and patterns, both of which
+        # are encoded using numbers. By using a pattern floor, we
+        # ensure that these numbers come from different name spaces.
+        # Functions will be encoded as numbers smaller than PATTERN_FLOOR.
+        # Patterns will be encoded as numbers equal to or larger than
+        # PATTERN_FLOOR. PATTERN_FLOOR has to be large enough to encode
+        # all unique function names.
+        #
+        global PATTERN_FLOOR;
+
+        for key, pattern in patterns.items():
+            if (pattern.sameNonRepeating(self)):
+                pattern.addPosition(self.startTime, self.endTime);
+                return key;
+
+        newPattern = Pattern(self);
+        newPattern.addPosition(self.startTime, self.endTime);
+        patternID = len(patterns) + PATTERN_FLOOR;
+        patterns[patternID] = newPattern;
+        return patternID;
+
+    def printMe(self):
+        print("SEQ: start=" + str(self.startTime) + ", end="
+              + str(self.endTime)
+              + str(self.sequence));
+
+
 # TraceStats class holds attributes pertaining to the performance
 # trace.
-
+#
 class TraceStats:
     def __init__(self, name):
         self.name = name;
@@ -185,7 +407,6 @@ class PerfData:
         self.cumSumSquares = 0.0;
 
     def update(self, runningTime, beginTime):
-        global outliersFile;
 
         self.totalRunningTime = self.totalRunningTime + runningTime;
         self.numCalls = self.numCalls + 1;
@@ -194,19 +415,10 @@ class PerfData:
             self.maxRunningTime = runningTime;
             self.maxRunningTimeTimeStamp = beginTime;
 
-        # Update cumulative variance, so we can signal outliers
-        # on the fly.
-        #
+        # Update cumulative variance
         cumMean = float(self.totalRunningTime) / float(self.numCalls);
         self.cumSumSquares = self.cumSumSquares + \
           math.pow(float(runningTime) - cumMean, 2);
-
-        if (outliersFile is not None):
-            if (runningTime > cumMean + 2 * self.getStandardDeviation()):
-                outliersFile.write("T" + str(self.threadID) + ": " + self.name
-                                       + " took "
-                                       + str(runningTime) +
-                                       " ns at time " + str(beginTime) + "\n");
 
     def getAverage(self):
         return (float(self.totalRunningTime) / float(self.numCalls));
@@ -342,6 +554,15 @@ def mem():
     print('Memory usage         : % 2.2f MB' % round(
         resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0,1)
     )
+
+def countNonNegativeNumbers(list):
+
+    count = 0;
+
+    for number in list:
+        if (number >= 0):
+            count += 1;
+    return count;
 
 #
 # The following data structures and functions help us decide what
@@ -1090,6 +1311,171 @@ def getFirstUnusedId(fname):
 
     return oldLastUsedID;
 
+# Get the number corresponding to the current function.
+# We encode functions as numbers to save space used for
+# storing patterns.
+
+funcToID = {};
+idToFunc = None;
+
+def funcNameToID(funcName):
+
+    global funcToID;
+
+    if (not funcToID.has_key(funcName)):
+        funcToID[funcName] = len(funcToID);
+
+    return funcToID[funcName];
+
+def funcNameFromID(id):
+
+    global funcToID;
+    global idToFunc;
+
+    if (idToFunc is None):
+        idToFunc = {v: k for k, v in funcToID.iteritems()}
+
+    return idToFunc[id];
+
+currentStackLevel = 0;
+currentSequence = None;
+sequenceForLevel = {};
+
+def minePatterns(funcName, stackLevel, startTime, endTime):
+
+    global currentStackLevel;
+    global currentSequence;
+
+    funcID = funcNameToID(funcName);
+
+    # We are going up a stack level. Let's stash the current pattern.
+    # We will use it later once we are back at this stack level.
+    #
+    if (stackLevel > currentStackLevel):
+
+        # Stash the current sequence
+        if (currentSequence is not None):
+            sequenceForLevel[currentStackLevel] = currentSequence;
+
+        currentSequence = Sequence(startTime);
+        currentStackLevel = stackLevel;
+
+    # We have encountered a completed function at the same level as
+    # we were previously. Let's see if we can compress the remembered
+    # pattern for the current level on the fly.
+    #
+    if (stackLevel == currentStackLevel):
+        currentSequence.add(funcID, endTime);
+
+    # We are going down the stack level. This means that the parent of
+    # the completed functions we have just processed has completed.
+    # Let's record the pattern we derived and retrieve the pattern for
+    # the new stack level.
+    #
+    if (stackLevel < currentStackLevel):
+        if (currentStackLevel - stackLevel > 1):
+            print(color.BOLD + color.RED +
+                  "Warning: jumping down more than one stack level.");
+            print(funcName + ": stack level is " + str(stackLevel) +
+                  ", previous stack level was " + str(currentStackLevel));
+            print(color.END);
+            return;
+
+        childPatternID = currentSequence.finalize();
+        currentStackLevel = stackLevel;
+
+        if (sequenceForLevel.has_key(currentStackLevel)):
+            currentSequence = sequenceForLevel[currentStackLevel];
+            if (currentSequence is None):
+                print(color.BOLD + color.RED);
+                print("Warning: retrieved a null current sequence");
+                print(color.END);
+        else:
+            currentSequence = Sequence(startTime);
+
+        currentSequence.add(funcID, endTime);
+        currentSequence.add(childPatternID, endTime);
+
+# We reached the end of the trace. We need to finalize the current sequence.
+#
+def finalizePatterns(endTime, prefix):
+
+    global currentSequence;
+
+    currentSequence.endTime = endTime;
+    lastPatternID = currentSequence.finalize();
+
+    dumpPatterns(prefix);
+
+    # For testing purposes.
+    # unrollTrace(lastPatternID);
+
+# Using the encoded patterns, unroll the trace, so that we can verify
+# that we did not miss anything. To unroll the entire trace, we need to
+# start the processes with the ID of the last encoded pattern.
+#
+def unrollTrace(patternID):
+
+    prevFuncName = None;
+    p = patterns[patternID];
+
+    # Go over every entry in the sequence for this pattern.
+    # If we encounter another pattern, recursively call this
+    # function to unroll the pattern.
+    #
+    s = p.sequence;
+
+    for i in range(len(s)):
+        if (s[i] < PATTERN_FLOOR):
+            if (prevFuncName is not None):
+                print("<-- " + prevFuncName);
+                prevFuncName = None;
+
+            if (s[i] >=0):
+                funcName = funcNameFromID(s[i]);
+                print("--> " + funcName);
+                prevFuncName = funcName;
+            else:
+                print("Next sequence of " + str(-s[i]) + " functions " +
+                      "repeats at least twice.");
+        else:
+            unrollTrace(s[i]);
+
+    print("<-- " + prevFuncName);
+
+def dumpPatterns(prefix):
+
+    # Create the patterns file for this trace file.
+    try:
+        file = open(prefix + ".patterns", "w");
+    except:
+        print(color.RED + color.BOLD + "Could not open " +
+              prefix + ".patterns for writing.");
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback);
+        print(color.END);
+        return;
+
+    # Dump function encoding
+    file.write("Mapping between function IDs and maps:\n");
+    sortedByID = sorted(funcToID.items(),
+                        key=operator.itemgetter(1));
+
+    for idFuncTuple in sortedByID:
+        file.write(str(idFuncTuple[1]) + "\t" + idFuncTuple[0] + "\n");
+
+    file.write("\n");
+    file.write("Detected " + str(len(patterns)) + " patterns.\n");
+
+    # Dump patterns and their occurrences in the trace
+    for patID, pattern in patterns.items():
+        file.write("#############\n");
+        file.write(str(patID) + ":\n");
+        pattern.printMe(file);
+
+    # Close the file
+    file.close();
+
 def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     global dbFile;
@@ -1256,6 +1642,10 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     rec.otherInfo = stackRec.otherInfo;
                     rec.setID(stackRec.id);
 
+                    if (not dontMinePatterns):
+                        minePatterns(stackRec.func, len(stack),
+                                     stackRec.time, rec.time);
+
                     # Now that we know this function's duration we can write
                     # it's opening and closing record into the database
                     # importable file.
@@ -1286,6 +1676,9 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
 
     traceStats.setStartTime(startTime);
     traceStats.setEndTime(endTime);
+
+    if (not dontMinePatterns):
+        finalizePatterns(endTime, prefix);
 
     if (dbFile is not None):
        dbFile.flush();
@@ -1732,6 +2125,8 @@ def main():
 
     global dbFile;
     global dbFileName;
+    global dontCompressPatterns;
+    global dontMinePatterns;
     global firstNodeName;
     global generateTextFiles;
     global graphFilePostfix;
@@ -1741,7 +2136,6 @@ def main():
     global lastNodeName;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
-    global outliersFile;
     global percentThreshold;
     global separator;
     global shortenFuncName;
@@ -1763,6 +2157,9 @@ def main():
 
     parser.add_argument('files', type=str, nargs='*',
                     help='log files to process');
+
+    parser.add_argument('-c', dest='dontCompressPatterns',
+                        action='store_true');
 
     parser.add_argument('-d', '--dumpdbfile', dest='dumpdbfile', type=bool,
                         default=True,
@@ -1786,12 +2183,13 @@ def main():
     parser.add_argument('-j', dest='jobParallelism', type=int,
                         default='0');
 
-    parser.add_argument('-o', '--outliersFile',
-                            dest='outliersFile',
-                            default=False, action='store_true',
-                            help='Default: False. Generate the file with all \
-                            function records whose duration was greater than \
-                            two standard deviations above the average.');
+    parser.add_argument('-m', dest='dontMinePatterns',
+                        action='store_true',
+                        help='Default: False; \
+                        By default we mine execution patterns encountered \
+                        in the trace. Pattern mining increases the runtime \
+                        overhead from a dozen percent to 10x. Disable pattern \
+                        mining with this option.');
 
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
                         type=float, default = 2.0,
@@ -1835,6 +2233,8 @@ def main():
 
     args = parser.parse_args();
 
+    dontCompressPatterns = args.dontCompressPatterns;
+    dontMinePatterns = args.dontMinePatterns;
     generateTextFiles = args.generateTextFiles;
     graphType = args.graphtype;
     graphFilePostfix = args.graphFilePostfix;
@@ -1889,14 +2289,6 @@ def main():
                   "% of total.\n To avoid filtering or change the default "
                   "value, use --percent-threshold argument.\n Example: "
                   "--percent-threshold=0.0" + color.END);
-
-    # Create the file for dumping info about outliers
-    #
-    if (args.outliersFile):
-        try:
-            outliersFile = open("outliers.txt", "w");
-        except:
-            print ("Warning: could not open outliers.txt for writing");
 
     runnableProcesses = {};
     returnValues = {};
