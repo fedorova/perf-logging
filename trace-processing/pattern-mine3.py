@@ -175,7 +175,7 @@ class Pattern:
                 old_curElement = self.sequence[i];
 
             new_curElement = newSequence.sequence[j];
-            while(new_curElement < = and j < len(newSequence.sequence)):
+            while(new_curElement < 0 and j < len(newSequence.sequence)):
                 j += 1;
                 new_curElement =  newSequence.sequence[j];
 
