@@ -29,6 +29,7 @@ graphFilePostfix = None;
 graphType = None;
 htmlDir = "./";
 htmlTemplate = None;
+minePatterns = True;
 multipleAcquireWithoutRelease = 0;
 noMatchingAcquireOnRelease = 0;
 patterns = {};
@@ -2101,6 +2102,7 @@ def main():
     global htmlDir;
     global htmlTemplate;
     global lastNodeName;
+    global minePatterns;
     global multipleAcquireWithoutRelease;
     global noMatchingAcquireOnRelease;
     global percentThreshold;

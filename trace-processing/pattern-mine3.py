@@ -24,6 +24,7 @@ import traceback
 dbFile = None;
 dbFileName = "trace.sql";
 dontCompressPatterns = False;
+dontMinePatterns = False;
 generateTextFiles = False;
 graphFilePostfix = None;
 graphType = None;
@@ -1641,8 +1642,9 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
                     rec.otherInfo = stackRec.otherInfo;
                     rec.setID(stackRec.id);
 
-                    minePatterns(stackRec.func, len(stack),
-                                 stackRec.time, rec.time);
+                    if (not dontMinePatterns):
+                        minePatterns(stackRec.func, len(stack),
+                                     stackRec.time, rec.time);
 
                     # Now that we know this function's duration we can write
                     # it's opening and closing record into the database
@@ -1675,7 +1677,8 @@ def parse_file(traceFile, prefix, createTextFile, firstUnusedID):
     traceStats.setStartTime(startTime);
     traceStats.setEndTime(endTime);
 
-    finalizePatterns(endTime, prefix);
+    if (not dontMinePatterns):
+        finalizePatterns(endTime, prefix);
 
     if (dbFile is not None):
        dbFile.flush();
@@ -2120,9 +2123,10 @@ def createGzippedDbFile(dbFileName, totalRecords, successfullyProcessedFiles):
 
 def main():
 
-    global compressPatterns;
     global dbFile;
     global dbFileName;
+    global dontCompressPatterns;
+    global dontMinePatterns;
     global firstNodeName;
     global generateTextFiles;
     global graphFilePostfix;
@@ -2179,6 +2183,14 @@ def main():
     parser.add_argument('-j', dest='jobParallelism', type=int,
                         default='0');
 
+    parser.add_argument('-m', dest='dontMinePatterns',
+                        action='store_true',
+                        help='Default: False; \
+                        By default we mine execution patterns encountered \
+                        in the trace. Pattern mining increases the runtime \
+                        overhead from a dozen percent to 10x. Disable pattern \
+                        mining with this option.');
+
     parser.add_argument('-p', '--percent-threshold', dest='percentThreshold',
                         type=float, default = 2.0,
                         help='Default=2.0 percent.\
@@ -2222,6 +2234,7 @@ def main():
     args = parser.parse_args();
 
     dontCompressPatterns = args.dontCompressPatterns;
+    dontMinePatterns = args.dontMinePatterns;
     generateTextFiles = args.generateTextFiles;
     graphType = args.graphtype;
     graphFilePostfix = args.graphFilePostfix;
