@@ -182,6 +182,9 @@ class Pattern:
             # Compare them
             if (old_curElement != new_curElement):
                 return False;
+            else:
+                i += 1;
+                j += 1;
 
         return True;
 
