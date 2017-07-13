@@ -267,14 +267,16 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
-        if ((self.sequence[0]) == 18):
-            print("BEFORE COMPRESSION");
-            self.printMe();
+        #print("BEFORE COMPRESSION");
+        #self.printMe();
 
         # Search for the same function ID.
         for i in range(lastFuncIdx - 1, -1, -1):
 
-            if (self.sequence[i] == lastFuncID):
+            if ( (self.sequence[i] == lastFuncID) or
+                 (isinstance(lastFuncID, set) and
+                  isinstance(self.sequence[i], set))):
+
                 candidateListLength = lastFuncIdx - i;
 
                 if ((i+1) - candidateListLength < 0):
@@ -303,8 +305,11 @@ class Sequence:
 
                 if (i-candidateListLength >= 0):
                     if (self.sequence[i-candidateListLength] >= 0):
-                        self.sequence.insert(i-candidateListLength+1,
-                                             -nonNegativeLength);
+                        # Avoid recording the same encoding twice
+                        if (self.sequence[i-candidateListLength+1] !=
+                            -nonNegativeLength):
+                            self.sequence.insert(i-candidateListLength+1,
+                                                 -nonNegativeLength);
 
                     elif (self.sequence[i-candidateListLength] !=
                           -nonNegativeLength):
@@ -324,7 +329,9 @@ class Sequence:
                             self.sequence.insert(j, -nonNegativeLength);
 
                 elif (i-candidateListLength == -1):
-                    self.sequence.insert(0, -nonNegativeLength);
+                    # Avoid recording the same encoding twice
+                    if (self.sequence[0] != -nonNegativeLength):
+                        self.sequence.insert(0, -nonNegativeLength);
 
                 else:
                     print(color.BOLD + color.RED +
@@ -346,9 +353,8 @@ class Sequence:
 
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
 
-                if ((self.sequence[0]) == 18):
-                    print("AFTER COMPRESSION");
-                    self.printMe();
+                #print("AFTER COMPRESSION");
+                #self.printMe();
 
                 return True;
 
