@@ -267,6 +267,10 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
+        if ((self.sequence[0]) == 18):
+            print("BEFORE COMPRESSION");
+            self.printMe();
+
         # Search for the same function ID.
         for i in range(lastFuncIdx - 1, -1, -1):
 
@@ -341,6 +345,10 @@ class Sequence:
                         self.sequence[idx1] |= sublist1[idx];
 
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
+
+                if ((self.sequence[0]) == 18):
+                    print("AFTER COMPRESSION");
+                    self.printMe();
 
                 return True;
 
