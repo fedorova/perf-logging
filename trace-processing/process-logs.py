@@ -156,12 +156,18 @@ class Pattern:
         self.tracePositions.append(startTime);
         self.durations.append(endTime - startTime);
 
-    # When comparing patterns, we skip negative numbers,
+    # When comparing sequences, we skip negative numbers,
     # as they represent repetitions. We compare only
     # positive numbers. Also, with this comparison function,
     # if a shorter pattern is a prefix of a longer pattern,
     # the shorter pattern will be deemed the same as the longer
     # pattern.
+    #
+    # Furthermore, if we detect a pattern within a sequence, that is,
+    # a number above the PATTERN_FLOOR, we deem two sequences the same
+    # if they are identical, but have different patterns in the same
+    # index. To keep track of the differences, we simply insert a new
+    # seen pattern in the sequence that we previously saw.
     #
     def sameNonRepeating(self, newSequence):
 
@@ -248,7 +254,6 @@ class Sequence:
         while (success):
             success = self.compress();
 
-
     # A sequence is just a list of numbers. We use a very simple lossy
     # compression method to encode repeating numbers or
     # repeating groups of numbers. To indicate that a previous number or a group
@@ -274,7 +279,8 @@ class Sequence:
                 sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
                 sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
 
-                if (cmp(sublist1, sublist2) != 0):
+                if not self.same(i + 1, lastFuncIdx + 1,
+                                 i-candidateListLength+1, i + 1):
                     return False;
 
                 # A part of a compressed sequence can be
@@ -321,7 +327,19 @@ class Sequence:
                           "WARNING: unexpected condition during encoding"
                           + color.END);
 
-                # The final sequence is already encoded. Remove it.
+                # The final sequence is already encoded. Remove it. Before
+                # deleting the final piece of the sequence, merge any
+                # sets that we encounter.
+                #
+
+                # sublist1 contains the sequence we are about to delete.
+                for idx in range (0, candidateListLength):
+                    idx1 = len(self.sequence) -  candidateListLength*2 + idx;
+
+                    if (isinstance(self.sequence[idx1], set) and
+                        isinstance(sublist1[idx], set)):
+                        self.sequence[idx1] |= sublist1[idx];
+
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
 
                 return True;
@@ -354,9 +372,44 @@ class Sequence:
         return patternID;
 
     def printMe(self):
+        i = 0;
         print("SEQ: start=" + str(self.startTime) + ", end="
-              + str(self.endTime)
-              + str(self.sequence));
+              + str(self.endTime));
+        print("["),
+        for item in self.sequence:
+            if (i > 0):
+                print(", "),
+            print(str(item)),
+            i += 1;
+
+        print("]");
+
+    # If two subsequences contain difference patterns we still deem
+    # them identical, as long as they have the same non-pattern
+    # sequences of numbers.
+    #
+    def same(self, int1_begin, int1_end, int2_begin, int2_end):
+
+        if ( (int1_end - int1_begin) != (int2_end - int2_begin)):
+            return False;
+
+        i = int1_begin;
+        j = int2_begin;
+
+
+        while (i < int1_end and j < int2_end):
+
+            if ( ((isinstance(self.sequence[i], set)) and
+                  (isinstance(self.sequence[j], set))) or
+                 (self.sequence[i] == self.sequence[j])):
+                i += 1;
+                j += 1;
+            else:
+                return False;
+
+        return True;
+
+
 
 
 # TraceStats class holds attributes pertaining to the performance
@@ -1394,7 +1447,9 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
             currentSequence = Sequence(startTime);
 
         currentSequence.add(funcID, endTime);
-        currentSequence.add(childPatternID, endTime);
+        newSet = set();
+        newSet.add(childPatternID);
+        currentSequence.add(newSet, endTime);
 
 # We reached the end of the trace. We need to finalize the current sequence.
 #
