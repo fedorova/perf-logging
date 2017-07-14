@@ -160,8 +160,7 @@ class Pattern:
     # as they represent repetitions. We compare only
     # positive numbers. Also, with this comparison function,
     # if a shorter pattern is a prefix of a longer pattern,
-    # the shorter pattern will be deemed the same as the longer
-    # pattern.
+    # the two patterns will be deemed the same.
     #
     # Furthermore, if we detect a pattern within a sequence, that is,
     # a number above the PATTERN_FLOOR, we deem two sequences the same
@@ -171,11 +170,13 @@ class Pattern:
     #
     def sameNonRepeating(self, newSequence):
 
-        j = 0;
         i = 0;
+        j = 0;
+        commonSetPositions = [];
 
         while (i < len(self.sequence) and j < len(newSequence.sequence)):
             # Find the next positive element of each sequence
+            #
             old_curElement = self.sequence[i];
             while(old_curElement < 0 and i < len(self.sequence)):
                 i += 1;
@@ -186,12 +187,35 @@ class Pattern:
                 j += 1;
                 new_curElement =  newSequence.sequence[j];
 
-            # Compare them
-            if (old_curElement != new_curElement):
+            # If the two elements are sets, we keep track of where they
+            # occur. If the two patterns are the same in every function
+            # they include, but not in the patterns that they contain,
+            # we still deem them as they same and we merge the elements of
+            # the old set into the new set.
+            #
+            if (isinstance(old_curElement, set) and
+                isinstance(new_curElement, set) and
+                old_curElement != new_curElement):
+                tup = (i, j);
+                commonSetPositions.append(tup);
+            elif (old_curElement != new_curElement):
+                # Compare them
                 return False;
-            else:
-                i += 1;
-                j += 1;
+
+            i += 1;
+            j += 1;
+
+        # We are about to report these two patterns as being the same.
+        # However, as explained in the comment above, their enclosed
+        # pattern numbers might not be. If they are not, we have to add
+        # the set elements of the new pattern to the sets in the corresponding
+        # positions of old pattern. That is because the new pattern will be
+        # discarded by the calling code once we return True.
+        #
+        for tup in commonSetPositions:
+            i = tup[0];
+            j = tup[1];
+            self.sequence[i] |= newSequence.sequence[j];
 
         return True;
 
@@ -250,9 +274,11 @@ class Sequence:
         if (dontCompressPatterns):
             return;
 
-        success = self.compress();
-        while (success):
-            success = self.compress();
+        # First try a less aggressive compression
+        self.compressVeryLossy(False);
+
+        # Now try a more aggressive version:
+        self.compressVeryLossy(True);
 
     # A sequence is just a list of numbers. We use a very simple lossy
     # compression method to encode repeating numbers or
@@ -270,7 +296,10 @@ class Sequence:
         # Search for the same function ID.
         for i in range(lastFuncIdx - 1, -1, -1):
 
-            if (self.sequence[i] == lastFuncID):
+            if ( (self.sequence[i] == lastFuncID) or
+                 (isinstance(lastFuncID, set) and
+                  isinstance(self.sequence[i], set))):
+
                 candidateListLength = lastFuncIdx - i;
 
                 if ((i+1) - candidateListLength < 0):
@@ -299,8 +328,11 @@ class Sequence:
 
                 if (i-candidateListLength >= 0):
                     if (self.sequence[i-candidateListLength] >= 0):
-                        self.sequence.insert(i-candidateListLength+1,
-                                             -nonNegativeLength);
+                        # Avoid recording the same encoding twice
+                        if (self.sequence[i-candidateListLength+1] !=
+                            -nonNegativeLength):
+                            self.sequence.insert(i-candidateListLength+1,
+                                                 -nonNegativeLength);
 
                     elif (self.sequence[i-candidateListLength] !=
                           -nonNegativeLength):
@@ -320,7 +352,9 @@ class Sequence:
                             self.sequence.insert(j, -nonNegativeLength);
 
                 elif (i-candidateListLength == -1):
-                    self.sequence.insert(0, -nonNegativeLength);
+                    # Avoid recording the same encoding twice
+                    if (self.sequence[0] != -nonNegativeLength):
+                        self.sequence.insert(0, -nonNegativeLength);
 
                 else:
                     print(color.BOLD + color.RED +
@@ -343,7 +377,57 @@ class Sequence:
                 del self.sequence[(i+1):(lastFuncIdx + 1)];
 
                 return True;
+        return False;
 
+    # This is a version of very lossy compression. Here we no longer
+    # encode the repeating sequences. If we find a repeating sequence,
+    # we just drop it. This is done to reduce the number of patterns,
+    # reduce the length of sequences and improve the runtime.
+    #
+    def compressVeryLossy(self, moreAggressive):
+
+        lastFuncIdx = len(self.sequence) - 1;
+        lastFuncID = self.sequence[lastFuncIdx];
+
+        # Search for the same function ID or for a set that includes
+        # a pattern if lastFuncID is actually a set.
+        for i in range(lastFuncIdx - 1, -1, -1):
+
+            if ( (self.sequence[i] == lastFuncID) or
+                 (moreAggressive and isinstance(lastFuncID, set) and
+                  isinstance(self.sequence[i], set))):
+
+                candidateListLength = lastFuncIdx - i;
+
+                if ((i+1) - candidateListLength < 0):
+                    return False;
+
+                sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
+                sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
+
+
+                if not self.same(i + 1, lastFuncIdx + 1,
+                                 i-candidateListLength+1, i + 1):
+                    return False;
+
+                # The final part of the sequence is the same as the one
+                # preceding it. So we just remove it. Before
+                # deleting the final piece of the sequence, merge any
+                # sets that we encounter.
+                #
+                # sublist1 contains the sequence we are about to delete.
+                #
+                for idx in range (0, candidateListLength):
+                    idx1 = len(self.sequence) -  candidateListLength*2 + idx;
+
+                    if (isinstance(self.sequence[idx1], set) and
+                        isinstance(sublist1[idx], set)):
+                        self.sequence[idx1] |= sublist1[idx];
+
+                del self.sequence[(i+1):(lastFuncIdx + 1)];
+                return True;
+
+        return False;
 
     # Add to the dictionary of patterns
     def finalize(self):
