@@ -1502,6 +1502,8 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     # pattern for the current level on the fly.
     #
     if (stackLevel == currentStackLevel):
+        if (currentSequence is None):
+            currentSequence = Sequence(startTime);
         currentSequence.add(funcID, endTime);
 
     # We are going down the stack level. This means that the parent of
