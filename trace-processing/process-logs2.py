@@ -212,19 +212,10 @@ class Pattern:
         # positions of old pattern. That is because the new pattern will be
         # discarded by the calling code once we return True.
         #
-        if (len(commonSetPositions) > 0):
-            print("BEFORE fixing");
-            print("Old sequence: " + str(self.sequence));
-            print("New sequence: " + str(newSequence.sequence));
-
         for tup in commonSetPositions:
             i = tup[0];
             j = tup[1];
             self.sequence[i] |= newSequence.sequence[j];
-
-        if (len(commonSetPositions) > 0):
-            print("AFTER fixing");
-            print("Old sequence: " + str(self.sequence));
 
         return True;
 
@@ -284,14 +275,10 @@ class Sequence:
             return;
 
         # First try a less aggressive compression
-        success = self.compressVeryLossy(False);
-        while (success):
-            success = self.compressVeryLossy(False);
+        self.compressVeryLossy(False);
 
         # Now try a more aggressive version:
-        success = self.compressVeryLossy(True);
-        while (success):
-            success = self.compressVeryLossy(True);
+        self.compressVeryLossy(True);
 
     # A sequence is just a list of numbers. We use a very simple lossy
     # compression method to encode repeating numbers or
@@ -399,12 +386,18 @@ class Sequence:
     #
     def compressVeryLossy(self, moreAggressive):
 
+        iter = 0;
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
+
+            iter += 1;
+
+            if (iter > 30):
+                print("Warning: more than 30 iterations");
 
             if ( (self.sequence[i] == lastFuncID) or
                  (moreAggressive and isinstance(lastFuncID, set) and
@@ -418,10 +411,11 @@ class Sequence:
                 sublist1 = self.sequence[(i+1):(lastFuncIdx + 1)];
                 sublist2 = self.sequence[(i-candidateListLength+1):(i+1)];
 
-
+                # Continue looking for a suitable candidate.
+                # May increase the running time.
                 if not self.same(i + 1, lastFuncIdx + 1,
                                  i-candidateListLength+1, i + 1):
-                    return False;
+                    continue;
 
                 # The final part of the sequence is the same as the one
                 # preceding it. So we just remove it. Before
@@ -1515,6 +1509,8 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
     # pattern for the current level on the fly.
     #
     if (stackLevel == currentStackLevel):
+        if (currentSequence is None):
+            currentSequence = Sequence(startTime);
         currentSequence.add(funcID, endTime);
 
     # We are going down the stack level. This means that the parent of
