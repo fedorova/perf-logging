@@ -398,6 +398,9 @@ class Sequence:
 
             if (iter > 30):
                 print("Warning: more than 30 iterations");
+                print("Last Func ID = " + str(lastFuncID));
+                self.printMe();
+                return False;
 
             if ( (self.sequence[i] == lastFuncID) or
                  (moreAggressive and isinstance(lastFuncID, set) and
