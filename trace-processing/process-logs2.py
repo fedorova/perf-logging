@@ -217,6 +217,14 @@ class Pattern:
             j = tup[1];
             self.sequence[i] |= newSequence.sequence[j];
 
+        # If the existing pattern is shorter than the new pattern, we have to
+        # append to it the elements of the new pattern that were not part
+        # of the existing pattern. Otherwise, these elements will get lost.
+        #
+        if (len(newSequence.sequence) > len(self.sequence)):
+            self.sequence.extend(
+                newSequence.sequence[j:len(newSequence.sequence)]);
+
         return True;
 
     # Check if the new sequence is the same as the
