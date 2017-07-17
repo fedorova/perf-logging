@@ -386,18 +386,12 @@ class Sequence:
     #
     def compressVeryLossy(self, moreAggressive):
 
-        iter = 0;
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
-
-            iter += 1;
-
-            if (iter > 30):
-                print("Warning: more than 30 iterations");
 
             if ( (self.sequence[i] == lastFuncID) or
                  (moreAggressive and isinstance(lastFuncID, set) and
