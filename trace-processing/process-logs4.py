@@ -168,7 +168,7 @@ class Pattern:
     # functions otherwise. To keep track of the differences, we simply
     # merge sets of patterns encountered at the same index.
     #
-    def sameNonRepeating(self, newSequence, patID):
+    def sameNonRepeating(self, newSequence):
 
         i = 0;
         j = 0;
@@ -200,19 +200,11 @@ class Pattern:
                 commonSetPositions.append(tup);
             elif (old_curElement != new_curElement):
                 # Compare them
-                if (verbose):
-                    print("Returning False, because " +
-                          str(old_curElement) + " != " +
-                          str(new_curElement) + " at "
-                          "positions " + str(i) + " and " + str(j));
                 return False;
 
             i += 1;
             j += 1;
 
-        if (patID == 1000035 or patID == 1000034):
-            print("Before fixing");
-            self.printMe(sys.stdout);
         # We are about to report these two patterns as being the same.
         # However, as explained in the comment above, their enclosed
         # pattern numbers might not be. If they are not, we have to add
@@ -221,13 +213,9 @@ class Pattern:
         # discarded by the calling code once we return True.
         #
         for tup in commonSetPositions:
-            i = tup[0];
-            j = tup[1];
-            self.sequence[i] |= newSequence.sequence[j];
-
-            if (patID == 1000035 or patID == 1000034):
-                print("After set fixing");
-                self.printMe(sys.stdout);
+            k = tup[0];
+            m = tup[1];
+            self.sequence[k] |= newSequence.sequence[m];
 
         # If the existing pattern is shorter than the new pattern, we have to
         # append to it the elements of the new pattern that were not part
@@ -236,9 +224,6 @@ class Pattern:
         if (len(newSequence.sequence) > len(self.sequence)):
             self.sequence.extend(
                 newSequence.sequence[j:len(newSequence.sequence)]);
-            if (patID == 1000035 or patID == 1000034):
-                print("After merging");
-                self.printMe(sys.stdout);
 
         return True;
 
@@ -409,7 +394,7 @@ class Sequence:
         lastFuncID = self.sequence[lastFuncIdx];
 
         lookBackActual = 0;
-        lookBackLimit = 40;
+        lookBackLimit = 100;
 
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
@@ -472,7 +457,7 @@ class Sequence:
         global PATTERN_FLOOR;
 
         for key, pattern in patterns.items():
-            if (pattern.sameNonRepeating(self, key)):
+            if (pattern.sameNonRepeating(self)):
                 pattern.addPosition(self.startTime, self.endTime);
                 return key;
 
@@ -480,9 +465,6 @@ class Sequence:
         newPattern.addPosition(self.startTime, self.endTime);
         patternID = len(patterns) + PATTERN_FLOOR;
         patterns[patternID] = newPattern;
-        if (patternID == 1000034 or patternID == 1000035):
-            print("SUSPICIOUS pattern " + str(patternID));
-            newPattern.printMe(sys.stdout);
         return patternID;
 
     def printMe(self):
