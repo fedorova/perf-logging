@@ -393,16 +393,9 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
-        lookBackActual = 0;
-        lookBackLimit = 100;
-
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
-
-            if (lookBackActual > lookBackLimit):
-                return False;
-            lookBackActual += 1;
 
             if ( (self.sequence[i] == lastFuncID) or
                  (isinstance(lastFuncID, set) and
