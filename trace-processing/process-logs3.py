@@ -213,9 +213,9 @@ class Pattern:
         # discarded by the calling code once we return True.
         #
         for tup in commonSetPositions:
-            i = tup[0];
-            j = tup[1];
-            self.sequence[i] |= newSequence.sequence[j];
+            k = tup[0];
+            m = tup[1];
+            self.sequence[k] |= newSequence.sequence[m];
 
         # If the existing pattern is shorter than the new pattern, we have to
         # append to it the elements of the new pattern that were not part
@@ -394,7 +394,7 @@ class Sequence:
         lastFuncID = self.sequence[lastFuncIdx];
 
         lookBackActual = 0;
-        lookBackLimit = 40;
+        lookBackLimit = 100;
 
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
