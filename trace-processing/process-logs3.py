@@ -174,9 +174,6 @@ class Pattern:
         j = 0;
         commonSetPositions = [];
 
-        if (len(newSequence.sequence) != len(self.sequence)):
-            return False;
-
         while (i < len(self.sequence) and j < len(newSequence.sequence)):
             # Find the next positive element of each sequence
             #
@@ -219,6 +216,14 @@ class Pattern:
             i = tup[0];
             j = tup[1];
             self.sequence[i] |= newSequence.sequence[j];
+
+        # If the existing pattern is shorter than the new pattern, we have to
+        # append to it the elements of the new pattern that were not part
+        # of the existing pattern. Otherwise, these elements will get lost.
+        #
+        if (len(newSequence.sequence) > len(self.sequence)):
+            self.sequence.extend(
+                newSequence.sequence[j:len(newSequence.sequence)]);
 
         return True;
 
@@ -388,9 +393,16 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
+        lookBackActual = 0;
+        lookBackLimit = 40;
+
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
+
+            if (lookBackActual > lookBackLimit):
+                return False;
+            lookBackActual += 1;
 
             if ( (self.sequence[i] == lastFuncID) or
                  (isinstance(lastFuncID, set) and
