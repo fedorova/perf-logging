@@ -168,19 +168,11 @@ class Pattern:
     # functions otherwise. To keep track of the differences, we simply
     # merge sets of patterns encountered at the same index.
     #
-    def sameNonRepeating(self, newSequence):
+    def sameNonRepeating(self, newSequence, patID):
 
         i = 0;
         j = 0;
         commonSetPositions = [];
-        verbose = False;
-
-        if (self.sequence[0] == 58 and self.sequence[1] == 9
-            and newSequence.sequence[0] == 58 and newSequence.sequence[1]== 9):
-           verbose = True;
-           print("These might be equal:");
-           print(str(self.sequence));
-           print(str(newSequence.sequence));
 
         while (i < len(self.sequence) and j < len(newSequence.sequence)):
             # Find the next positive element of each sequence
@@ -218,6 +210,9 @@ class Pattern:
             i += 1;
             j += 1;
 
+        if (patID == 1000035 or patID == 1000034):
+            print("Before fixing");
+            self.printMe(sys.stdout);
         # We are about to report these two patterns as being the same.
         # However, as explained in the comment above, their enclosed
         # pattern numbers might not be. If they are not, we have to add
@@ -230,6 +225,10 @@ class Pattern:
             j = tup[1];
             self.sequence[i] |= newSequence.sequence[j];
 
+            if (patID == 1000035 or patID == 1000034):
+                print("After set fixing");
+                self.printMe(sys.stdout);
+
         # If the existing pattern is shorter than the new pattern, we have to
         # append to it the elements of the new pattern that were not part
         # of the existing pattern. Otherwise, these elements will get lost.
@@ -237,9 +236,10 @@ class Pattern:
         if (len(newSequence.sequence) > len(self.sequence)):
             self.sequence.extend(
                 newSequence.sequence[j:len(newSequence.sequence)]);
+            if (patID == 1000035 or patID == 1000034):
+                print("After merging");
+                self.printMe(sys.stdout);
 
-        if(verbose):
-            print("Returning true");
         return True;
 
     # Check if the new sequence is the same as the
@@ -472,7 +472,7 @@ class Sequence:
         global PATTERN_FLOOR;
 
         for key, pattern in patterns.items():
-            if (pattern.sameNonRepeating(self)):
+            if (pattern.sameNonRepeating(self, key)):
                 pattern.addPosition(self.startTime, self.endTime);
                 return key;
 
@@ -480,6 +480,9 @@ class Sequence:
         newPattern.addPosition(self.startTime, self.endTime);
         patternID = len(patterns) + PATTERN_FLOOR;
         patterns[patternID] = newPattern;
+        if (patternID == 1000034 or patternID == 1000035):
+            print("SUSPICIOUS pattern " + str(patternID));
+            newPattern.printMe(sys.stdout);
         return patternID;
 
     def printMe(self):
