@@ -164,9 +164,9 @@ class Pattern:
     #
     # Furthermore, if we detect a pattern within a sequence, that is,
     # a number above the PATTERN_FLOOR, we deem two sequences the same
-    # if they are identical, but have different patterns in the same
-    # index. To keep track of the differences, we simply insert a new
-    # seen pattern in the sequence that we previously saw.
+    # if they have different patterns in the same slot, but the same
+    # functions otherwise. To keep track of the differences, we simply
+    # merge sets of patterns encountered at the same index.
     #
     def sameNonRepeating(self, newSequence):
 
@@ -282,11 +282,7 @@ class Sequence:
         if (dontCompressPatterns):
             return;
 
-        # First try a less aggressive compression
-        self.compressVeryLossy(False);
-
-        # Now try a more aggressive version:
-        self.compressVeryLossy(True);
+        self.compressVeryLossy();
 
     # A sequence is just a list of numbers. We use a very simple lossy
     # compression method to encode repeating numbers or
@@ -392,7 +388,7 @@ class Sequence:
     # we just drop it. This is done to reduce the number of patterns,
     # reduce the length of sequences and improve the runtime.
     #
-    def compressVeryLossy(self, moreAggressive):
+    def compressVeryLossy(self):
 
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
@@ -402,7 +398,7 @@ class Sequence:
         for i in range(lastFuncIdx - 1, -1, -1):
 
             if ( (self.sequence[i] == lastFuncID) or
-                 (moreAggressive and isinstance(lastFuncID, set) and
+                 (isinstance(lastFuncID, set) and
                   isinstance(self.sequence[i], set))):
 
                 candidateListLength = lastFuncIdx - i;

@@ -164,9 +164,9 @@ class Pattern:
     #
     # Furthermore, if we detect a pattern within a sequence, that is,
     # a number above the PATTERN_FLOOR, we deem two sequences the same
-    # if they are identical, but have different patterns in the same
-    # index. To keep track of the differences, we simply insert a new
-    # seen pattern in the sequence that we previously saw.
+    # if they have different patterns in the same slot, but the same
+    # functions otherwise. To keep track of the differences, we simply
+    # merge sets of patterns encountered at the same index.
     #
     def sameNonRepeating(self, newSequence):
 
