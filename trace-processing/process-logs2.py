@@ -168,11 +168,18 @@ class Pattern:
     # functions otherwise. To keep track of the differences, we simply
     # merge sets of patterns encountered at the same index.
     #
-    def sameNonRepeating(self, newSequence):
+    def sameNonRepeating(self, newSequence, patID):
 
         i = 0;
         j = 0;
         commonSetPositions = [];
+        verbose = False;
+
+        if (patID == 1000054):
+            verbose = True;
+            print("Before comparison:");
+            print("Pattern: " + str(self.sequence));
+            print("Sequence: " + str(newSequence.sequence));
 
         while (i < len(self.sequence) and j < len(newSequence.sequence)):
             # Find the next positive element of each sequence
@@ -200,6 +207,12 @@ class Pattern:
                 commonSetPositions.append(tup);
             elif (old_curElement != new_curElement):
                 # Compare them
+                if (verbose):
+                    print("Returning false when comparing:");
+                    print(str(self.sequence));
+                    print(str(newSequence.sequence));
+                    print(str(old_curElement) + " != " + str(new_curElement) +
+                          " at positions " + str(i) + " and " + str(j));
                 return False;
 
             i += 1;
@@ -212,10 +225,21 @@ class Pattern:
         # positions of old pattern. That is because the new pattern will be
         # discarded by the calling code once we return True.
         #
+        if (patID == 1000061 or patID == 1000060 or
+            patID == 1000062 or patID == 1000063 or
+            patID == 1000073 or patID == 1000074):
+            print("Pattern " + str(patID) + " before fixing");
+            self.printMe(sys.stdout);
         for tup in commonSetPositions:
-            i = tup[0];
-            j = tup[1];
-            self.sequence[i] |= newSequence.sequence[j];
+            k = tup[0];
+            m = tup[1];
+            self.sequence[k] |= newSequence.sequence[m];
+
+            if (patID == 1000061 or patID == 1000060 or
+                patID == 1000062 or patID == 1000063 or
+                patID == 1000073 or patID == 1000074):
+               print("Pattern " + str(patID) + " after set fixing");
+               self.printMe(sys.stdout);
 
         # If the existing pattern is shorter than the new pattern, we have to
         # append to it the elements of the new pattern that were not part
@@ -225,6 +249,16 @@ class Pattern:
             self.sequence.extend(
                 newSequence.sequence[j:len(newSequence.sequence)]);
 
+            if (patID == 1000061 or patID == 1000060 or
+                patID == 1000062 or patID == 1000063 or
+                patID == 1000073 or patID == 1000074):
+               print("Pattern " + str(patID) + " after merging");
+               self.printMe(sys.stdout);
+
+        if (verbose):
+            print("Returning True when comparing:");
+            print(str(self.sequence));
+            print(str(newSequence.sequence));
         return True;
 
     # Check if the new sequence is the same as the
@@ -393,9 +427,16 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
+        lookBackActual = 0;
+        lookBackLimit = 100;
+
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
+
+            if (lookBackActual > lookBackLimit):
+                return False;
+            lookBackActual += 1;
 
             if ( (self.sequence[i] == lastFuncID) or
                  (isinstance(lastFuncID, set) and
@@ -450,14 +491,26 @@ class Sequence:
         global PATTERN_FLOOR;
 
         for key, pattern in patterns.items():
-            if (pattern.sameNonRepeating(self)):
+            if (key == 1000054):
+                print("Comparing with pattern " + str(key));
+                print("Seq: " + str(self.sequence));
+                print("Pat: " + str(pattern.sequence));
+            if (pattern.sameNonRepeating(self, key)):
                 pattern.addPosition(self.startTime, self.endTime);
                 return key;
+            elif (key == 1000054):
+                print("Comparison false");
 
         newPattern = Pattern(self);
         newPattern.addPosition(self.startTime, self.endTime);
         patternID = len(patterns) + PATTERN_FLOOR;
         patterns[patternID] = newPattern;
+        if (patternID == 1000054 or patternID == 1000055 or
+            patternID == 1000061 or patternID == 1000060 or
+            patternID == 1000062 or patternID == 1000063 or
+            patternID == 1000073 or patternID == 1000074):
+            print("Pattern " + str(patternID) + " CREATED");
+            newPattern.printMe(sys.stdout);
         return patternID;
 
     def printMe(self):
