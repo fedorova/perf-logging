@@ -170,7 +170,7 @@ class Pattern:
     # functions otherwise. To keep track of the differences, we simply
     # merge sets of patterns encountered at the same index.
     #
-    def sameNonRepeating(self, newSequence):
+    def sameNonRepeating(self, newSequence, patID):
 
         i = 0;
         j = 0;
@@ -196,10 +196,11 @@ class Pattern:
             # the old set into the new set.
             #
             if (isinstance(old_curElement, set) and
-                isinstance(new_curElement, set) and
-                (not new_curElement.issubset(old_curElement))):
-                tup = (i, j);
-                commonSetPositions.append(tup);
+                isinstance(new_curElement, set)):
+                if (not new_curElement.issubset(old_curElement)
+                    and not old_curElement.issubset(new_curElement)):
+                    tup = (i, j);
+                    commonSetPositions.append(tup);
             elif (old_curElement != new_curElement):
                 return False;
 
@@ -458,7 +459,7 @@ class Sequence:
         global PATTERN_FLOOR;
 
         for key, pattern in patterns.items():
-            if (pattern.sameNonRepeating(self)):
+            if (pattern.sameNonRepeating(self, key)):
                 pattern.addPosition(self.startTime, self.endTime);
                 return key;
 

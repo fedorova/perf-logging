@@ -170,7 +170,7 @@ class Pattern:
     # functions otherwise. To keep track of the differences, we simply
     # merge sets of patterns encountered at the same index.
     #
-    def sameNonRepeating(self, newSequence):
+    def sameNonRepeating(self, newSequence, patID):
 
         i = 0;
         j = 0;
@@ -196,10 +196,11 @@ class Pattern:
             # the old set into the new set.
             #
             if (isinstance(old_curElement, set) and
-                isinstance(new_curElement, set) and
-                (not new_curElement.issubset(old_curElement))):
-                tup = (i, j);
-                commonSetPositions.append(tup);
+                isinstance(new_curElement, set)):
+                if (not new_curElement.issubset(old_curElement)
+                    and not old_curElement.issubset(new_curElement)):
+                    tup = (i, j);
+                    commonSetPositions.append(tup);
             elif (old_curElement != new_curElement):
                 return False;
 
@@ -267,7 +268,7 @@ class Pattern:
 # Once the sequence has ended, which happens when we go down a stack level,
 # we turn the sequence into a pattern.
 #
-longestSeenSequence = 0;
+largestSeenSequence = 0;
 class Sequence:
 
     def __init__(self, time):
@@ -392,13 +393,13 @@ class Sequence:
     #
     def compressVeryLossy(self):
 
-        global longestSeenSequence;
+        global largestSeenSequence;
 
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
-        if (len(self.sequence) > longestSeenSequence):
-            longestSeenSequence = len(self.sequence);
+        if (len(self.sequence) > largestSeenSequence):
+            largestSeenSequence = len(self.sequence);
 
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
@@ -457,7 +458,7 @@ class Sequence:
         global PATTERN_FLOOR;
 
         for key, pattern in patterns.items():
-            if (pattern.sameNonRepeating(self)):
+            if (pattern.sameNonRepeating(self, key)):
                 pattern.addPosition(self.startTime, self.endTime);
                 return key;
 
@@ -1556,14 +1557,14 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
 def finalizePatterns(endTime, prefix):
 
     global currentSequence;
-    global longestSeenSequence;
+    global largestSeenSequence;
 
     currentSequence.endTime = endTime;
     lastPatternID = currentSequence.finalize();
 
+    print("Largest seen sequence is " + str(largestSeenSequence));
     dumpPatterns(prefix);
 
-    print("Longest seen sequence was " + str(longestSeenSequence));
     # For testing purposes.
     # unrollTrace(lastPatternID);
 
