@@ -148,7 +148,9 @@ PATTERN_FLOOR = 1000000;
 class Pattern:
 
     def __init__(self, sequence):
-        self.sequence = sequence.sequence;
+        self.sequence = [];
+        for i in range(len(sequence.sequence)):
+            self.sequence.append(sequence.sequence[i]);
         self.tracePositions = []
         self.durations = [];
 
@@ -195,11 +197,10 @@ class Pattern:
             #
             if (isinstance(old_curElement, set) and
                 isinstance(new_curElement, set) and
-                old_curElement != new_curElement):
+                (not new_curElement.issubset(old_curElement))):
                 tup = (i, j);
                 commonSetPositions.append(tup);
             elif (old_curElement != new_curElement):
-                # Compare them
                 return False;
 
             i += 1;
@@ -266,6 +267,7 @@ class Pattern:
 # Once the sequence has ended, which happens when we go down a stack level,
 # we turn the sequence into a pattern.
 #
+longestSeenSequence = 0;
 class Sequence:
 
     def __init__(self, time):
@@ -390,19 +392,17 @@ class Sequence:
     #
     def compressVeryLossy(self):
 
+        global longestSeenSequence;
+
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
-        lookBackActual = 0;
-        lookBackLimit = 100;
+        if (len(self.sequence) > longestSeenSequence):
+            longestSeenSequence = len(self.sequence);
 
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
-
-            if (lookBackActual > lookBackLimit):
-                return False;
-            lookBackActual += 1;
 
             if ( (self.sequence[i] == lastFuncID) or
                  (isinstance(lastFuncID, set) and
@@ -1533,6 +1533,7 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
             return;
 
         childPatternID = currentSequence.finalize();
+        currentSequence = None;
         currentStackLevel = stackLevel;
 
         if (sequenceForLevel.has_key(currentStackLevel)):
@@ -1549,17 +1550,20 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
         newSet.add(childPatternID);
         currentSequence.add(newSet, endTime);
 
+
 # We reached the end of the trace. We need to finalize the current sequence.
 #
 def finalizePatterns(endTime, prefix):
 
     global currentSequence;
+    global longestSeenSequence;
 
     currentSequence.endTime = endTime;
     lastPatternID = currentSequence.finalize();
 
     dumpPatterns(prefix);
 
+    print("Longest seen sequence was " + str(longestSeenSequence));
     # For testing purposes.
     # unrollTrace(lastPatternID);
 
