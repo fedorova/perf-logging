@@ -148,7 +148,9 @@ PATTERN_FLOOR = 1000000;
 class Pattern:
 
     def __init__(self, sequence):
-        self.sequence = sequence.sequence;
+        self.sequence = [];
+        for i in range(len(sequence.sequence)):
+            self.sequence.append(sequence.sequence[i]);
         self.tracePositions = []
         self.durations = [];
 
@@ -168,7 +170,7 @@ class Pattern:
     # functions otherwise. To keep track of the differences, we simply
     # merge sets of patterns encountered at the same index.
     #
-    def sameNonRepeating(self, newSequence):
+    def sameNonRepeating(self, newSequence, patID):
 
         i = 0;
         j = 0;
@@ -194,12 +196,12 @@ class Pattern:
             # the old set into the new set.
             #
             if (isinstance(old_curElement, set) and
-                isinstance(new_curElement, set) and
-                old_curElement != new_curElement):
-                tup = (i, j);
-                commonSetPositions.append(tup);
+                isinstance(new_curElement, set)):
+                if (not new_curElement.issubset(old_curElement)
+                    and not old_curElement.issubset(new_curElement)):
+                    tup = (i, j);
+                    commonSetPositions.append(tup);
             elif (old_curElement != new_curElement):
-                # Compare them
                 return False;
 
             i += 1;
@@ -213,9 +215,9 @@ class Pattern:
         # discarded by the calling code once we return True.
         #
         for tup in commonSetPositions:
-            i = tup[0];
-            j = tup[1];
-            self.sequence[i] |= newSequence.sequence[j];
+            k = tup[0];
+            m = tup[1];
+            self.sequence[k] |= newSequence.sequence[m];
 
         # If the existing pattern is shorter than the new pattern, we have to
         # append to it the elements of the new pattern that were not part
@@ -393,9 +395,16 @@ class Sequence:
         lastFuncIdx = len(self.sequence) - 1;
         lastFuncID = self.sequence[lastFuncIdx];
 
+        lookBackActual = 0;
+        lookBackLimit = 100;
+
         # Search for the same function ID or for a set that includes
         # a pattern if lastFuncID is actually a set.
         for i in range(lastFuncIdx - 1, -1, -1):
+
+            if (lookBackActual > lookBackLimit):
+                return False;
+            lookBackActual += 1;
 
             if ( (self.sequence[i] == lastFuncID) or
                  (isinstance(lastFuncID, set) and
@@ -450,7 +459,7 @@ class Sequence:
         global PATTERN_FLOOR;
 
         for key, pattern in patterns.items():
-            if (pattern.sameNonRepeating(self)):
+            if (pattern.sameNonRepeating(self, key)):
                 pattern.addPosition(self.startTime, self.endTime);
                 return key;
 
@@ -1526,6 +1535,7 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
             return;
 
         childPatternID = currentSequence.finalize();
+        currentSequence = None;
         currentStackLevel = stackLevel;
 
         if (sequenceForLevel.has_key(currentStackLevel)):
@@ -1541,6 +1551,7 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
         newSet = set();
         newSet.add(childPatternID);
         currentSequence.add(newSet, endTime);
+
 
 # We reached the end of the trace. We need to finalize the current sequence.
 #
