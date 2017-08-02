@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=wt-dev
+BRANCH=wt-3133
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
@@ -8,7 +8,8 @@ else
 fi
 
 #DB_HOME=/tmp/WT_TEST/
-DB_HOME=/mnt/fast/sasha/WT_TEST/
+#DB_HOME=/mnt/fast/sasha/WT_TEST/
+DB_HOME=$HOME/Work/WiredTiger/WT_TEST
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 #SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
 #OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
@@ -19,7 +20,7 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="500m-btree-50r50u.wtperf"
 #WORKLOAD="500m-btree-80r20u.wtperf"
 #WORKLOAD="500m-btree-populate.wtperf"
-WORKLOAD="checkpoint-schema-race-run.wtperf"
+#WORKLOAD="checkpoint-schema-race-run.wtperf"
 #WORKLOAD="checkpoint-stress-schema-ops-run.wtperf"
 #WORKLOAD="evict-btree.wtperf"
 #WORKLOAD="evict-btree-run.wtperf"
@@ -34,7 +35,7 @@ WORKLOAD="checkpoint-schema-race-run.wtperf"
 #WORKLOAD="mongodb-secondary-apply-run.wtperf"
 #WORKLOAD="multi-btree-read-heavy-stress-run.wtperf"
 #WORKLOAD="multi-btree-zipfian-workload.wtperf"
-#WORKLOAD="small-btree-run.wtperf"
+WORKLOAD="small-btree-run.wtperf"
 
 #DINAMITE_TRACE_DIR="/mnt/fast/sasha"
 DINAMITE_TRACE_DIR="/dev/shm"
@@ -67,7 +68,7 @@ do
 	else
 	    pushd ${WT_HOME}/bench/wtperf
 	    if [ "$OSTYPE" == 'darwin' ]; then
-		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),eviction=\(threads_max=${EVICT_WORKERS}\)\"
+		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPLOG=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\)\"
 	    else
 		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\)\"
 	    fi

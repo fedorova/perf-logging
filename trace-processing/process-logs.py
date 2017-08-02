@@ -1536,10 +1536,12 @@ def minePatterns(funcName, stackLevel, startTime, endTime):
 
         childPatternID = currentSequence.finalize();
         currentSequence = None;
+        sequenceForLevel.pop(currentStackLevel, None);
         currentStackLevel = stackLevel;
 
         if (sequenceForLevel.has_key(currentStackLevel)):
             currentSequence = sequenceForLevel[currentStackLevel];
+
             if (currentSequence is None):
                 print(color.BOLD + color.RED);
                 print("Warning: retrieved a null current sequence");
