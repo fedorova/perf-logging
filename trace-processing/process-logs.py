@@ -1249,7 +1249,7 @@ def generatePerFileHTML(htmlFileName, imageFileName, mapFileName, htmlDir,
     try:
         mapFile = open(mapFileName, "r");
     except:
-        print("Could not open " + mapFileName + " for writing");
+        print("Could not open " + mapFileName + " for reading");
         return;
 
     relativeImageFileName = stripHTMLDirFromFileName(imageFileName, htmlDir);
@@ -2498,7 +2498,6 @@ def main():
         if (retval.value > 0):
             successfullyProcessedFiles.append(fname);
         totalRecords += retval.value;
-
 
     print("\n" + color.BOLD +
           "ALMOST DONE! Generating images and HTML files." + color.END);
