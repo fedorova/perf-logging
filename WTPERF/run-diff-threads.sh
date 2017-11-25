@@ -26,7 +26,7 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="evict-btree-run.wtperf"
 #WORKLOAD="evict-btree-stress-multi.wtperf"
 #WORKLOAD="evict-btree-stress.wtperf"
-#WORKLOAD="evict-btree-stress-multi-run.wtperf"
+WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="evict-lsm-readonly.wtperf"
 #WORKLOAD="many-table-stress.wtperf"
 #WORKLOAD="medium-btree.wtperf"
@@ -35,7 +35,7 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="mongodb-secondary-apply-run.wtperf"
 #WORKLOAD="multi-btree-read-heavy-stress-run.wtperf"
 #WORKLOAD="multi-btree-zipfian-workload.wtperf"
-WORKLOAD="small-btree-run.wtperf"
+#WORKLOAD="small-btree-run.wtperf"
 
 #DINAMITE_TRACE_DIR="/mnt/fast/sasha"
 DINAMITE_TRACE_DIR="/dev/shm"
@@ -82,14 +82,11 @@ do
 	mv ${DB_HOME}/WiredTigerStat* ${OUTPUT}/${i}/.
 	python ${WT_HOME}/../tools/wtstats/wtstats.py --clear ${OUTPUT}/${i}/WiredTigerStat*
 	mv wtstats.html ${OUTPUT}/${i}/.
+	mv ${DB_HOME}/optrack* ${OUTPUT}/${i}/.
     done
 done
 
 grep 'ops/sec' ${OUTPUT_ROOT}/${EXPNAME}*/*/test.stat
 
 
-
-
-
-
-
+# operation_tracking=\(enabled=true,path=.\)
