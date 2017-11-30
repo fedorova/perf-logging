@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-
+from bokeh.models import ColumnDataSource, Legend, LegendItem
 from bokeh.plotting import figure, output_file, show
 import matplotlib
 import numpy as np
@@ -8,7 +8,11 @@ import pandas as pd
 
 
 colorList = [];
+lastColorUsed = 0;
+largestStackDepth = 0;
+funcToColor = {};
 intervalBeginningsStack = [];
+
 
 def initColorList():
 
@@ -17,8 +21,29 @@ def initColorList():
     colorList = matplotlib.colors.cnames.keys();
 
     for color in colorList:
+        # Some browsers break if you try to give them 'sage'
+        if (color == "sage"):
+            colorList.remove(color);
         print(color);
 
+#
+# Each unique function name gets a unique color.
+# If we run out of colors, we repeat them from the
+# beginning of the list.
+#
+def getColorForFunction(function):
+
+    global colorList;
+    global lastColorUsed;
+    global funcToColor;
+
+    if not funcToColor.has_key(function):
+        funcToColor[function] = colorList[lastColorUsed % len(colorList)];
+        lastColorUsed += 1;
+
+    print("Function " + function + " gets the color " +
+          funcToColor[function] + ".");
+    return funcToColor[function];
 
 def bokeh_plot_old(figure_title, file_to_save, legend, x_data,
               x_name, y_data, y_name):
@@ -37,19 +62,46 @@ def bokeh_plot_old(figure_title, file_to_save, legend, x_data,
     # show the results
     show(p)
 
-def bokeh_plot(figure_title, file_to_save, legend, dataframe):
 
-     # output to static HTML file
+def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
+
+    num = 100;
+    legendItems = [];
+
+    # output to static HTML file
     output_file(file_to_save);
 
-    p = figure(title=figure_title, plot_width=800, plot_height=400,
+    p = figure(title=figure_title, plot_width=1200,
+               plot_height=max(y_max * 50, 400),
+               y_range = (0, max(y_max, 6)),
                x_axis_label = "Time (CPU cycles)",
-               y_axis_label = "Stack depth");
+               y_axis_label = "Stack depth",
+               tools = "hover"
+    );
 
-    p.quad(left = dataframe.head()['start'], right = dataframe.head()['end'],
-           bottom = dataframe.head()['stackdepth'],
-           top = dataframe.head()['stackdepth'] + 1,
-           color=["firebrick", "navy", "deeppink", "deepskyblue", "dimgrey"]);
+    cds = ColumnDataSource(dataframe.head(num));
+
+    #p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
+    #       top = 'stackdepthNext', color = 'color', legend = 'function',
+    #       source=cds);
+
+    p.quad(left = dataframe.head(num)['start'],
+           right = dataframe.head(num)['end'],
+           bottom = dataframe.head(num)['stackdepth'],
+           top = dataframe.head(num)['stackdepth'] + 1,
+           color=dataframe.head(num)['color'],
+           line_color="black");
+
+    for func, fColor in funcToColor.iteritems():
+        r = p.quad(left=0, right=1, bottom=0, top=1, color=fColor);
+
+        lItem = LegendItem(label = func,
+                           renderers = [r]);
+        legendItems.append(lItem);
+
+    print legendItems;
+    legend = Legend(items=legendItems);
+    p.add_layout(legend, place='left');
 
     show(p);
 
@@ -92,15 +144,17 @@ def getIntervalData(intervalEnd):
 
     return intervalBegin[0], intervalEnd[0], intervalEnd[2], stackDepth;
 
-
-
 def createTimedeltaSeries(data):
 
+    global largestStackDepth;
+
+    colors = [];
     beginIntervals = [];
     dataFrame = None;
     endIntervals = [];
     functionNames = [];
     stackDepths = [];
+    stackDepthsNext = [];
 
     for row in data.itertuples():
         # row[0] is the timestamp, row[1] is the event type,
@@ -116,6 +170,11 @@ def createTimedeltaSeries(data):
             endIntervals.append(intervalEnd);
             functionNames.append(function);
             stackDepths.append(stackDepth);
+            stackDepthsNext.append(stackDepth + 1);
+            colors.append(getColorForFunction(function));
+
+            if (stackDepth > largestStackDepth):
+                largestStackDepth = stackDepth;
         else:
             print("Invalid event in this line:");
             print(str(row[0]) + " " + str(row[1]) + " " + str(row[2]));
@@ -127,25 +186,32 @@ def createTimedeltaSeries(data):
         dict['end'] = endIntervals;
         dict['function'] = functionNames;
         dict['stackdepth'] = stackDepths;
+        dict['stackdepthNext'] = stackDepthsNext;
+        dict['color'] = colors;
 
         firstTimeStamp = beginIntervals[0];
-        print("First timestamp is " + str(firstTimeStamp));
+        #print("First timestamp is " + str(firstTimeStamp));
 
         dataframe = pd.DataFrame(data=dict);
 
         dataframe['start'] = dataframe['start'] - firstTimeStamp;
         dataframe['end'] = dataframe['end'] - firstTimeStamp;
 
-        print dataframe;
+        #print dataframe;
 
     return dataframe;
 
 
 def main():
 
+    global largestStackDepth;
+    global legendItems;
+
     initColorList();
 
-    data = pd.read_csv('optrack.0000060755.0000000021.txt',
+    fname = 'optrack.0000060755.0000000021.txt';
+
+    data = pd.read_csv(fname,
                        header=None, delimiter=" ",
                        index_col=2,
                        names=["Event", "Function", "Timestamp"],
@@ -153,7 +219,8 @@ def main():
                        thousands=",");
 
     intervalDataFrame = createTimedeltaSeries(data);
-    bokeh_plot("Log file", "WT-log.html", "functions", intervalDataFrame);
+    bokeh_plot(fname, "WT-log.html", "functions", intervalDataFrame,
+               largestStackDepth);
 
     #print  intervalDataFrame.index[0];
 
