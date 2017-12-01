@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from bokeh.models import ColumnDataSource, Legend, LegendItem
+from bokeh.models import ColumnDataSource, HoverTool, Legend, LegendItem
+from bokeh.models import NumeralTickFormatter
 from bokeh.plotting import figure, output_file, show
 import matplotlib
 import numpy as np
@@ -72,29 +73,38 @@ def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
     # output to static HTML file
     output_file(file_to_save);
 
+    cds = ColumnDataSource(dataframe.head(num));
+
+    hover = HoverTool(tooltips=[
+        ("function", "@function"),
+        ("duration", "@start")
+    ]);
+
+    TOOLS = [hover];
+
     p = figure(title=figure_title, plot_width=1200,
                y_range = (0, max(y_max, y_max+1)),
                x_axis_label = "Time (CPU cycles)",
                y_axis_label = "Stack depth",
-               tools = "hover"
+               tools = TOOLS
     );
 
     # No minor ticks or labels on the y-axis
     p.yaxis.minor_tick_line_color = None;
     p.yaxis.major_label_text_font_size = '0pt';
 
-    #cds = ColumnDataSource(dataframe.head(num));
+    p.xaxis.formatter = NumeralTickFormatter(format="0,")
 
-    #p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
-    #       top = 'stackdepthNext', color = 'color', legend = 'function',
-    #       source=cds);
+    p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
+           top = 'stackdepthNext', color = 'color',
+           source=cds, line_color="lightgrey");
 
-    p.quad(left = dataframe.head(num)['start'],
-           right = dataframe.head(num)['end'],
-           bottom = dataframe.head(num)['stackdepth'],
-           top = dataframe.head(num)['stackdepth'] + 1,
-           color=dataframe.head(num)['color'],
-           line_color="lightgrey");
+    #p.quad(left = dataframe.head(num)['start'],
+    #       right = dataframe.head(num)['end'],
+    #       bottom = dataframe.head(num)['stackdepth'],
+    #       top = dataframe.head(num)['stackdepth'] + 1,
+    #       color=dataframe.head(num)['color'],
+    #       line_color="lightgrey");
 
     for func, fColor in funcToColor.iteritems():
         r = p.quad(left=0, right=1, bottom=0, top=1, color=fColor);
