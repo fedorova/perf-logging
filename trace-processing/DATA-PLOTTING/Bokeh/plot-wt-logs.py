@@ -41,8 +41,6 @@ def getColorForFunction(function):
         funcToColor[function] = colorList[lastColorUsed % len(colorList)];
         lastColorUsed += 1;
 
-    print("Function " + function + " gets the color " +
-          funcToColor[function] + ".");
     return funcToColor[function];
 
 def bokeh_plot_old(figure_title, file_to_save, legend, x_data,
@@ -65,21 +63,27 @@ def bokeh_plot_old(figure_title, file_to_save, legend, x_data,
 
 def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
 
+    MAX_ITEMS_PER_LEGEND = 5;
     num = 100;
+    numLegends = 0;
     legendItems = [];
+    pixelsPerVisualRow = 60;
 
     # output to static HTML file
     output_file(file_to_save);
 
     p = figure(title=figure_title, plot_width=1200,
-               plot_height=max(y_max * 50, 400),
-               y_range = (0, max(y_max, 6)),
+               y_range = (0, max(y_max, y_max+1)),
                x_axis_label = "Time (CPU cycles)",
                y_axis_label = "Stack depth",
                tools = "hover"
     );
 
-    cds = ColumnDataSource(dataframe.head(num));
+    # No minor ticks or labels on the y-axis
+    p.yaxis.minor_tick_line_color = None;
+    p.yaxis.major_label_text_font_size = '0pt';
+
+    #cds = ColumnDataSource(dataframe.head(num));
 
     #p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
     #       top = 'stackdepthNext', color = 'color', legend = 'function',
@@ -90,7 +94,7 @@ def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
            bottom = dataframe.head(num)['stackdepth'],
            top = dataframe.head(num)['stackdepth'] + 1,
            color=dataframe.head(num)['color'],
-           line_color="black");
+           line_color="lightgrey");
 
     for func, fColor in funcToColor.iteritems():
         r = p.quad(left=0, right=1, bottom=0, top=1, color=fColor);
@@ -99,9 +103,17 @@ def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
                            renderers = [r]);
         legendItems.append(lItem);
 
-    print legendItems;
-    legend = Legend(items=legendItems);
-    p.add_layout(legend, place='left');
+        # Cap the number of items in a legend, so it can
+        # fit horizontally.
+        if (len(legendItems) == MAX_ITEMS_PER_LEGEND):
+            legend = Legend(items=legendItems, orientation = "horizontal");
+            p.add_layout(legend, place='above');
+            numLegends += 1;
+            legendItems[:] = []
+
+    # Plot height is the function of the maximum call stack and the number of
+    # legends
+    p.plot_height = max((y_max + numLegends) * pixelsPerVisualRow, 200);
 
     show(p);
 
