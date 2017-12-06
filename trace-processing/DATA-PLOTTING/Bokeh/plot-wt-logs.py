@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from bokeh.layouts import column
 from bokeh.models import ColumnDataSource, HoverTool, Legend, LegendItem
 from bokeh.models import NumeralTickFormatter
 from bokeh.plotting import figure, output_file, show
@@ -7,10 +8,13 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
-
+# A static list of available CSS colors
 colorList = [];
+
+# Track if this color was already used in any legend.
+colorAlreadyUsedInLegend = {};
+
 lastColorUsed = 0;
-largestStackDepth = 0;
 funcToColor = {};
 intervalBeginningsStack = [];
 
@@ -44,34 +48,24 @@ def getColorForFunction(function):
 
     return funcToColor[function];
 
-def bokeh_plot_old(figure_title, file_to_save, legend, x_data,
-              x_name, y_data, y_name):
+def add_legend(p, legendItems, numLegends):
 
+    legend = Legend(items=legendItems, orientation = "horizontal");
+    p.add_layout(legend, place='above');
+    legendItems[:] = [];  # Empty the list.
 
-    # output to static HTML file
-    output_file(file_to_save);
+    return (numLegends + 1);
 
-    # create a new plot with a title and axis labels
-    p = figure(title=figure_title, x_axis_label=x_name, y_axis_label=y_name,
-               plot_width=800, plot_height=400);
+def bokeh_plot(figure_title, legend, dataframe, y_max):
 
-    # add a line renderer with legend and line thickness
-    p.line(x_data, y_data, legend=legend, line_width=2);
-
-    # show the results
-    show(p)
-
-
-def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
+    global colorAlreadyUsedInLegend;
 
     MAX_ITEMS_PER_LEGEND = 5;
     num = 100;
     numLegends = 0;
     legendItems = [];
-    pixelsPerVisualRow = 60;
-
-    # output to static HTML file
-    output_file(file_to_save);
+    pixelsPerStackLevel = 15;
+    pixelsPerLegend = 90;
 
     cds = ColumnDataSource(dataframe.head(num));
 
@@ -106,7 +100,18 @@ def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
     #       color=dataframe.head(num)['color'],
     #       line_color="lightgrey");
 
+    print("New legend.");
     for func, fColor in funcToColor.iteritems():
+
+        # If we already added a color to any legend, we don't
+        # add it again to avoid redundancy in the charts and
+        # in order not to waste space.
+        #
+        if (colorAlreadyUsedInLegend.has_key(fColor)):
+            continue;
+        else:
+            colorAlreadyUsedInLegend[fColor] = True;
+
         r = p.quad(left=0, right=1, bottom=0, top=1, color=fColor);
 
         lItem = LegendItem(label = func,
@@ -116,16 +121,23 @@ def bokeh_plot(figure_title, file_to_save, legend, dataframe, y_max):
         # Cap the number of items in a legend, so it can
         # fit horizontally.
         if (len(legendItems) == MAX_ITEMS_PER_LEGEND):
-            legend = Legend(items=legendItems, orientation = "horizontal");
-            p.add_layout(legend, place='above');
-            numLegends += 1;
-            legendItems[:] = []
+            numLegends = add_legend(p, legendItems, numLegends);
+
+    # Add whatever legend items did not get added
+    if (len(legendItems) > 0):
+        numLegends = add_legend(p, legendItems, numLegends);
 
     # Plot height is the function of the maximum call stack and the number of
     # legends
-    p.plot_height = max((y_max + numLegends) * pixelsPerVisualRow, 200);
+    p.plot_height = max((y_max * pixelsPerStackLevel +
+                         numLegends * pixelsPerLegend),
+                        200);
 
-    show(p);
+    print("Num legends is " + str(numLegends));
+    print("y_max is " + str(y_max));
+    print("Plot height is " + str(p.plot_height));
+
+    return p;
 
 
 def markIntervalBeginning(row):
@@ -166,15 +178,14 @@ def getIntervalData(intervalEnd):
 
     return intervalBegin[0], intervalEnd[0], intervalEnd[2], stackDepth;
 
-def createTimedeltaSeries(data):
-
-    global largestStackDepth;
+def createCallstackSeries(data):
 
     colors = [];
     beginIntervals = [];
     dataFrame = None;
     endIntervals = [];
     functionNames = [];
+    largestStackDepth = 0;
     stackDepths = [];
     stackDepthsNext = [];
 
@@ -221,17 +232,9 @@ def createTimedeltaSeries(data):
 
         #print dataframe;
 
-    return dataframe;
+    return dataframe, largestStackDepth;
 
-
-def main():
-
-    global largestStackDepth;
-    global legendItems;
-
-    initColorList();
-
-    fname = 'optrack.0000060755.0000000021.txt';
+def processFileAndCreatePlot(fname):
 
     data = pd.read_csv(fname,
                        header=None, delimiter=" ",
@@ -240,41 +243,32 @@ def main():
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
-    intervalDataFrame = createTimedeltaSeries(data);
-    bokeh_plot(fname, "WT-log.html", "functions", intervalDataFrame,
-               largestStackDepth);
-
-    #print  intervalDataFrame.index[0];
-
-    #interval = pd.DataFrame({'start' : intervalDataFrame.index[0] });
-    #interval['end'] = interval['start'] + intervalDataFrame;
-    #cds = ColumnDataSource(interval);
+    intervalDataFrame, largestStackDepth = createCallstackSeries(data);
+    figure = bokeh_plot(fname, "functions", intervalDataFrame,
+                        largestStackDepth + 1);
+    return figure;
 
 
-    # Convert to time series. This allows you to index the data.
-    # x_data = time = data.index.values;
-    # y_data = series = data["Event"].values;
+def main():
 
-    #print(time);
-    #print(series);
+    figuresForAllFiles = [];
 
-    #print(data);
+    # Get names of standard CSS colors that we will use for the legend
+    initColorList();
 
-    #print("=====================");
-    #print(data.values.tolist());
+    # output to static HTML file
+    output_file("WT-log.html");
 
-    #x_data = series.to_xarray();
-    #print(x_data);
+    fname = 'optrack.0000060755.0000000021.txt';
+    fname1 = 'optrack.0000060755.0000000021a.txt';
 
-    #x_data = list(data.keys());
-    #y_data = list(data.values());
+    figure1 = processFileAndCreatePlot(fname);
+    figuresForAllFiles.append(figure1);
 
-    #print(x_data);
-    #print(y_data);
+    figure2 = processFileAndCreatePlot(fname1);
+    figuresForAllFiles.append(figure2);
 
-    #bokeh_plot("Function entry/exit events",
-    #           "WT-log.html", "entry = 0, exit=1",
-    #           x_data, "Time", y_data, "Enter/Exit");
+    show(column(figuresForAllFiles));
 
 if __name__ == '__main__':
     main()
