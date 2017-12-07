@@ -63,14 +63,15 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
     global colorAlreadyUsedInLegend;
 
     MAX_ITEMS_PER_LEGEND = 5;
-    num = 100;
+    #num = 100;
     numLegends = 0;
     legendItems = [];
     pixelsPerStackLevel = 30;
     pixelsPerLegend = 60;
     pixelsForTitle = 30;
 
-    cds = ColumnDataSource(dataframe.head(num));
+    #    cds = ColumnDataSource(dataframe.head(num));
+    cds = ColumnDataSource(dataframe);
 
     hover = HoverTool(tooltips=[
         ("function", "@function"),
@@ -139,13 +140,6 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
                      + max((y_max+1) * pixelsPerStackLevel, 100) \
                      + pixelsForTitle;
 
-    print("Legend area height is " + str(numLegends * pixelsPerLegend));
-    print("Chart area height is " + str(max((y_max+1) * pixelsPerStackLevel, 100)));
-
-    print("Num legends is " + str(numLegends));
-    print("y_max is " + str(y_max));
-    print("Plot height is " + str(p.plot_height));
-
     return p;
 
 
@@ -193,10 +187,12 @@ def createCallstackSeries(data):
     beginIntervals = [];
     dataFrame = None;
     endIntervals = [];
+    firstTimeStamp = sys.maxsize;
     functionNames = [];
     largestStackDepth = 0;
     stackDepths = [];
     stackDepthsNext = [];
+    thisIsFirstRow = True;
 
     for row in data.itertuples():
         # row[0] is the timestamp, row[1] is the event type,
@@ -207,6 +203,13 @@ def createCallstackSeries(data):
         elif (row[1] == 1):
             intervalBegin, intervalEnd, function, stackDepth \
                 = getIntervalData(row);
+
+            print("begin:    " + str(intervalBegin));
+            print("end:      " + str(intervalEnd));
+            print("function: " + str(function));
+
+            if (intervalBegin < firstTimeStamp):
+                firstTimeStamp =  intervalBegin;
 
             beginIntervals.append(intervalBegin);
             endIntervals.append(intervalEnd);
@@ -222,6 +225,8 @@ def createCallstackSeries(data):
             print(str(row[0]) + " " + str(row[1]) + " " + str(row[2]));
             continue;
 
+    print("First time stamp is " + str(firstTimeStamp));
+
     if (dataFrame is None):
         dict = {};
         dict['start'] = beginIntervals;
@@ -231,15 +236,10 @@ def createCallstackSeries(data):
         dict['stackdepthNext'] = stackDepthsNext;
         dict['color'] = colors;
 
-        firstTimeStamp = beginIntervals[0];
-        #print("First timestamp is " + str(firstTimeStamp));
-
         dataframe = pd.DataFrame(data=dict);
 
         dataframe['start'] = dataframe['start'] - firstTimeStamp;
         dataframe['end'] = dataframe['end'] - firstTimeStamp;
-
-        #print dataframe;
 
     return dataframe, largestStackDepth;
 
@@ -252,7 +252,8 @@ def processFileAndCreatePlot(fname):
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
-    intervalDataFrame, largestStackDepth = createCallstackSeries(data);
+    intervalDataFrame, largestStackDepth = \
+                                        createCallstackSeries(data.head(100));
     figure = bokeh_plot(fname, "functions", intervalDataFrame,
                         largestStackDepth + 1);
     return figure;
