@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 
+import argparse
 from bokeh.layouts import column
-from bokeh.models import ColumnDataSource, HoverTool, Legend, LegendItem
+from bokeh.models import ColumnDataSource, HoverTool, FixedTicker
+from bokeh.models import Legend, LegendItem
 from bokeh.models import NumeralTickFormatter
 from bokeh.plotting import figure, output_file, show
 import matplotlib
 import numpy as np
 import pandas as pd
+import sys
 
 # A static list of available CSS colors
 colorList = [];
@@ -29,7 +32,6 @@ def initColorList():
         # Some browsers break if you try to give them 'sage'
         if (color == "sage"):
             colorList.remove(color);
-        print(color);
 
 #
 # Each unique function name gets a unique color.
@@ -64,8 +66,9 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
     num = 100;
     numLegends = 0;
     legendItems = [];
-    pixelsPerStackLevel = 15;
-    pixelsPerLegend = 90;
+    pixelsPerStackLevel = 30;
+    pixelsPerLegend = 60;
+    pixelsForTitle = 30;
 
     cds = ColumnDataSource(dataframe.head(num));
 
@@ -84,8 +87,11 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
     );
 
     # No minor ticks or labels on the y-axis
+    p.yaxis.major_tick_line_color = None;
     p.yaxis.minor_tick_line_color = None;
     p.yaxis.major_label_text_font_size = '0pt';
+    p.yaxis.ticker = FixedTicker(ticks = range(0, y_max+1));
+    p.ygrid.ticker = FixedTicker(ticks = range(0, y_max+1));
 
     p.xaxis.formatter = NumeralTickFormatter(format="0,")
 
@@ -129,9 +135,12 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
 
     # Plot height is the function of the maximum call stack and the number of
     # legends
-    p.plot_height = max((y_max * pixelsPerStackLevel +
-                         numLegends * pixelsPerLegend),
-                        200);
+    p.plot_height =  (numLegends * pixelsPerLegend) \
+                     + max((y_max+1) * pixelsPerStackLevel, 100) \
+                     + pixelsForTitle;
+
+    print("Legend area height is " + str(numLegends * pixelsPerLegend));
+    print("Chart area height is " + str(max((y_max+1) * pixelsPerStackLevel, 100)));
 
     print("Num legends is " + str(numLegends));
     print("y_max is " + str(y_max));
@@ -253,20 +262,27 @@ def main():
 
     figuresForAllFiles = [];
 
+    # Set up the argument parser
+    #
+    parser = argparse.ArgumentParser(description=
+                                 'Visualize operation log');
+    parser.add_argument('files', type=str, nargs='*',
+                        help='log files to process');
+    args = parser.parse_args();
+
     # Get names of standard CSS colors that we will use for the legend
     initColorList();
 
     # output to static HTML file
     output_file("WT-log.html");
 
-    fname = 'optrack.0000060755.0000000021.txt';
-    fname1 = 'optrack.0000060755.0000000021a.txt';
+    if (len(args.files) == 0):
+        parser.print_help()
+        sys.exit(1)
 
-    figure1 = processFileAndCreatePlot(fname);
-    figuresForAllFiles.append(figure1);
-
-    figure2 = processFileAndCreatePlot(fname1);
-    figuresForAllFiles.append(figure2);
+    for fname in args.files:
+        figure = processFileAndCreatePlot(fname);
+        figuresForAllFiles.append(figure);
 
     show(column(figuresForAllFiles));
 
