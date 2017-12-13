@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=wt-3133
+BRANCH=wt-3795
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else

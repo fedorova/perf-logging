@@ -63,19 +63,17 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
     global colorAlreadyUsedInLegend;
 
     MAX_ITEMS_PER_LEGEND = 5;
-    #num = 100;
     numLegends = 0;
     legendItems = [];
     pixelsPerStackLevel = 30;
     pixelsPerLegend = 60;
     pixelsForTitle = 30;
 
-    #    cds = ColumnDataSource(dataframe.head(num));
     cds = ColumnDataSource(dataframe);
 
     hover = HoverTool(tooltips=[
         ("function", "@function"),
-        ("duration", "@start")
+        ("duration", "@durations")
     ]);
 
     TOOLS = [hover];
@@ -107,7 +105,6 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
     #       color=dataframe.head(num)['color'],
     #       line_color="lightgrey");
 
-    print("New legend.");
     for func, fColor in funcToColor.iteritems():
 
         # If we already added a color to any legend, we don't
@@ -186,6 +183,7 @@ def createCallstackSeries(data):
     colors = [];
     beginIntervals = [];
     dataFrame = None;
+    durations = [];
     endIntervals = [];
     firstTimeStamp = sys.maxsize;
     functionNames = [];
@@ -204,15 +202,12 @@ def createCallstackSeries(data):
             intervalBegin, intervalEnd, function, stackDepth \
                 = getIntervalData(row);
 
-            print("begin:    " + str(intervalBegin));
-            print("end:      " + str(intervalEnd));
-            print("function: " + str(function));
-
             if (intervalBegin < firstTimeStamp):
                 firstTimeStamp =  intervalBegin;
 
             beginIntervals.append(intervalBegin);
             endIntervals.append(intervalEnd);
+            durations.append(intervalEnd-intervalBegin);
             functionNames.append(function);
             stackDepths.append(stackDepth);
             stackDepthsNext.append(stackDepth + 1);
@@ -225,13 +220,12 @@ def createCallstackSeries(data):
             print(str(row[0]) + " " + str(row[1]) + " " + str(row[2]));
             continue;
 
-    print("First time stamp is " + str(firstTimeStamp));
-
     if (dataFrame is None):
         dict = {};
         dict['start'] = beginIntervals;
         dict['end'] = endIntervals;
         dict['function'] = functionNames;
+        dict['durations'] = durations;
         dict['stackdepth'] = stackDepths;
         dict['stackdepthNext'] = stackDepthsNext;
         dict['color'] = colors;
@@ -271,15 +265,15 @@ def main():
                         help='log files to process');
     args = parser.parse_args();
 
+    if (len(args.files) == 0):
+        parser.print_help()
+        sys.exit(1)
+
     # Get names of standard CSS colors that we will use for the legend
     initColorList();
 
     # output to static HTML file
-    output_file("WT-log.html");
-
-    if (len(args.files) == 0):
-        parser.print_help()
-        sys.exit(1)
+    output_file(filename = "WT-log.html", title="Operation log");
 
     for fname in args.files:
         figure = processFileAndCreatePlot(fname);
