@@ -14,9 +14,29 @@ import sys
 # A static list of available CSS colors
 colorList = [];
 
+# Codes for various colors for printing of informational and error messages.
+#
+class color:
+   PURPLE = '\033[95m'
+   CYAN = '\033[96m'
+   DARKCYAN = '\033[36m'
+   BLUE = '\033[94m'
+   GREEN = '\033[92m'
+   YELLOW = '\033[93m'
+   RED = '\033[91m'
+   BOLD = '\033[1m'
+   UNDERLINE = '\033[4m'
+   END = '\033[0m'
+
 # A function name mapped to its corresponding color.
+#
 funcToColor = {};
 lastColorUsed = 0;
+
+# The smallest and the largest timestamps seen across all files.
+#
+firstTimeStamp = sys.maxsize;
+lastTimeStamp = 0;
 
 # Push operation opening records onto this callstack until the
 # corresponding closing records are found.
@@ -24,8 +44,12 @@ lastColorUsed = 0;
 intervalBeginningsStack = [];
 
 # A dictionary that holds a reference to the raw dataframe for each file.
+#
 perFileDataFrame = {};
 
+# A dictionary that holds the intervals data per function.
+#
+perFuncDF = {};
 
 def initColorList():
 
@@ -98,13 +122,14 @@ def getIntervalData(intervalEnd):
 
 def createCallstackSeries(data):
 
+    global firstTimeStamp;
+    global lastTimeStamp;
+
 #    colors = [];
     beginIntervals = [];
     dataFrame = None;
 #    durations = [];
     endIntervals = [];
-    firstTimeStamp = sys.maxsize;
-    lastTimeStamp = 0;
     functionNames = [];
 #    largestStackDepth = 0;
 #    stackDepths = [];
@@ -147,21 +172,18 @@ def createCallstackSeries(data):
     dict['start'] = beginIntervals;
     dict['end'] = endIntervals;
     dict['function'] = functionNames;
-#    dict['durations'] = durations;
 #        dict['stackdepth'] = stackDepths;
 #        dict['stackdepthNext'] = stackDepthsNext;
 #        dict['color'] = colors;
 
     dataframe = pd.DataFrame(data=dict);
-
     dataframe['durations'] = dataframe['end'] - dataframe['start'];
 
-#    dataframe['start'] = dataframe['start'] - firstTimeStamp;
-#    dataframe['end'] = dataframe['end'] - firstTimeStamp;
-
-    return dataframe, firstTimeStamp, lastTimeStamp;
+    return dataframe;
 
 def processFile(fname):
+
+    global perFuncDF;
 
     rawData = pd.read_csv(fname,
                        header=None, delimiter=" ",
@@ -170,16 +192,106 @@ def processFile(fname):
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
-    iDF, firstTimeStamp, lastTimeStamp = createCallstackSeries(rawData);
+    iDF = createCallstackSeries(rawData);
 
     perFileDataFrame[fname] = iDF;
 
     for func in funcToColor.keys():
-        print(func);
-        perFuncDF = iDF.loc[lambda iDF: iDF.function == func, :];
-        print(perFuncDF);
+
+        funcDF = iDF.loc[lambda iDF: iDF.function == func, :];
+        #funcDF = funcDF.set_index('start');
+        funcDF = funcDF.drop(columns = ['function']);
+
+        if (not perFuncDF.has_key(func)):
+            perFuncDF[func] = funcDF;
+        else:
+            perFuncDF[func] = pd.concat([perFuncDF[func], funcDF]);
+
+
+#        print(func + ": " + str(perFuncDF[func].size) +
+#              " elements.");
+#        if (func == '__curfile_search'):
+#            print(color.PURPLE + color.UNDERLINE + func + color.END);
+#            print(color.BLUE);
+#            i = 0;
+#            df = perFuncDF[func];
+#            for row in df.itertuples():
+#                i += 1;
+#                print(getattr(row, 'start'));
+#            print color.END;
+#            print(perFuncDF[func]);
+#            df = perFuncDF[func];
+#            row = df.loc[lambda df: df.start == 2367889268286, :];
+#            print row;
+#            print(color.END);
+
+
+#
+# For each function, split the timeline into buckets. In each bucket
+# show how many times this function took an unusually long time to
+# execute.
+#
+# The parameter durationThreshold tells us when a function should be
+# considered as unusually long. If this parameter is "-1" we count
+# all functions whose duration exceeded the average by more than
+# two standard deviations.
+#
+def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
+
+    global firstTimeStamp;
+    global lastTimeStamp;
+
+    pixelsForTitle = 30;
+    pixelsPerHeightUnit = 5;
+    pixelsPerWidthUnit = 5;
+    plotWidth = 1200;   # Standard plot width
+
+    #
+    # funcDF is a list of functions along with their start and end
+    # interval and durations. We need to create a new dataframe where
+    # we separate the entire timeline into a fixed number of periods
+    # and for each period compute how many outlier durations were
+    # observed. Then we create a histogram from this data.
+
+    # Subtract the smallest timestamp from all the interval data.
+    #funcDF['start'] = funcDF['start'] - firstTimeStamp;
+    #funcDF['end'] = funcDF['end'] - firstTimeStamp;
+
+    funcDF = funcDF.sort_values(by=['start'])
+
+    # If duration threshold equals -1 compute the average and standard
+    # deviation. Our actual threashold will be the value exceeding two
+    # standard deviations from the average.
+    #
+    if (durationThreshold == -1):
+        average = funcDF['durations'].mean();
+        stdDev = funcDF['durations'].std();
+        durationThreshold = average + 2 * stdDev;
+
+        print(color.PURPLE + color.UNDERLINE + func + color.END);
+        print("Average duration: " + color.BOLD + str(average) + color.END);
+        print("Standard deviation: " + color.BOLD + str(stdDev) + color.END);
+        #print funcDF;
+        print;
+
+    numColumns = plotWidth / pixelsPerWidthUnit;
+    #timeUnitsPerColumn = funcDF.size();
+
+    bucketStart = [];
+    bucketEnd = [];
+    bucketHeight = [];
+
+    i = 0
+
+    if (func == '__curfile_search'):
+        for row in funcDF.itertuples():
+            i += 1;
+            if (i < 10):
+                print(getattr(row, 'start'));
 
 def main():
+
+    global perFuncDF;
 
     figuresForAllFiles = [];
 
@@ -201,6 +313,10 @@ def main():
     # Parallelize this later, so we are working on files in parallel.
     for fname in args.files:
         processFile(fname);
+
+    # Generate a histogram of outlier durations
+    for func, funcDF in perFuncDF.iteritems():
+        createOutlierHistogramForFunction(func, funcDF, -1);
 
 if __name__ == '__main__':
     main()
