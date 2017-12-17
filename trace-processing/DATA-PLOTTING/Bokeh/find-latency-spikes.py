@@ -254,8 +254,8 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
     # observed. Then we create a histogram from this data.
 
     # Subtract the smallest timestamp from all the interval data.
-    #funcDF['start'] = funcDF['start'] - firstTimeStamp;
-    #funcDF['end'] = funcDF['end'] - firstTimeStamp;
+    funcDF['start'] = funcDF['start'] - firstTimeStamp;
+    funcDF['end'] = funcDF['end'] - firstTimeStamp;
 
     funcDF = funcDF.sort_values(by=['start'])
 
@@ -271,23 +271,25 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
         print(color.PURPLE + color.UNDERLINE + func + color.END);
         print("Average duration: " + color.BOLD + str(average) + color.END);
         print("Standard deviation: " + color.BOLD + str(stdDev) + color.END);
-        #print funcDF;
         print;
 
     numColumns = plotWidth / pixelsPerWidthUnit;
-    #timeUnitsPerColumn = funcDF.size();
+    timeUnitsPerColumn = (lastTimeStamp - firstTimeStamp) / numColumns;
 
     bucketStart = [];
     bucketEnd = [];
     bucketHeight = [];
 
-    i = 0
+    for i in range(numColumns):
+        lowerBound = i * timeUnitsPerColumn;
+        upperBound = (i+1) * timeUnitsPerColumn;
 
-    if (func == '__curfile_search'):
-        for row in funcDF.itertuples():
-            i += 1;
-            if (i < 10):
-                print(getattr(row, 'start'));
+        intervalDF = funcDF.loc[(funcDF['start'] >= lowerBound)
+                                & (funcDF['end'] < upperBound)
+                                & (funcDF['durations'] > durationThreshold)];
+
+        print("LB: " + str(lowerBound) + ", UB: " + str(upperBound) +
+              " numFunctions above thr: " + str(intervalDF.size));
 
 def main():
 
