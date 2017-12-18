@@ -53,8 +53,13 @@ perFuncDF = {};
 
 plotWidth = 1200;
 pixelsForTitle = 30;
-pixelsPerHeightUnit = 5;
+pixelsPerHeightUnit = 30;
 pixelsPerWidthUnit = 5;
+
+# The coefficient by which we multiply the standard deviation when
+# setting the outlier threshold, in case it is not specified by the user.
+#
+STDEV_MULT = 1;
 
 
 def initColorList():
@@ -135,7 +140,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     cds = ColumnDataSource(dataframe);
 
     figureTitle = "Occurrences of " + func + " that took longer than " \
-                  + str(durationThreshold) + " timeUnits.";
+                  + "{:,.0f}".format(durationThreshold) + " time units.";
 
     hover = HoverTool(tooltips = [
         ("interval start", "@lowerbound"),
@@ -144,14 +149,19 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     TOOLS = [hover];
 
     p = figure(title = figureTitle, plot_width = plotWidth,
-               plot_height = (maxOutliers + 1) * 30 + \
+               plot_height = (maxOutliers + 1) * pixelsPerHeightUnit + \
                pixelsForTitle,
                y_range = (0, maxOutliers + 1),
-               x_axis_label = "Time intervals (CPU cycles)",
+               x_axis_label = "Execution timeline (CPU cycles)",
                y_axis_label = "Number of outliers", tools = TOOLS);
 
+    p.yaxis.ticker = FixedTicker(ticks = range(0, maxOutliers+1));
+    p.ygrid.ticker = FixedTicker(ticks = range(0, maxOutliers+1));
+    p.xaxis.formatter = NumeralTickFormatter(format="0,");
+
     p.quad(left = 'lowerbound', right = 'upperbound', bottom = 'bottom',
-           top = 'height', color = funcToColor[func], source = cds);
+           top = 'height', color = funcToColor[func], source = cds,
+           line_color="lightgrey");
 
     return p;
 
@@ -245,6 +255,7 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
     global lastTimeStamp;
     global plotWidth;
     global pixelsPerWidthUnit;
+    global STDEV_MULT;
 
     #
     # funcDF is a list of functions along with their start and end
@@ -266,12 +277,12 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
     if (durationThreshold == -1):
         average = funcDF['durations'].mean();
         stdDev = funcDF['durations'].std();
-        durationThreshold = average + 2 * stdDev;
+        durationThreshold = average + STDEV_MULT * stdDev;
 
-        print(color.PURPLE + color.UNDERLINE + func + color.END);
-        print("Average duration: " + color.BOLD + str(average) + color.END);
-        print("Standard deviation: " + color.BOLD + str(stdDev) + color.END);
-        print;
+#        print(color.PURPLE + color.UNDERLINE + func + color.END);
+#        print("Average duration: " + color.BOLD + str(average) + color.END);
+#        print("Standard deviation: " + color.BOLD + str(stdDev) + color.END);
+#        print;
 
     numColumns = plotWidth / pixelsPerWidthUnit;
     timeUnitsPerColumn = (lastTimeStamp - firstTimeStamp) / numColumns;
