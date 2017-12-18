@@ -51,6 +51,12 @@ perFileDataFrame = {};
 #
 perFuncDF = {};
 
+plotWidth = 1200;
+pixelsForTitle = 30;
+pixelsPerHeightUnit = 5;
+pixelsPerWidthUnit = 5;
+
+
 def initColorList():
 
     global colorList;
@@ -120,20 +126,44 @@ def getIntervalData(intervalEnd):
 
     return intervalBegin[0], intervalEnd[0], intervalEnd[2], stackDepth;
 
+def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
+
+    global pixelsForTitle;
+    global pixelsPerHeightUnit;
+    global plotWidth;
+
+    cds = ColumnDataSource(dataframe);
+
+    figureTitle = "Occurrences of " + func + " that took longer than " \
+                  + str(durationThreshold) + " timeUnits.";
+
+    hover = HoverTool(tooltips = [
+        ("interval start", "@lowerbound"),
+        ("interval end", "@upperbound")]);
+
+    TOOLS = [hover];
+
+    p = figure(title = figureTitle, plot_width = plotWidth,
+               plot_height = (maxOutliers + 1) * 30 + \
+               pixelsForTitle,
+               y_range = (0, maxOutliers + 1),
+               x_axis_label = "Time intervals (CPU cycles)",
+               y_axis_label = "Number of outliers", tools = TOOLS);
+
+    p.quad(left = 'lowerbound', right = 'upperbound', bottom = 'bottom',
+           top = 'height', color = funcToColor[func], source = cds);
+
+    return p;
+
 def createCallstackSeries(data):
 
     global firstTimeStamp;
     global lastTimeStamp;
 
-#    colors = [];
     beginIntervals = [];
     dataFrame = None;
-#    durations = [];
     endIntervals = [];
     functionNames = [];
-#    largestStackDepth = 0;
-#    stackDepths = [];
-#    stackDepthsNext = [];
     thisIsFirstRow = True;
 
     for row in data.itertuples():
@@ -154,14 +184,8 @@ def createCallstackSeries(data):
             getColorForFunction(function);
             beginIntervals.append(intervalBegin);
             endIntervals.append(intervalEnd);
-#            durations.append(intervalEnd-intervalBegin);
             functionNames.append(function);
-#            stackDepths.append(stackDepth);
-#            stackDepthsNext.append(stackDepth + 1);
-#            colors.append(getColorForFunction(function));
 
-#            if (stackDepth > largestStackDepth):
-#                largestStackDepth = stackDepth;
         else:
             print("Invalid event in this line:");
             print(str(row[0]) + " " + str(row[1]) + " " + str(row[2]));
@@ -172,9 +196,6 @@ def createCallstackSeries(data):
     dict['start'] = beginIntervals;
     dict['end'] = endIntervals;
     dict['function'] = functionNames;
-#        dict['stackdepth'] = stackDepths;
-#        dict['stackdepthNext'] = stackDepthsNext;
-#        dict['color'] = colors;
 
     dataframe = pd.DataFrame(data=dict);
     dataframe['durations'] = dataframe['end'] - dataframe['start'];
@@ -208,24 +229,6 @@ def processFile(fname):
             perFuncDF[func] = pd.concat([perFuncDF[func], funcDF]);
 
 
-#        print(func + ": " + str(perFuncDF[func].size) +
-#              " elements.");
-#        if (func == '__curfile_search'):
-#            print(color.PURPLE + color.UNDERLINE + func + color.END);
-#            print(color.BLUE);
-#            i = 0;
-#            df = perFuncDF[func];
-#            for row in df.itertuples():
-#                i += 1;
-#                print(getattr(row, 'start'));
-#            print color.END;
-#            print(perFuncDF[func]);
-#            df = perFuncDF[func];
-#            row = df.loc[lambda df: df.start == 2367889268286, :];
-#            print row;
-#            print(color.END);
-
-
 #
 # For each function, split the timeline into buckets. In each bucket
 # show how many times this function took an unusually long time to
@@ -240,11 +243,8 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
 
     global firstTimeStamp;
     global lastTimeStamp;
-
-    pixelsForTitle = 30;
-    pixelsPerHeightUnit = 5;
-    pixelsPerWidthUnit = 5;
-    plotWidth = 1200;   # Standard plot width
+    global plotWidth;
+    global pixelsPerWidthUnit;
 
     #
     # funcDF is a list of functions along with their start and end
@@ -276,9 +276,10 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
     numColumns = plotWidth / pixelsPerWidthUnit;
     timeUnitsPerColumn = (lastTimeStamp - firstTimeStamp) / numColumns;
 
-    bucketStart = [];
-    bucketEnd = [];
-    bucketHeight = [];
+    lowerBounds = [];
+    upperBounds = [];
+    bucketHeights = [];
+    maxOutliers = 0;
 
     for i in range(numColumns):
         lowerBound = i * timeUnitsPerColumn;
@@ -286,16 +287,34 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
 
         intervalDF = funcDF.loc[(funcDF['start'] >= lowerBound)
                                 & (funcDF['end'] < upperBound)
-                                & (funcDF['durations'] > durationThreshold)];
+                                & (funcDF['durations'] >= durationThreshold)];
 
-        print("LB: " + str(lowerBound) + ", UB: " + str(upperBound) +
-              " numFunctions above thr: " + str(intervalDF.size));
+        numOutliers = intervalDF.size;
+        if (numOutliers > maxOutliers):
+            maxOutliers = numOutliers;
+
+        lowerBounds.append(lowerBound);
+        upperBounds.append(upperBound);
+        bucketHeights.append(numOutliers);
+
+    if (maxOutliers == 0):
+        return None;
+
+    dict = {};
+    dict['lowerbound'] = lowerBounds;
+    dict['upperbound'] = upperBounds;
+    dict['height'] = bucketHeights;
+    dict['bottom'] = [0] * len(lowerBounds);
+    dataframe = pd.DataFrame(data=dict);
+
+    return plotOutlierHistogram(dataframe, maxOutliers, func,
+                                durationThreshold);
 
 def main():
 
     global perFuncDF;
 
-    figuresForAllFiles = [];
+    figuresForAllFunctions = [];
 
     # Set up the argument parser
     #
@@ -318,7 +337,12 @@ def main():
 
     # Generate a histogram of outlier durations
     for func, funcDF in perFuncDF.iteritems():
-        createOutlierHistogramForFunction(func, funcDF, -1);
+        figure = createOutlierHistogramForFunction(func, funcDF, -1);
+        if (figure is not None):
+            figuresForAllFunctions.append(figure);
+
+    output_file(filename = "WT-outliers.html", title="Outlier histograms");
+    show(column(figuresForAllFunctions));
 
 if __name__ == '__main__':
     main()
