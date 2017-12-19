@@ -347,7 +347,8 @@ def main():
         processFile(fname);
 
     # Generate a histogram of outlier durations
-    for func, funcDF in perFuncDF.iteritems():
+    for func in sorted(perFuncDF.keys()):
+        funcDF = perFuncDF[func];
         figure = createOutlierHistogramForFunction(func, funcDF, -1);
         if (figure is not None):
             figuresForAllFunctions.append(figure);
