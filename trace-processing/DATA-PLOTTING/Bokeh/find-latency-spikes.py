@@ -2,14 +2,19 @@
 
 import argparse
 from bokeh.layouts import column
-from bokeh.models import ColumnDataSource, HoverTool, FixedTicker
+from bokeh.models import ColumnDataSource, CustomJS, HoverTool, FixedTicker
 from bokeh.models import Legend, LegendItem
-from bokeh.models import NumeralTickFormatter
+from bokeh.models import NumeralTickFormatter, OpenURL, TapTool
 from bokeh.plotting import figure, output_file, show
 import matplotlib
 import numpy as np
 import pandas as pd
 import sys
+
+# A directory where we store cross-file plots for each bucket of the outlier
+# histogram.
+#
+bucketDir = "BUCKET-FILES";
 
 # A static list of available CSS colors
 colorList = [];
@@ -51,6 +56,10 @@ perFileDataFrame = {};
 #
 perFuncDF = {};
 
+# Data frames and largest stack depth for each file.
+perFileDataFrame = {};
+perFileLargestStackDepth = {};
+
 plotWidth = 1200;
 pixelsForTitle = 30;
 pixelsPerHeightUnit = 30;
@@ -59,7 +68,7 @@ pixelsPerWidthUnit = 5;
 # The coefficient by which we multiply the standard deviation when
 # setting the outlier threshold, in case it is not specified by the user.
 #
-STDEV_MULT = 1;
+STDEV_MULT = 2;
 
 
 def initColorList():
@@ -89,9 +98,6 @@ def getColorForFunction(function):
         lastColorUsed += 1;
 
     return funcToColor[function];
-
-
-    intervalBeginningsStack.append(row);
 
 def markIntervalBeginning(row):
 
@@ -140,13 +146,13 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     cds = ColumnDataSource(dataframe);
 
     figureTitle = "Occurrences of " + func + " that took longer than " \
-                  + "{:,.0f}".format(durationThreshold) + " time units.";
+                  + "{:,.0f}".format(durationThreshold) + " CPU cycles.";
 
     hover = HoverTool(tooltips = [
-        ("interval start", "@lowerbound"),
-        ("interval end", "@upperbound")]);
+        ("interval start", "@lowerbound{0,0}"),
+        ("interval end", "@upperbound{0,0}")]);
 
-    TOOLS = [hover];
+    TOOLS = [hover, "tap, reset"];
 
     p = figure(title = figureTitle, plot_width = plotWidth,
                plot_height = (maxOutliers + 1) * pixelsPerHeightUnit + \
@@ -163,17 +169,37 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
            top = 'height', color = funcToColor[func], source = cds,
            line_color="lightgrey");
 
+    url = "@bucketfiles";
+    taptool = p.select(type=TapTool);
+    taptool.callback = OpenURL(url=url);
+
     return p;
+
+# From all timestamps subtract the smallest observed timestamp, so that
+# our execution timeline begins at zero.
+#
+def normalizeIntervalData():
+
+    global firstTimeStamp;
+    global perFileDataFrame;
+
+    for file, df in perFileDataFrame.iteritems():
+        df['start'] = df['start'] - firstTimeStamp;
+        df['end'] = df['end'] - firstTimeStamp;
 
 def createCallstackSeries(data):
 
     global firstTimeStamp;
     global lastTimeStamp;
 
+    colors = [];
     beginIntervals = [];
     dataFrame = None;
     endIntervals = [];
     functionNames = [];
+    largestStackDepth = 0;
+    stackDepths = [];
+    stackDepthsNext = [];
     thisIsFirstRow = True;
 
     for row in data.itertuples():
@@ -191,10 +217,15 @@ def createCallstackSeries(data):
             if (intervalEnd > lastTimeStamp):
                 lastTimeStamp = intervalEnd;
 
-            getColorForFunction(function);
+            colors.append(getColorForFunction(function));
             beginIntervals.append(intervalBegin);
             endIntervals.append(intervalEnd);
             functionNames.append(function);
+            stackDepths.append(stackDepth);
+            stackDepthsNext.append(stackDepth + 1);
+
+            if (stackDepth > largestStackDepth):
+                largestStackDepth = stackDepth;
 
         else:
             print("Invalid event in this line:");
@@ -203,17 +234,38 @@ def createCallstackSeries(data):
 
 
     dict = {};
+    dict['color'] = colors;
     dict['start'] = beginIntervals;
     dict['end'] = endIntervals;
     dict['function'] = functionNames;
+    dict['stackdepth'] = stackDepths;
+    dict['stackdepthNext'] = stackDepthsNext;
 
     dataframe = pd.DataFrame(data=dict);
     dataframe['durations'] = dataframe['end'] - dataframe['start'];
 
-    return dataframe;
+    return dataframe, largestStackDepth;
+
+#
+# Here we generate plots that span all the input files. Each plot shows
+# the timelines for all files, stacked vertically. The timeline shows
+# the function callstacks over time from this file.
+#
+# Since a single timeline is too large to fit on a single screen, we generate
+# a separate HTML file with plots for bucket "i". A bucket is a vertical slice
+# across the timelines for all files. We call it a bucket, because it
+# corresponds to a bucket in the outlier histogram.
+#
+def generateCrossFilePlotsForBucket(i):
+
+    fileName = "bucket-" + str(i) + ".html";
+
+    
 
 def processFile(fname):
 
+    global perFileDataFrame;
+    global perFileLargestStackDepth;
     global perFuncDF;
 
     rawData = pd.read_csv(fname,
@@ -223,14 +275,14 @@ def processFile(fname):
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
-    iDF = createCallstackSeries(rawData);
+    iDF, largestStackDepth = createCallstackSeries(rawData);
 
     perFileDataFrame[fname] = iDF;
+    perFileLargestStackDepth[fname] = largestStackDepth;
 
     for func in funcToColor.keys():
 
         funcDF = iDF.loc[lambda iDF: iDF.function == func, :];
-        #funcDF = funcDF.set_index('start');
         funcDF = funcDF.drop(columns = ['function']);
 
         if (not perFuncDF.has_key(func)):
@@ -251,6 +303,7 @@ def processFile(fname):
 #
 def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
 
+    global bucketDir;
     global firstTimeStamp;
     global lastTimeStamp;
     global plotWidth;
@@ -284,17 +337,18 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
 #        print("Standard deviation: " + color.BOLD + str(stdDev) + color.END);
 #        print;
 
-    numColumns = plotWidth / pixelsPerWidthUnit;
-    timeUnitsPerColumn = (lastTimeStamp - firstTimeStamp) / numColumns;
+    numBuckets = plotWidth / pixelsPerWidthUnit;
+    timeUnitsPerBucket = (lastTimeStamp - firstTimeStamp) / numBuckets;
 
     lowerBounds = [];
     upperBounds = [];
     bucketHeights = [];
+    bucketFilenames = [];
     maxOutliers = 0;
 
-    for i in range(numColumns):
-        lowerBound = i * timeUnitsPerColumn;
-        upperBound = (i+1) * timeUnitsPerColumn;
+    for i in range(numBuckets):
+        lowerBound = i * timeUnitsPerBucket;
+        upperBound = (i+1) * timeUnitsPerBucket;
 
         intervalDF = funcDF.loc[(funcDF['start'] >= lowerBound)
                                 & (funcDF['end'] < upperBound)
@@ -308,6 +362,12 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
         upperBounds.append(upperBound);
         bucketHeights.append(numOutliers);
 
+        # Generate cross-thread charts for this bucket and write
+        # them to an HTML file for this bucket."
+        #
+        fileName = generateCrossFilePlotsForBucket(i);
+        bucketFilenames.append(bucketDir + "/" + fileName);
+
     if (maxOutliers == 0):
         return None;
 
@@ -316,6 +376,7 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
     dict['upperbound'] = upperBounds;
     dict['height'] = bucketHeights;
     dict['bottom'] = [0] * len(lowerBounds);
+    dict['bucketfiles'] = bucketFilenames;
     dataframe = pd.DataFrame(data=dict);
 
     return plotOutlierHistogram(dataframe, maxOutliers, func,
@@ -345,6 +406,9 @@ def main():
     # Parallelize this later, so we are working on files in parallel.
     for fname in args.files:
         processFile(fname);
+
+    # Normalize all intervals by subtracting the first timestamp.
+    normalizeIntervalData();
 
     # Generate a histogram of outlier durations
     for func in sorted(perFuncDF.keys()):
