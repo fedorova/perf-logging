@@ -5,9 +5,10 @@ from bokeh.layouts import column
 from bokeh.models import ColumnDataSource, CustomJS, HoverTool, FixedTicker
 from bokeh.models import Legend, LegendItem
 from bokeh.models import NumeralTickFormatter, OpenURL, TapTool
-from bokeh.plotting import figure, output_file, show
+from bokeh.plotting import figure, output_file, reset_output, save, show
 import matplotlib
 import numpy as np
+import os
 import pandas as pd
 import sys
 
@@ -224,9 +225,6 @@ def createCallstackSeries(data):
             stackDepths.append(stackDepth);
             stackDepthsNext.append(stackDepth + 1);
 
-            if (stackDepth > largestStackDepth):
-                largestStackDepth = stackDepth;
-
         else:
             print("Invalid event in this line:");
             print(str(row[0]) + " " + str(row[1]) + " " + str(row[2]));
@@ -244,8 +242,97 @@ def createCallstackSeries(data):
     dataframe = pd.DataFrame(data=dict);
     dataframe['durations'] = dataframe['end'] - dataframe['start'];
 
-    return dataframe, largestStackDepth;
+    return dataframe;
 
+
+def addLegend(p, legendItems, numLegends):
+
+    legend = Legend(items=legendItems, orientation = "horizontal");
+    p.add_layout(legend, place='above');
+    legendItems[:] = [];  # Empty the list.
+
+    return (numLegends + 1);
+
+# For each function we only show the legend once. In this dictionary we
+# keep track of colors already used.
+#
+colorAlreadyUsedInLegend = {};
+
+def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
+
+    global colorAlreadyUsedInLegend;
+    global funcToColor;
+
+    MAX_ITEMS_PER_LEGEND = 5;
+    numLegends = 0;
+    legendItems = [];
+    pixelsPerStackLevel = 30;
+    pixelsPerLegend = 60;
+    pixelsForTitle = 30;
+
+    cds = ColumnDataSource(dataframe);
+
+    hover = HoverTool(tooltips=[
+        ("function", "@function"),
+        ("duration", "@durations{0,0}")
+    ]);
+
+    TOOLS = [hover];
+
+    p = figure(title=figureName, plot_width=1200,
+               x_range = (x_min, x_max),
+               y_range = (0, y_max+1),
+               x_axis_label = "Time (CPU cycles)",
+               y_axis_label = "Stack depth",
+               tools = TOOLS
+    );
+
+    # No minor ticks or labels on the y-axis
+    p.yaxis.major_tick_line_color = None;
+    p.yaxis.minor_tick_line_color = None;
+    p.yaxis.major_label_text_font_size = '0pt';
+    p.yaxis.ticker = FixedTicker(ticks = range(0, y_max+1));
+    p.ygrid.ticker = FixedTicker(ticks = range(0, y_max+1));
+
+    p.xaxis.formatter = NumeralTickFormatter(format="0,")
+
+    p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
+           top = 'stackdepthNext', color = 'color',
+           source=cds, line_color="lightgrey");
+
+    for func, fColor in funcToColor.iteritems():
+
+        # If we already added a color to any legend, we don't
+        # add it again to avoid redundancy in the charts and
+        # in order not to waste space.
+        #
+        if (colorAlreadyUsedInLegend.has_key(fColor)):
+            continue;
+        else:
+            colorAlreadyUsedInLegend[fColor] = True;
+
+        r = p.quad(left=0, right=1, bottom=0, top=1, color=fColor);
+
+        lItem = LegendItem(label = func,
+                           renderers = [r]);
+        legendItems.append(lItem);
+
+        # Cap the number of items in a legend, so it can
+        # fit horizontally.
+        if (len(legendItems) == MAX_ITEMS_PER_LEGEND):
+            numLegends = addLegend(p, legendItems, numLegends);
+
+    # Add whatever legend items did not get added
+    if (len(legendItems) > 0):
+        numLegends = addLegend(p, legendItems, numLegends);
+
+    # Plot height is the function of the maximum call stack and the number of
+    # legends
+    p.plot_height =  (numLegends * pixelsPerLegend) \
+                     + max((y_max+1) * pixelsPerStackLevel, 100) \
+                     + pixelsForTitle;
+
+    return p;
 #
 # Here we generate plots that span all the input files. Each plot shows
 # the timelines for all files, stacked vertically. The timeline shows
@@ -256,16 +343,79 @@ def createCallstackSeries(data):
 # across the timelines for all files. We call it a bucket, because it
 # corresponds to a bucket in the outlier histogram.
 #
-def generateCrossFilePlotsForBucket(i):
+def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
 
-    fileName = "bucket-" + str(i) + ".html";
+    global bucketDir;
+    global colorAlreadyUsedInLegend;
 
-    
+    figuresForAllFiles = [];
+    fileName = bucketDir + "/bucket-" + str(i) + ".html";
+
+    reset_output();
+
+    # The following dictionary keeps track of legends. We need
+    # a legend for each new HTML file. So we reset the dictionary
+    # before generating a new file.
+    #
+    colorAlreadyUsedInLegend = {};
+
+    intervalTitle = "Interval " + "{:,}".format(lowerBound) + \
+                    " to " + "{:,}".format(upperBound) + \
+                    " CPU cycles";
+
+    print("Generating " + intervalTitle + " into file " + fileName);
+
+    # Select from the dataframe for this file the records whose 'start'
+    # and 'end' timestamps fall within the lower and upper bound.
+    #
+    for fname, fileDF in perFileDataFrame.iteritems():
+        bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
+                              & (fileDF['start'] < upperBound)];
+        if (bucketDF.size == 0):
+            continue;
+
+        print("\t for " + fname);
+
+        largestStackDepth = bucketDF['stackdepthNext'].max();
+        figureTitle = fname + ": " + intervalTitle;
+        figure = generateBucketChartForFile(figureTitle, bucketDF,
+                                            largestStackDepth,
+                                            lowerBound, upperBound);
+
+        figuresForAllFiles.append(figure);
+
+    savedFileName = save(column(figuresForAllFiles),
+                         filename = fileName, title=intervalTitle);
+    return savedFileName;
+
+# Generate plots of time series slices across all files for each bucket
+# in the outlier histogram. Save each cross-file slice to an HTML file.
+#
+def generateTSSlicesForBuckets():
+
+    global firstTimeStamp;
+    global lastTimeStamp;
+    global plotWidth;
+    global pixelsPerWidthUnit;
+
+    bucketFilenames = [];
+
+    numBuckets = plotWidth / pixelsPerWidthUnit;
+    timeUnitsPerBucket = (lastTimeStamp - firstTimeStamp) / numBuckets;
+
+    for i in range(numBuckets):
+        lowerBound = i * timeUnitsPerBucket;
+        upperBound = (i+1) * timeUnitsPerBucket;
+
+        fileName = generateCrossFilePlotsForBucket(i, lowerBound,
+                                                       upperBound);
+        bucketFilenames.append(fileName);
+
+    return bucketFilenames;
 
 def processFile(fname):
 
     global perFileDataFrame;
-    global perFileLargestStackDepth;
     global perFuncDF;
 
     rawData = pd.read_csv(fname,
@@ -275,10 +425,9 @@ def processFile(fname):
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
-    iDF, largestStackDepth = createCallstackSeries(rawData);
+    iDF = createCallstackSeries(rawData);
 
     perFileDataFrame[fname] = iDF;
-    perFileLargestStackDepth[fname] = largestStackDepth;
 
     for func in funcToColor.keys():
 
@@ -301,9 +450,9 @@ def processFile(fname):
 # all functions whose duration exceeded the average by more than
 # two standard deviations.
 #
-def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
+def createOutlierHistogramForFunction(func, funcDF, durationThreshold,
+                                      bucketFilenames):
 
-    global bucketDir;
     global firstTimeStamp;
     global lastTimeStamp;
     global plotWidth;
@@ -332,41 +481,29 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
         stdDev = funcDF['durations'].std();
         durationThreshold = average + STDEV_MULT * stdDev;
 
-#        print(color.PURPLE + color.UNDERLINE + func + color.END);
-#        print("Average duration: " + color.BOLD + str(average) + color.END);
-#        print("Standard deviation: " + color.BOLD + str(stdDev) + color.END);
-#        print;
-
     numBuckets = plotWidth / pixelsPerWidthUnit;
     timeUnitsPerBucket = (lastTimeStamp - firstTimeStamp) / numBuckets;
 
     lowerBounds = [];
     upperBounds = [];
     bucketHeights = [];
-    bucketFilenames = [];
     maxOutliers = 0;
 
     for i in range(numBuckets):
         lowerBound = i * timeUnitsPerBucket;
         upperBound = (i+1) * timeUnitsPerBucket;
 
-        intervalDF = funcDF.loc[(funcDF['start'] >= lowerBound)
-                                & (funcDF['end'] < upperBound)
+        bucketDF = funcDF.loc[(funcDF['start'] >= lowerBound)
+                                & (funcDF['start'] < upperBound)
                                 & (funcDF['durations'] >= durationThreshold)];
 
-        numOutliers = intervalDF.size;
+        numOutliers = bucketDF.size;
         if (numOutliers > maxOutliers):
             maxOutliers = numOutliers;
 
         lowerBounds.append(lowerBound);
         upperBounds.append(upperBound);
         bucketHeights.append(numOutliers);
-
-        # Generate cross-thread charts for this bucket and write
-        # them to an HTML file for this bucket."
-        #
-        fileName = generateCrossFilePlotsForBucket(i);
-        bucketFilenames.append(bucketDir + "/" + fileName);
 
     if (maxOutliers == 0):
         return None;
@@ -377,6 +514,7 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
     dict['height'] = bucketHeights;
     dict['bottom'] = [0] * len(lowerBounds);
     dict['bucketfiles'] = bucketFilenames;
+
     dataframe = pd.DataFrame(data=dict);
 
     return plotOutlierHistogram(dataframe, maxOutliers, func,
@@ -384,6 +522,7 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold):
 
 def main():
 
+    global bucketDir;
     global perFuncDF;
 
     figuresForAllFunctions = [];
@@ -410,15 +549,31 @@ def main():
     # Normalize all intervals by subtracting the first timestamp.
     normalizeIntervalData();
 
+    # Create a directory for the files that display the data summarized
+    # in each bucket of the outlier histogram. We call these "bucket files".
+    #
+    if not os.path.exists(bucketDir):
+        os.makedirs(bucketDir)
+
+    # Generate plots of time series slices across all files for each bucket
+    # in the outlier histogram. Save each cross-file slice to an HTML file.
+    #
+    fileNameList = generateTSSlicesForBuckets();
+
     # Generate a histogram of outlier durations
     for func in sorted(perFuncDF.keys()):
         funcDF = perFuncDF[func];
-        figure = createOutlierHistogramForFunction(func, funcDF, -1);
+        figure = createOutlierHistogramForFunction(func, funcDF, -1,
+                                                   fileNameList);
         if (figure is not None):
             figuresForAllFunctions.append(figure);
 
+    reset_output();
     output_file(filename = "WT-outliers.html", title="Outlier histograms");
     show(column(figuresForAllFunctions));
 
 if __name__ == '__main__':
     main()
+
+
+
