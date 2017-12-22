@@ -70,7 +70,7 @@ pixelsPerWidthUnit = 5;
 # The coefficient by which we multiply the standard deviation when
 # setting the outlier threshold, in case it is not specified by the user.
 #
-STDEV_MULT = 2;
+STDEV_MULT = 4;
 
 
 def initColorList():
@@ -157,7 +157,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     TOOLS = [hover, "tap, reset"];
 
     p = figure(title = figureTitle, plot_width = plotWidth,
-               plot_height = (maxOutliers + 1) * pixelsPerHeightUnit + \
+               plot_height = max(5, (maxOutliers + 1)) * pixelsPerHeightUnit + \
                pixelsForTitle,
                y_range = (0, maxOutliers + 1),
                x_axis_label = "Execution timeline (CPU cycles)",
@@ -305,7 +305,6 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
     p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
            top = 'stackdepthNext', color = 'color',
            source=cds);
-           #line_color="lightgrey");
 
     for func, fColor in funcToColor.iteritems():
 
