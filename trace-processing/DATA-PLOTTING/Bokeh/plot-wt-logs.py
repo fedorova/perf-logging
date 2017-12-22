@@ -257,6 +257,10 @@ def main():
 
     figuresForAllFiles = [];
 
+    for x in range(1000000):
+        print '{0}\r'.format(x),
+    print
+
     # Set up the argument parser
     #
     parser = argparse.ArgumentParser(description=

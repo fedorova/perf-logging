@@ -6,6 +6,7 @@ from bokeh.models import ColumnDataSource, CustomJS, HoverTool, FixedTicker
 from bokeh.models import Legend, LegendItem
 from bokeh.models import NumeralTickFormatter, OpenURL, TapTool
 from bokeh.plotting import figure, output_file, reset_output, save, show
+from bokeh.resources import CDN
 import matplotlib
 import numpy as np
 import os
@@ -79,7 +80,6 @@ def initColorList():
     colorList = matplotlib.colors.cnames.keys();
 
     for color in colorList:
-        print color;
         # Some browsers break if you try to give them 'sage'
         if (color == "sage"):
             colorList.remove(color);
@@ -393,14 +393,11 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
                     " to " + "{:,}".format(upperBound) + \
                     " CPU cycles";
 
-    print("Generating " + intervalTitle + " into file " + fileName);
-
     # Select from the dataframe for this file the records whose 'start'
     # and 'end' timestamps fall within the lower and upper bound.
     #
     for fname, fileDF in perFileDataFrame.iteritems():
 
-        print("\t for " + fname);
         bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
                               & (fileDF['start'] < upperBound)];
         if (bucketDF.size == 0):
@@ -415,7 +412,8 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
         figuresForAllFiles.append(figure);
 
     savedFileName = save(column(figuresForAllFiles),
-                         filename = fileName, title=intervalTitle);
+                         filename = fileName, title=intervalTitle,
+                         resources=CDN);
     return savedFileName;
 
 # Generate plots of time series slices across all files for each bucket
@@ -439,8 +437,14 @@ def generateTSSlicesForBuckets():
 
         fileName = generateCrossFilePlotsForBucket(i, lowerBound,
                                                        upperBound);
+
+        percentComplete = float(i) / float(numBuckets) * 100;
+        print(color.BLUE + color.BOLD + " Generating timeline charts... "),
+        sys.stdout.write("%d%% complete  \r" % (percentComplete) );
+        sys.stdout.flush();
         bucketFilenames.append(fileName);
 
+    print(color.END);
     return bucketFilenames;
 
 def processFile(fname):
@@ -590,6 +594,8 @@ def main():
     #
     fileNameList = generateTSSlicesForBuckets();
 
+    totalFuncs = len(perFuncDF.keys());
+    i = 0;
     # Generate a histogram of outlier durations
     for func in sorted(perFuncDF.keys()):
         funcDF = perFuncDF[func];
@@ -598,6 +604,13 @@ def main():
         if (figure is not None):
             figuresForAllFunctions.append(figure);
 
+        i += 1;
+        percentComplete = float(i) / float(totalFuncs) * 100;
+        print(color.BLUE + color.BOLD + " Generating outlier histograms... "),
+        sys.stdout.write("%d%% complete  \r" % (percentComplete) );
+        sys.stdout.flush();
+
+    print(color.END);
     reset_output();
     output_file(filename = "WT-outliers.html", title="Outlier histograms");
     show(column(figuresForAllFunctions));
