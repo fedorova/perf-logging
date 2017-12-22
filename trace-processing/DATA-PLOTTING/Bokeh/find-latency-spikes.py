@@ -79,6 +79,7 @@ def initColorList():
     colorList = matplotlib.colors.cnames.keys();
 
     for color in colorList:
+        print color;
         # Some browsers break if you try to give them 'sage'
         if (color == "sage"):
             colorList.remove(color);
@@ -168,7 +169,12 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
 
     p.quad(left = 'lowerbound', right = 'upperbound', bottom = 'bottom',
            top = 'height', color = funcToColor[func], source = cds,
-           line_color="lightgrey");
+           nonselection_fill_color=funcToColor[func],
+           nonselection_fill_alpha = 1.0,
+           line_color = "lightgrey",
+           selection_fill_color = funcToColor[func],
+           selection_line_color="grey"
+    );
 
     url = "@bucketfiles";
     taptool = p.select(type=TapTool);
@@ -298,9 +304,18 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
 
     p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
            top = 'stackdepthNext', color = 'color',
-           source=cds, line_color="lightgrey");
+           source=cds);
+           #line_color="lightgrey");
 
     for func, fColor in funcToColor.iteritems():
+
+        # If this function is not present in this dataframe,
+        # we don't care about it.
+        #
+        boolVec = (dataframe['function'] == func);
+        fDF = dataframe[boolVec];
+        if (fDF.size == 0):
+            continue;
 
         # If we already added a color to any legend, we don't
         # add it again to avoid redundancy in the charts and
@@ -333,6 +348,21 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
                      + pixelsForTitle;
 
     return p;
+
+
+def generateEmptyDataset():
+
+    dict = {};
+    dict['color'] = [0];
+    dict['durations'] = [0];
+    dict['start'] = [0];
+    dict['end'] = [0];
+    dict['function'] = [""];
+    dict['stackdepth'] = [0];
+    dict['stackdepthNext'] = [0];
+
+    return pd.DataFrame(data=dict);
+
 #
 # Here we generate plots that span all the input files. Each plot shows
 # the timelines for all files, stacked vertically. The timeline shows
@@ -369,12 +399,12 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
     # and 'end' timestamps fall within the lower and upper bound.
     #
     for fname, fileDF in perFileDataFrame.iteritems():
+
+        print("\t for " + fname);
         bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
                               & (fileDF['start'] < upperBound)];
         if (bucketDF.size == 0):
-            continue;
-
-        print("\t for " + fname);
+            bucketDF = generateEmptyDataset();
 
         largestStackDepth = bucketDF['stackdepthNext'].max();
         figureTitle = fname + ": " + intervalTitle;
