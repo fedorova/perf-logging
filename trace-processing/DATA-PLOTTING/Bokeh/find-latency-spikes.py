@@ -12,6 +12,7 @@ import numpy as np
 import os
 import pandas as pd
 import sys
+import traceback
 
 # A directory where we store cross-file plots for each bucket of the outlier
 # histogram.
@@ -70,7 +71,7 @@ pixelsPerWidthUnit = 5;
 # The coefficient by which we multiply the standard deviation when
 # setting the outlier threshold, in case it is not specified by the user.
 #
-STDEV_MULT = 4;
+STDEV_MULT = 2;
 
 
 def initColorList():
@@ -116,23 +117,38 @@ def markIntervalBeginning(row):
 def getIntervalData(intervalEnd):
 
     global intervalBeginningsStack;
+
+    matchFound = False;
+
     if (intervalEnd[1] != 1):
         print("createTimedeltaObject: only rows with event type 1 can be used");
         print(str(intervalEnd));
-        return;
+        return None;
 
     if (len(intervalBeginningsStack) < 1):
         print("Nothing on the intervalBeginningsStack. I cannot find the " +
               "beginning for this interval.");
         print(str(intervalEnd));
-        return;
+        return None;
 
-    intervalBegin = intervalBeginningsStack.pop();
-    if (intervalBegin[2] != intervalEnd[2]):
-        print("Interval end does not match the available interval beginning.");
-        print("Begin: " + str(intervalBegin));
-        print("End: " + str(intervalEnd));
-        return;
+    while (not matchFound):
+        intervalBegin = intervalBeginningsStack.pop();
+        if (intervalBegin is None):
+            print(color.RED + color.BOLD +
+                  "Could not find the matching operation begin record " +
+                  " for the following operation end record: " + color.END
+                  + str(intervalEnd));
+            return None;
+        if (intervalBegin[2] != intervalEnd[2]):
+            print(color.RED + color.BOLD +
+                  "Operation end record does not match the available " +
+                  "operation begin record. Your log file may be incomplete. " +
+                  "Skipping the begin record."
+                  + color.END);
+            print("Begin: " + str(intervalBegin));
+            print("End: " + str(intervalEnd));
+        else:
+            matchFound = True;
 
     # This value determines how deep we are in the callstack
     stackDepth = len(intervalBeginningsStack);
@@ -216,8 +232,12 @@ def createCallstackSeries(data):
         if (row[1] == 0):
             markIntervalBeginning(row);
         elif (row[1] == 1):
-            intervalBegin, intervalEnd, function, stackDepth \
-                = getIntervalData(row);
+            try:
+                intervalBegin, intervalEnd, function, stackDepth \
+                    = getIntervalData(row);
+            except:
+                print(color.RED + color.BOLD + " ...skipping." + color.END);
+                continue;
 
             if (intervalBegin < firstTimeStamp):
                 firstTimeStamp =  intervalBegin;
@@ -249,7 +269,6 @@ def createCallstackSeries(data):
     dataframe['durations'] = dataframe['end'] - dataframe['start'];
 
     return dataframe;
-
 
 def addLegend(p, legendItems, numLegends):
 
@@ -363,6 +382,46 @@ def generateEmptyDataset():
     return pd.DataFrame(data=dict);
 
 #
+# If we have incomplete data, where some functions have a begin record,
+# but not an end record, we may have an appearance of skipped stack levels.
+#
+# For instance:
+#
+# begin foo
+# begin foo1
+# begin foo2
+# end   foo2
+# end   foo
+#
+# foo will have stack level 0. foo1 will be skipped, foo2 will have
+# stack level 2. That's because at the time we are assigning a stack level
+# to foo2, we don't yet know that foo1 will have to be skipped -- what if
+# we find a matching record later?
+#
+# Therefore, we go through the data and adjust all stack levels that appear
+# skipped.
+#
+def cleanUpIntervalRecords(bucketDF):
+
+    df = bucketDF.sort_values(by=['start']);
+    df = df.reset_index(drop = True);
+
+    i = 0;
+    prevStackLevel = df.at[i, 'stackdepth'];
+
+    for i in range(len(df.index)):
+
+        if ((df.at[i, 'stackdepth'] - prevStackLevel) > 1):
+            df.at[i, 'stackdepth'] = prevStackLevel + 1;
+            df.at[i, 'stackdepthNext'] = df.at[i, 'stackdepth'] + 1;
+
+        prevStackLevel = df.at[i, 'stackdepth'];
+        i += 1;
+
+    return df;
+
+
+#
 # Here we generate plots that span all the input files. Each plot shows
 # the timelines for all files, stacked vertically. The timeline shows
 # the function callstacks over time from this file.
@@ -392,16 +451,25 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
                     " to " + "{:,}".format(upperBound) + \
                     " CPU cycles";
 
+    #print("Bucket " + str(i));
+    #print("Generating bucket for interval " + intervalTitle);
+
     # Select from the dataframe for this file the records whose 'start'
     # and 'end' timestamps fall within the lower and upper bound.
     #
     for fname, fileDF in perFileDataFrame.iteritems():
 
+        #print("\tfor file " + fname);
+
         bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
                               & (fileDF['start'] < upperBound)];
-        if (bucketDF.size == 0):
-            bucketDF = generateEmptyDataset();
 
+        #print("\tdataframe size: " + str(bucketDF.size));
+        if (bucketDF.size == 0):
+            #bucketDF = generateEmptyDataset();
+            continue;
+
+        bucketDF = cleanUpIntervalRecords(bucketDF);
         largestStackDepth = bucketDF['stackdepthNext'].max();
         figureTitle = fname + ": " + intervalTitle;
         figure = generateBucketChartForFile(figureTitle, bucketDF,
@@ -410,9 +478,13 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
 
         figuresForAllFiles.append(figure);
 
-    savedFileName = save(column(figuresForAllFiles),
-                         filename = fileName, title=intervalTitle,
-                         resources=CDN);
+    if (len(figuresForAllFiles) > 0):
+        savedFileName = save(column(figuresForAllFiles),
+                             filename = fileName, title=intervalTitle,
+                             resources=CDN);
+    else:
+        savedFileName = "no-data.html";
+
     return savedFileName;
 
 # Generate plots of time series slices across all files for each bucket
@@ -458,6 +530,7 @@ def processFile(fname):
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
+    print(color.BOLD + "file " + str(fname) + color.END);
     iDF = createCallstackSeries(rawData);
 
     perFileDataFrame[fname] = iDF;
@@ -503,7 +576,7 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold,
     funcDF['start'] = funcDF['start'] - firstTimeStamp;
     funcDF['end'] = funcDF['end'] - firstTimeStamp;
 
-    funcDF = funcDF.sort_values(by=['start'])
+    funcDF = funcDF.sort_values(by=['start']);
 
     # If duration threshold equals -1 compute the average and standard
     # deviation. Our actual threashold will be the value exceeding two
