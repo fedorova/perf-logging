@@ -207,6 +207,7 @@ def normalizeIntervalData():
     global perFileDataFrame;
 
     for file, df in perFileDataFrame.iteritems():
+        df['origstart'] = df['start'];
         df['start'] = df['start'] - firstTimeStamp;
         df['end'] = df['end'] - firstTimeStamp;
 
@@ -299,7 +300,8 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
 
     hover = HoverTool(tooltips=[
         ("function", "@function"),
-        ("duration", "@durations{0,0}")
+        ("duration", "@durations{0,0}"),
+        ("log file begin timestamp", "@origstart{0,0}")
     ]);
 
     TOOLS = [hover];
@@ -401,6 +403,9 @@ def generateEmptyDataset():
 # Therefore, we go through the data and adjust all stack levels that appear
 # skipped.
 #
+# The rule is that every function foo2 should be at the same level as the last
+# function foo1 that completed prior to it.
+#
 def cleanUpIntervalRecords(bucketDF):
 
     df = bucketDF.sort_values(by=['start']);
@@ -408,15 +413,21 @@ def cleanUpIntervalRecords(bucketDF):
 
     i = 0;
     prevStackLevel = df.at[i, 'stackdepth'];
+    prevEndTimestamp = 0;
 
     for i in range(len(df.index)):
 
-        if ((df.at[i, 'stackdepth'] - prevStackLevel) > 1):
-            df.at[i, 'stackdepth'] = prevStackLevel + 1;
-            df.at[i, 'stackdepthNext'] = df.at[i, 'stackdepth'] + 1;
+        if (prevEndTimestamp < df.at[i, 'start']):
+            if ((df.at[i, 'stackdepth'] - prevStackLevel) > 0):
+                df.at[i, 'stackdepth'] = prevStackLevel;
+                df.at[i, 'stackdepthNext'] = df.at[i, 'stackdepth'] + 1;
+        else:
+            if ((df.at[i, 'stackdepth'] - prevStackLevel) > 1):
+                df.at[i, 'stackdepth'] = prevStackLevel + 1;
+                df.at[i, 'stackdepthNext'] = df.at[i, 'stackdepth'] + 1;
 
         prevStackLevel = df.at[i, 'stackdepth'];
-        i += 1;
+        prevEndTimestamp = df.at[i, 'end'];
 
     return df;
 
@@ -464,6 +475,12 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
         bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
                               & (fileDF['start'] < upperBound)];
 
+        if (lowerBound == 11479487124):
+            print("-----------------------------------");
+            print("Before cleanup:");
+            for row in bucketDF.iterrows():
+                print row;
+
         #print("\tdataframe size: " + str(bucketDF.size));
         if (bucketDF.size == 0):
             #bucketDF = generateEmptyDataset();
@@ -475,6 +492,12 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
         figure = generateBucketChartForFile(figureTitle, bucketDF,
                                             largestStackDepth,
                                             lowerBound, upperBound);
+
+        if (lowerBound == 11479487124):
+            print("-----------------------------------");
+            print("After cleanup:");
+            for row in bucketDF.iterrows():
+                print row;
 
         figuresForAllFiles.append(figure);
 
