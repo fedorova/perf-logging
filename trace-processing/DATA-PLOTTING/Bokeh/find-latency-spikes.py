@@ -163,6 +163,8 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
 
     cds = ColumnDataSource(dataframe);
 
+    print("Function " + func + ", max outliers is " + str(maxOutliers));
+
     figureTitle = "Occurrences of " + func + " that took longer than " \
                   + "{:,.0f}".format(durationThreshold) + " CPU cycles.";
 
@@ -173,8 +175,9 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     TOOLS = [hover, "tap, reset"];
 
     p = figure(title = figureTitle, plot_width = plotWidth,
-               plot_height = max(5, (maxOutliers + 1)) * pixelsPerHeightUnit + \
-               pixelsForTitle,
+               plot_height = min(500, (max(5, (maxOutliers + 1)) \
+                                       * pixelsPerHeightUnit + \
+                                       pixelsForTitle)),
                y_range = (0, maxOutliers + 1),
                x_axis_label = "Execution timeline (CPU cycles)",
                y_axis_label = "Number of outliers", tools = TOOLS);
@@ -182,6 +185,8 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     p.yaxis.ticker = FixedTicker(ticks = range(0, maxOutliers+1));
     p.ygrid.ticker = FixedTicker(ticks = range(0, maxOutliers+1));
     p.xaxis.formatter = NumeralTickFormatter(format="0,");
+
+    print("Plot height is " + str(p.plot_height));
 
     p.quad(left = 'lowerbound', right = 'upperbound', bottom = 'bottom',
            top = 'height', color = funcToColor[func], source = cds,
@@ -210,6 +215,8 @@ def normalizeIntervalData():
         df['origstart'] = df['start'];
         df['start'] = df['start'] - firstTimeStamp;
         df['end'] = df['end'] - firstTimeStamp;
+
+        perFileDataFrame[file] = cleanUpIntervalRecords(df);
 
 def createCallstackSeries(data):
 
@@ -462,42 +469,23 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
                     " to " + "{:,}".format(upperBound) + \
                     " CPU cycles";
 
-    #print("Bucket " + str(i));
-    #print("Generating bucket for interval " + intervalTitle);
-
     # Select from the dataframe for this file the records whose 'start'
     # and 'end' timestamps fall within the lower and upper bound.
     #
     for fname, fileDF in perFileDataFrame.iteritems():
 
-        #print("\tfor file " + fname);
-
         bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
                               & (fileDF['start'] < upperBound)];
 
-        if (lowerBound == 11479487124):
-            print("-----------------------------------");
-            print("Before cleanup:");
-            for row in bucketDF.iterrows():
-                print row;
-
-        #print("\tdataframe size: " + str(bucketDF.size));
         if (bucketDF.size == 0):
             #bucketDF = generateEmptyDataset();
             continue;
 
-        bucketDF = cleanUpIntervalRecords(bucketDF);
         largestStackDepth = bucketDF['stackdepthNext'].max();
         figureTitle = fname + ": " + intervalTitle;
         figure = generateBucketChartForFile(figureTitle, bucketDF,
                                             largestStackDepth,
                                             lowerBound, upperBound);
-
-        if (lowerBound == 11479487124):
-            print("-----------------------------------");
-            print("After cleanup:");
-            for row in bucketDF.iterrows():
-                print row;
 
         figuresForAllFiles.append(figure);
 
@@ -698,6 +686,12 @@ def main():
                                                    fileNameList);
         if (figure is not None):
             figuresForAllFunctions.append(figure);
+            fname = func + ".html";
+            print("Figure for func " + func + " saved to " + fname);
+            reset_output();
+            save(figure, filename=fname, title=func, resources=CDN);
+        else:
+            print("No figure was generated for function " + func);
 
         i += 1;
         percentComplete = float(i) / float(totalFuncs) * 100;
