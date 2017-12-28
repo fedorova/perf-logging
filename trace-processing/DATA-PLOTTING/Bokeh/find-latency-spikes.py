@@ -182,11 +182,13 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
                x_axis_label = "Execution timeline (CPU cycles)",
                y_axis_label = "Number of outliers", tools = TOOLS);
 
-    p.yaxis.ticker = FixedTicker(ticks = range(0, maxOutliers+1));
-    p.ygrid.ticker = FixedTicker(ticks = range(0, maxOutliers+1));
+    y_ticker_max = p.plot_height / pixelsPerHeightUnit;
+    y_ticker_step = max(1, (maxOutliers + 1)/y_ticker_max);
+    p.yaxis.ticker = FixedTicker(ticks =
+                                 range(0, maxOutliers + 1, y_ticker_step));
+    p.ygrid.ticker = FixedTicker(ticks =
+                                 range(0, maxOutliers + 1, y_ticker_step));
     p.xaxis.formatter = NumeralTickFormatter(format="0,");
-
-    print("Plot height is " + str(p.plot_height));
 
     p.quad(left = 'lowerbound', right = 'upperbound', bottom = 'bottom',
            top = 'height', color = funcToColor[func], source = cds,
@@ -686,12 +688,6 @@ def main():
                                                    fileNameList);
         if (figure is not None):
             figuresForAllFunctions.append(figure);
-            fname = func + ".html";
-            print("Figure for func " + func + " saved to " + fname);
-            reset_output();
-            save(figure, filename=fname, title=func, resources=CDN);
-        else:
-            print("No figure was generated for function " + func);
 
         i += 1;
         percentComplete = float(i) / float(totalFuncs) * 100;
