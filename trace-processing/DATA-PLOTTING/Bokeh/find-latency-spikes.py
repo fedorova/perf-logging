@@ -46,11 +46,6 @@ lastColorUsed = 0;
 firstTimeStamp = sys.maxsize;
 lastTimeStamp = 0;
 
-# Push operation opening records onto this callstack until the
-# corresponding closing records are found.
-#
-intervalBeginningsStack = [];
-
 # A dictionary that holds a reference to the raw dataframe for each file.
 #
 perFileDataFrame = {};
@@ -102,11 +97,6 @@ def getColorForFunction(function):
 
     return funcToColor[function];
 
-def markIntervalBeginning(row):
-
-    global intervalBeginningsStack;
-
-    intervalBeginningsStack.append(row);
 
 #
 # An intervalEnd is a tuple of three items.
@@ -114,9 +104,7 @@ def markIntervalBeginning(row):
 # item #1 is the event type,
 # item #2 is the function name.
 #
-def getIntervalData(intervalEnd, logfile):
-
-    global intervalBeginningsStack;
+def getIntervalData(intervalBeginningsStack, intervalEnd, logfile):
 
     errorOccurred = False;
     matchFound = False;
@@ -241,6 +229,7 @@ def createCallstackSeries(data, logfilename):
     endIntervals = [];
     errorReported = False;
     functionNames = [];
+    intervalBeginningsStack = [];
     largestStackDepth = 0;
     logfile = None;
     stackDepths = [];
@@ -258,11 +247,11 @@ def createCallstackSeries(data, logfilename):
         # row[2] is the function name.
         #
         if (row[1] == 0):
-            markIntervalBeginning(row);
+            intervalBeginningsStack.append(row);
         elif (row[1] == 1):
             try:
                 intervalBegin, intervalEnd, function, stackDepth, error\
-                    = getIntervalData(row, logfile);
+                    = getIntervalData(intervalBeginningsStack, row, logfile);
                 if (error and (not errorReported)):
                     errorReported = reportDataError(logfile, logfilename);
             except:
@@ -398,7 +387,6 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
                      + pixelsForTitle;
 
     return p;
-
 
 def generateEmptyDataset():
 
