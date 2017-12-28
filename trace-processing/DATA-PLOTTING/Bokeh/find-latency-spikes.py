@@ -114,46 +114,48 @@ def markIntervalBeginning(row):
 # item #1 is the event type,
 # item #2 is the function name.
 #
-def getIntervalData(intervalEnd):
+def getIntervalData(intervalEnd, logfile):
 
     global intervalBeginningsStack;
 
+    errorOccurred = False;
     matchFound = False;
 
     if (intervalEnd[1] != 1):
-        print("createTimedeltaObject: only rows with event type 1 can be used");
-        print(str(intervalEnd));
+        logfile.write(
+            "getIntervaldata: only rows with event type 1 can be used.\n");
+        logfile.write(str(intervalEnd) + "\n");
         return None;
 
     if (len(intervalBeginningsStack) < 1):
-        print("Nothing on the intervalBeginningsStack. I cannot find the " +
-              "beginning for this interval.");
-        print(str(intervalEnd));
+        logfile.write("Nothing on the intervalBeginningsStack. " +
+                      "I cannot find the beginning for this interval.\n");
+        logfile.write(str(intervalEnd) + "\n");
         return None;
 
     while (not matchFound):
         intervalBegin = intervalBeginningsStack.pop();
         if (intervalBegin is None):
-            print(color.RED + color.BOLD +
-                  "Could not find the matching operation begin record " +
-                  " for the following operation end record: " + color.END
-                  + str(intervalEnd));
+            logfile.write("Could not find the matching operation begin record" +
+                          " for the following operation end record: \n");
+            logfile.write(str(intervalEnd) + "\n");
             return None;
         if (intervalBegin[2] != intervalEnd[2]):
-            print(color.RED + color.BOLD +
-                  "Operation end record does not match the available " +
-                  "operation begin record. Your log file may be incomplete. " +
-                  "Skipping the begin record."
-                  + color.END);
-            print("Begin: " + str(intervalBegin));
-            print("End: " + str(intervalEnd));
+            logfile.write("Operation end record does not match the available " +
+                          "operation begin record. " +
+                          "Your log file may be incomplete.\n" +
+                          "Skipping the begin record.\n");
+            logfile.write("Begin: " + str(intervalBegin) + "\n");
+            logfile.write("End: " + str(intervalEnd) + "\n");
+            errorOccurred = True;
         else:
             matchFound = True;
 
     # This value determines how deep we are in the callstack
     stackDepth = len(intervalBeginningsStack);
 
-    return intervalBegin[0], intervalEnd[0], intervalEnd[2], stackDepth;
+    return intervalBegin[0], intervalEnd[0], intervalEnd[2], stackDepth, \
+        errorOccurred;
 
 def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
 
@@ -162,8 +164,6 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     global plotWidth;
 
     cds = ColumnDataSource(dataframe);
-
-    print("Function " + func + ", max outliers is " + str(maxOutliers));
 
     figureTitle = "Occurrences of " + func + " that took longer than " \
                   + "{:,.0f}".format(durationThreshold) + " CPU cycles.";
@@ -207,11 +207,14 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
 
 # From all timestamps subtract the smallest observed timestamp, so that
 # our execution timeline begins at zero.
+# Cleanup the data to remove incomplete records and fix their effects.
 #
-def normalizeIntervalData():
+def normalizeAndCleanIntervalData():
 
     global firstTimeStamp;
     global perFileDataFrame;
+
+    print(color.BLUE + color.BOLD + "Cleaning data..." + color.END);
 
     for file, df in perFileDataFrame.iteritems():
         df['origstart'] = df['start'];
@@ -220,7 +223,14 @@ def normalizeIntervalData():
 
         perFileDataFrame[file] = cleanUpIntervalRecords(df);
 
-def createCallstackSeries(data):
+def reportDataError(logfile, logfilename):
+
+    if (logfile is not sys.stdout):
+        print(color.BOLD + color.RED + "Your data may have errors. " +
+              "Check the file " + logfilename + " for details." + color.END);
+    return True;
+
+def createCallstackSeries(data, logfilename):
 
     global firstTimeStamp;
     global lastTimeStamp;
@@ -229,11 +239,19 @@ def createCallstackSeries(data):
     beginIntervals = [];
     dataFrame = None;
     endIntervals = [];
+    errorReported = False;
     functionNames = [];
     largestStackDepth = 0;
+    logfile = None;
     stackDepths = [];
     stackDepthsNext = [];
     thisIsFirstRow = True;
+
+    # Let's open the log file.
+    try:
+        logfile = open(logfilename, "w");
+    except:
+        logfile = sys.stdout;
 
     for row in data.itertuples():
         # row[0] is the timestamp, row[1] is the event type,
@@ -243,10 +261,13 @@ def createCallstackSeries(data):
             markIntervalBeginning(row);
         elif (row[1] == 1):
             try:
-                intervalBegin, intervalEnd, function, stackDepth \
-                    = getIntervalData(row);
+                intervalBegin, intervalEnd, function, stackDepth, error\
+                    = getIntervalData(row, logfile);
+                if (error and (not errorReported)):
+                    errorReported = reportDataError(logfile, logfilename);
             except:
-                print(color.RED + color.BOLD + " ...skipping." + color.END);
+                if (not errorReported):
+                    errorReported = reportDataError(logfile, logfilename);
                 continue;
 
             if (intervalBegin < firstTimeStamp):
@@ -333,8 +354,8 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
     p.xaxis.formatter = NumeralTickFormatter(format="0,")
 
     p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
-           top = 'stackdepthNext', color = 'color',
-           source=cds);
+           top = 'stackdepthNext', color = 'color', line_color = "lightgrey",
+           line_width = 0.5, source=cds);
 
     for func, fColor in funcToColor.iteritems():
 
@@ -543,8 +564,9 @@ def processFile(fname):
                        dtype={"Event": np.int32, "Timestamp": np.int64},
                        thousands=",");
 
-    print(color.BOLD + "file " + str(fname) + color.END);
-    iDF = createCallstackSeries(rawData);
+    print(color.BOLD + color.BLUE +
+          "Processing file " + str(fname) + color.END);
+    iDF = createCallstackSeries(rawData, "." + fname + ".log");
 
     perFileDataFrame[fname] = iDF;
 
@@ -666,7 +688,7 @@ def main():
         processFile(fname);
 
     # Normalize all intervals by subtracting the first timestamp.
-    normalizeIntervalData();
+    normalizeAndCleanIntervalData();
 
     # Create a directory for the files that display the data summarized
     # in each bucket of the outlier histogram. We call these "bucket files".
