@@ -140,10 +140,9 @@ def getIntervalData(intervalBeginningsStack, intervalEnd, logfile):
             matchFound = True;
 
     # This value determines how deep we are in the callstack
-    stackDepth = len(intervalBeginningsStack);
+    # stackDepth = len(intervalBeginningsStack);
 
-    return intervalBegin[0], intervalEnd[0], intervalEnd[2], stackDepth, \
-        errorOccurred;
+    return intervalBegin[0], intervalEnd[0], intervalEnd[2], errorOccurred;
 
 def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
 
@@ -197,7 +196,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
 # our execution timeline begins at zero.
 # Cleanup the data to remove incomplete records and fix their effects.
 #
-def normalizeAndCleanIntervalData():
+def normalizeIntervalData():
 
     global firstTimeStamp;
     global perFileDataFrame;
@@ -209,14 +208,38 @@ def normalizeAndCleanIntervalData():
         df['start'] = df['start'] - firstTimeStamp;
         df['end'] = df['end'] - firstTimeStamp;
 
-        perFileDataFrame[file] = cleanUpIntervalRecords(df);
-
 def reportDataError(logfile, logfilename):
 
     if (logfile is not sys.stdout):
         print(color.BOLD + color.RED + "Your data may have errors. " +
               "Check the file " + logfilename + " for details." + color.END);
     return True;
+
+#
+# Go over all operation records in the dataframe and assign stack depths.
+#
+def assignStackDepths(dataframe):
+
+    stack = [];
+
+    df = dataframe.sort_values(by=['start']);
+    df = df.reset_index(drop = True);
+
+    for i in range(len(df.index)):
+
+        myStartTime = df.at[i, 'start'];
+
+        # Pop all items off stack whose end time is earlier than my
+        # start time. They are not part of my stack, so I don't want to
+        # count them.
+        #
+        while (len(stack) > 0 and stack[-1] < myStartTime):
+            stack.pop();
+
+        df.at[i, 'stackdepth'] = len(stack);
+        stack.append(df.at[i, 'end']);
+
+    return df;
 
 def createCallstackSeries(data, logfilename):
 
@@ -232,8 +255,6 @@ def createCallstackSeries(data, logfilename):
     intervalBeginningsStack = [];
     largestStackDepth = 0;
     logfile = None;
-    stackDepths = [];
-    stackDepthsNext = [];
     thisIsFirstRow = True;
 
     # Let's open the log file.
@@ -250,7 +271,7 @@ def createCallstackSeries(data, logfilename):
             intervalBeginningsStack.append(row);
         elif (row[1] == 1):
             try:
-                intervalBegin, intervalEnd, function, stackDepth, error\
+                intervalBegin, intervalEnd, function, error\
                     = getIntervalData(intervalBeginningsStack, row, logfile);
                 if (error and (not errorReported)):
                     errorReported = reportDataError(logfile, logfilename);
@@ -268,25 +289,39 @@ def createCallstackSeries(data, logfilename):
             beginIntervals.append(intervalBegin);
             endIntervals.append(intervalEnd);
             functionNames.append(function);
-            stackDepths.append(stackDepth);
-            stackDepthsNext.append(stackDepth + 1);
+            #stackDepths.append(stackDepth);
+            #stackDepthsNext.append(stackDepth + 1);
+
+            #print("Begin: " + str(intervalBegin)),
+            #print(" Func: " + function),
+            #print(" Stack depth: " + str(stackDepth));
 
         else:
             print("Invalid event in this line:");
             print(str(row[0]) + " " + str(row[1]) + " " + str(row[2]));
             continue;
 
+    if (len(intervalBeginningsStack) > 0):
+        logfile.write(str(len(intervalBeginningsStack)) + " operations had a " +
+                      "begin record, but no matching end records. " +
+                      "Please check that your operation tracking macros " +
+                      "are properly inserted.\n");
+        if (not errorReported):
+            errorReported = reportDataError(logfile, logfilename);
+        intervalBeginningsStack = [];
 
     dict = {};
     dict['color'] = colors;
     dict['start'] = beginIntervals;
     dict['end'] = endIntervals;
     dict['function'] = functionNames;
-    dict['stackdepth'] = stackDepths;
-    dict['stackdepthNext'] = stackDepthsNext;
+    dict['stackdepth'] = [0] * len(beginIntervals);
 
     dataframe = pd.DataFrame(data=dict);
+    dataframe = assignStackDepths(dataframe);
+
     dataframe['durations'] = dataframe['end'] - dataframe['start'];
+    dataframe['stackdepthNext'] = dataframe['stackdepth'] + 1;
 
     return dataframe;
 
@@ -402,55 +437,6 @@ def generateEmptyDataset():
     return pd.DataFrame(data=dict);
 
 #
-# If we have incomplete data, where some functions have a begin record,
-# but not an end record, we may have an appearance of skipped stack levels.
-#
-# For instance:
-#
-# begin foo
-# begin foo1
-# begin foo2
-# end   foo2
-# end   foo
-#
-# foo will have stack level 0. foo1 will be skipped, foo2 will have
-# stack level 2. That's because at the time we are assigning a stack level
-# to foo2, we don't yet know that foo1 will have to be skipped -- what if
-# we find a matching record later?
-#
-# Therefore, we go through the data and adjust all stack levels that appear
-# skipped.
-#
-# The rule is that every function foo2 should be at the same level as the last
-# function foo1 that completed prior to it.
-#
-def cleanUpIntervalRecords(bucketDF):
-
-    df = bucketDF.sort_values(by=['start']);
-    df = df.reset_index(drop = True);
-
-    i = 0;
-    prevStackLevel = df.at[i, 'stackdepth'];
-    prevEndTimestamp = 0;
-
-    for i in range(len(df.index)):
-
-        if (prevEndTimestamp < df.at[i, 'start']):
-            if ((df.at[i, 'stackdepth'] - prevStackLevel) > 0):
-                df.at[i, 'stackdepth'] = prevStackLevel;
-                df.at[i, 'stackdepthNext'] = df.at[i, 'stackdepth'] + 1;
-        else:
-            if ((df.at[i, 'stackdepth'] - prevStackLevel) > 1):
-                df.at[i, 'stackdepth'] = prevStackLevel + 1;
-                df.at[i, 'stackdepthNext'] = df.at[i, 'stackdepth'] + 1;
-
-        prevStackLevel = df.at[i, 'stackdepth'];
-        prevEndTimestamp = df.at[i, 'end'];
-
-    return df;
-
-
-#
 # Here we generate plots that span all the input files. Each plot shows
 # the timelines for all files, stacked vertically. The timeline shows
 # the function callstacks over time from this file.
@@ -483,8 +469,9 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
     # Select from the dataframe for this file the records whose 'start'
     # and 'end' timestamps fall within the lower and upper bound.
     #
-    for fname, fileDF in perFileDataFrame.iteritems():
+    for fname in sorted(perFileDataFrame.keys()):
 
+        fileDF = perFileDataFrame[fname];
         bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
                               & (fileDF['start'] < upperBound)];
 
@@ -494,6 +481,7 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
 
         largestStackDepth = bucketDF['stackdepthNext'].max();
         figureTitle = fname + ": " + intervalTitle;
+
         figure = generateBucketChartForFile(figureTitle, bucketDF,
                                             largestStackDepth,
                                             lowerBound, upperBound);
@@ -675,8 +663,10 @@ def main():
     for fname in args.files:
         processFile(fname);
 
+    #sys.exit(1);
+
     # Normalize all intervals by subtracting the first timestamp.
-    normalizeAndCleanIntervalData();
+    normalizeIntervalData();
 
     # Create a directory for the files that display the data summarized
     # in each bucket of the outlier histogram. We call these "bucket files".
