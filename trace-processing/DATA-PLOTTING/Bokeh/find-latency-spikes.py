@@ -492,10 +492,9 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
         savedFileName = save(column(figuresForAllFiles),
                              filename = fileName, title=intervalTitle,
                              resources=CDN);
+        return fileName;
     else:
-        savedFileName = "no-data.html";
-
-    return savedFileName;
+        return "no-data.html";
 
 # Generate plots of time series slices across all files for each bucket
 # in the outlier histogram. Save each cross-file slice to an HTML file.
@@ -526,6 +525,7 @@ def generateTSSlicesForBuckets():
         bucketFilenames.append(fileName);
 
     print(color.END);
+
     return bucketFilenames;
 
 def processFile(fname):
