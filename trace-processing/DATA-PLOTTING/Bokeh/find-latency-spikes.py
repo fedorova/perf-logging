@@ -46,6 +46,13 @@ lastColorUsed = 0;
 firstTimeStamp = sys.maxsize;
 lastTimeStamp = 0;
 
+# A dictionary that holds function-specific threshold values telling
+# us when the function is to be considered an outlier. These values
+# would be read from a config file, if supplied by the user.
+#
+outlierThresholdDict = {};
+outlierPrettyNames = {};
+
 # A dictionary that holds a reference to the raw dataframe for each file.
 #
 perFileDataFrame = {};
@@ -153,7 +160,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
     cds = ColumnDataSource(dataframe);
 
     figureTitle = "Occurrences of " + func + " that took longer than " \
-                  + "{:,.0f}".format(durationThreshold) + " CPU cycles.";
+                  + durationThreshold + ".";
 
     hover = HoverTool(tooltips = [
         ("interval start", "@lowerbound{0,0}"),
@@ -476,7 +483,6 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
                               & (fileDF['start'] < upperBound)];
 
         if (bucketDF.size == 0):
-            #bucketDF = generateEmptyDataset();
             continue;
 
         largestStackDepth = bucketDF['stackdepthNext'].max();
@@ -567,14 +573,16 @@ def processFile(fname):
 # all functions whose duration exceeded the average by more than
 # two standard deviations.
 #
-def createOutlierHistogramForFunction(func, funcDF, durationThreshold,
-                                      bucketFilenames):
+def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
 
     global firstTimeStamp;
     global lastTimeStamp;
     global plotWidth;
     global pixelsPerWidthUnit;
     global STDEV_MULT;
+
+    durationThreshold = 0;
+    durationThresholdDescr = "";
 
     #
     # funcDF is a list of functions along with their start and end
@@ -589,14 +597,24 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold,
 
     funcDF = funcDF.sort_values(by=['start']);
 
-    # If duration threshold equals -1 compute the average and standard
-    # deviation. Our actual threashold will be the value exceeding two
-    # standard deviations from the average.
-    #
-    if (durationThreshold == -1):
+    if (outlierThresholdDict.has_key(func)):
+        durationThreshold = outlierThresholdDict[func];
+        durationThresholdDescr = outlierPrettyNames[func];
+    elif (outlierThresholdDict.has_key("*")):
+        durationThreshold = outlierThresholdDict["*"];
+        durationThresholdDescr = outlierPrettyNames["*"];
+    else:
+        # Signal that we will use standard deviation
+        durationThreshold  = -STDEV_MULT;
+
+    if (durationThreshold < 0): # this is a stdev multiplier
+        mult = -durationThreshold;
         average = funcDF['durations'].mean();
         stdDev = funcDF['durations'].std();
-        durationThreshold = average + STDEV_MULT * stdDev;
+        durationThreshold = average + mult * stdDev;
+        durationThresholdDescr = '{0:,.0f}'.format(durationThreshold) \
+                                 + " measurement units (" + str(mult) + \
+                                 " standard deviations)";
 
     numBuckets = plotWidth / pixelsPerWidthUnit;
     timeUnitsPerBucket = (lastTimeStamp - firstTimeStamp) / numBuckets;
@@ -635,13 +653,141 @@ def createOutlierHistogramForFunction(func, funcDF, durationThreshold,
     dataframe = pd.DataFrame(data=dict);
 
     return plotOutlierHistogram(dataframe, maxOutliers, func,
-                                durationThreshold);
+                                durationThresholdDescr);
+#
+# The configuration file tells us which functions should be considered
+# outliers. All comment lines must begin with '#'.
+#
+# The first non-comment line of the file must tell us how to interpret
+# the measurement units in the trace file. It must have a single number
+# telling us how many time units are contained in a second. This should
+# be the same time units used in the trace file. For example, if the trace
+# file contains timestamps measured in milliseconds, the number would be 1000.
+# If timestamps were measured in clock cycles, as is typically done, the number
+# must tell us how many times the CPU clock ticks per second on the processor
+# where the trace was gathered.
+#
+# The remaining lines must have the format:
+#       <func_name> <outlier_threshold> [units]
+#
+# For example, if you would like to flag as outliers all instances of
+# __cursor_row_search that took longer than 200ms, you would specify this as:
+#
+#        __cursor_row_search 200 ms
+#
+# You can use * as the wildcard for all function. No other wildcard options are
+# supported at the moment.
+#
+# Acceptable units are:
+#
+# s -- for seconds
+# ms -- for milliseconds
+# us -- for microseconds
+# ns -- for nanoseconds
+# stdev -- for standard deviations.
+#
+# If no units are supplied, the same unit as the one used for the timestamp
+# in the trace files is assumed.
+#
+# If there is a valid configuration file, but the function does not appear in
+# it, we will not generate an outlier histogram for this function. Use the
+# wildcard symbol to include all functions.
+#
+def parseConfigFile(fname):
+
+    global outlierThresholdDict;
+    global outlierPrettyNames;
+
+    configFile = None;
+    firstNonCommentLine = True;
+    unitsPerSecond = -1;
+    unitsPerMillisecond = 0.0;
+    unitsPerMicrosecond = 0.0;
+    unitsPerNanosecond = 0.0;
+
+    try:
+        configFile = open(fname, "r");
+    except:
+        print(color.BOLD + color.RED +
+              "Could not open " + fname + " for reading." + color.END);
+        return False;
+
+    for line in configFile:
+
+        if (line[0] == "#"):
+            continue;
+        elif (firstNonCommentLine):
+            try:
+                unitsPerSecond = int(line);
+                unitsPerMillisecond = unitsPerSecond / 1000;
+                unitsPerMicrosecond = unitsPerSecond / 1000000;
+                unitsPerNanosecond  = unitsPerSecond / 1000000000;
+
+                firstNonCommentLine = False;
+            except ValueError:
+                print(color.BOLD + color.RED +
+                      "Could not parse the number of measurement units " +
+                      "per second. This must be the first value in the " +
+                      "config file." + color.END);
+                return False;
+        else:
+            func = "";
+            number = 0;
+            threshold = 0.0;
+            units = "";
+
+            words = line.split();
+            try:
+                func = words[0];
+                number = int(words[1]);
+                units = words[2];
+            except ValueError:
+                print(color.BOLD + color.RED +
+                      "While parsing the config file, could not understand " +
+                      "the following line: " + color.END);
+                print(line);
+                continue;
+
+            # Now convert the number to the baseline units and record in the
+            # dictionary.
+            #
+            if (units == "s"):
+                threshold = unitsPerSecond * number;
+            elif (units == "ms"):
+                threshold = unitsPerMillisecond * number;
+            elif (units == "us"):
+                threshold = unitsPerMicrosecond * number;
+            elif (units == "ns"):
+                threshold = unitsPerNanosecond * number;
+            elif (units == "stdev"):
+                threshold = -units;
+                # We record it as negative, so that we know
+                # this is a standard deviation. We will compute
+                # the actual value once we know the average.
+            else:
+                print(color.BOLD + color.RED +
+                      "While parsing the config file, could not understand " +
+                      "the following line: " + color.END);
+                print(line);
+                continue;
+
+            outlierThresholdDict[func] = threshold;
+            outlierPrettyNames[func] = str(number) + " " + units;
+
+    # We were given an empty config file
+    if (firstNonCommentLine):
+        return False;
+
+    print outlierThresholdDict;
+    return True;
+
 
 def main():
 
     global bucketDir;
     global perFuncDF;
 
+    configSupplied = False;
     figuresForAllFunctions = [];
 
     # Set up the argument parser
@@ -650,20 +796,33 @@ def main():
                                  'Visualize operation log');
     parser.add_argument('files', type=str, nargs='*',
                         help='log files to process');
+    parser.add_argument('-c', '--config', dest='configFile', default='');
     args = parser.parse_args();
 
     if (len(args.files) == 0):
-        parser.print_help()
-        sys.exit(1)
+        parser.print_help();
+        sys.exit(1);
 
     # Get names of standard CSS colors that we will use for the legend
     initColorList();
 
+    # Read the configuration file, if supplied.
+    if (args.configFile != ''):
+        configSupplied = parseConfigFile(args.configFile);
+
+    if (not configSupplied):
+        pluralSuffix = "";
+        if (STDEV_MULT > 1):
+            pluralSuffix = "s";
+        print(color.BLUE + color.BOLD +
+              "Will deem as outliers all function instances whose runtime " +
+              "was " + str(STDEV_MULT) + " standard deviation" + pluralSuffix +
+              " greater than the average runtime for that function."
+              + color.END);
+
     # Parallelize this later, so we are working on files in parallel.
     for fname in args.files:
         processFile(fname);
-
-    #sys.exit(1);
 
     # Normalize all intervals by subtracting the first timestamp.
     normalizeIntervalData();
@@ -684,8 +843,7 @@ def main():
     # Generate a histogram of outlier durations
     for func in sorted(perFuncDF.keys()):
         funcDF = perFuncDF[func];
-        figure = createOutlierHistogramForFunction(func, funcDF, -1,
-                                                   fileNameList);
+        figure = createOutlierHistogramForFunction(func, funcDF, fileNameList);
         if (figure is not None):
             figuresForAllFunctions.append(figure);
 
