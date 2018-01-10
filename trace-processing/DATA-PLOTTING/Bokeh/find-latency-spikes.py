@@ -4,7 +4,7 @@ import argparse
 from bokeh.layouts import column
 from bokeh.models import ColumnDataSource, CustomJS, HoverTool, FixedTicker
 from bokeh.models import Legend, LegendItem
-from bokeh.models import NumeralTickFormatter, OpenURL, TapTool
+from bokeh.models import NumeralTickFormatter, OpenURL, Range1d, TapTool
 from bokeh.models.annotations import Label
 from bokeh.plotting import figure, output_file, reset_output, save, show
 from bokeh.resources import CDN
@@ -174,17 +174,20 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
                plot_height = min(500, (max(5, (maxOutliers + 1)) \
                                        * pixelsPerHeightUnit + \
                                        pixelsForTitle)),
-               y_range = (0, maxOutliers + 1),
                x_axis_label = "Execution timeline (CPU cycles)",
                y_axis_label = "Number of outliers", tools = TOOLS);
 
     y_ticker_max = p.plot_height / pixelsPerHeightUnit;
     y_ticker_step = max(1, (maxOutliers + 1)/y_ticker_max);
+    y_upper_bound = (maxOutliers / y_ticker_step + 1) * y_ticker_step;
+
     p.yaxis.ticker = FixedTicker(ticks =
-                                 range(0, maxOutliers + 1, y_ticker_step));
+                                 range(0, y_upper_bound, y_ticker_step));
     p.ygrid.ticker = FixedTicker(ticks =
-                                 range(0, maxOutliers + 1, y_ticker_step));
+                                 range(0, y_upper_bound, y_ticker_step));
     p.xaxis.formatter = NumeralTickFormatter(format="0,");
+
+    p.y_range = Range1d(0, y_upper_bound);
 
     p.quad(left = 'lowerbound', right = 'upperbound', bottom = 'bottom',
            top = 'height', color = funcToColor[func], source = cds,
@@ -200,7 +203,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
     y_max = dataframe['height'].max();
     text = "Average duration: " + '{0:,.0f}'.format(averageDuration) + \
            ". Maximum duration: " + '{0:,.0f}'.format(maxDuration) + ".";
-    mytext = Label(x=0, y=y_max, text=text,
+    mytext = Label(x=0, y=y_upper_bound-y_ticker_step, text=text,
                    text_color = "grey", text_font = "helvetica",
                    text_font_size = "10pt",
                    text_font_style = "italic");
