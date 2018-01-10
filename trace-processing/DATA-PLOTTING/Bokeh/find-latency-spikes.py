@@ -5,6 +5,7 @@ from bokeh.layouts import column
 from bokeh.models import ColumnDataSource, CustomJS, HoverTool, FixedTicker
 from bokeh.models import Legend, LegendItem
 from bokeh.models import NumeralTickFormatter, OpenURL, TapTool
+from bokeh.models.annotations import Label
 from bokeh.plotting import figure, output_file, reset_output, save, show
 from bokeh.resources import CDN
 import matplotlib
@@ -151,7 +152,8 @@ def getIntervalData(intervalBeginningsStack, intervalEnd, logfile):
 
     return intervalBegin[0], intervalEnd[0], intervalEnd[2], errorOccurred;
 
-def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
+def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
+                         averageDuration, maxDuration):
 
     global pixelsForTitle;
     global pixelsPerHeightUnit;
@@ -192,6 +194,17 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold):
            selection_fill_color = funcToColor[func],
            selection_line_color="grey"
     );
+
+    # Add an annotation to the chart
+    #
+    y_max = dataframe['height'].max();
+    text = "Average duration: " + '{0:,.0f}'.format(averageDuration) + \
+           ". Maximum duration: " + '{0:,.0f}'.format(maxDuration) + ".";
+    mytext = Label(x=0, y=y_max, text=text,
+                   text_color = "grey", text_font = "helvetica",
+                   text_font_size = "10pt",
+                   text_font_style = "italic");
+    p.add_layout(mytext);
 
     url = "@bucketfiles";
     taptool = p.select(type=TapTool);
@@ -597,6 +610,9 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
 
     funcDF = funcDF.sort_values(by=['start']);
 
+    averageDuration = funcDF['durations'].mean();
+    maxDuration = funcDF['durations'].max();
+
     if (outlierThresholdDict.has_key(func)):
         durationThreshold = outlierThresholdDict[func];
         durationThresholdDescr = outlierPrettyNames[func];
@@ -609,16 +625,14 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
 
     if (durationThreshold < 0): # this is a stdev multiplier
         mult = -durationThreshold;
-        average = funcDF['durations'].mean();
         stdDev = funcDF['durations'].std();
-        durationThreshold = average + mult * stdDev;
-        durationThresholdDescr = '{0:,.0f}'.format(durationThreshold) \
+    durationThreshold = averageDuration + mult * stdDev;
+    durationThresholdDescr = '{0:,.0f}'.format(durationThreshold) \
                                  + " measurement units (" + str(mult) + \
                                  " standard deviations)";
 
     numBuckets = plotWidth / pixelsPerWidthUnit;
     timeUnitsPerBucket = (lastTimeStamp - firstTimeStamp) / numBuckets;
-
     lowerBounds = [];
     upperBounds = [];
     bucketHeights = [];
@@ -653,7 +667,8 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
     dataframe = pd.DataFrame(data=dict);
 
     return plotOutlierHistogram(dataframe, maxOutliers, func,
-                                durationThresholdDescr);
+                                durationThresholdDescr, averageDuration,
+                                maxDuration);
 #
 # The configuration file tells us which functions should be considered
 # outliers. All comment lines must begin with '#'.

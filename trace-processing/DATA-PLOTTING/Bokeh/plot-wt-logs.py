@@ -5,6 +5,7 @@ from bokeh.layouts import column
 from bokeh.models import ColumnDataSource, HoverTool, FixedTicker
 from bokeh.models import Legend, LegendItem
 from bokeh.models import NumeralTickFormatter
+from bokeh.models.annotations import Label
 from bokeh.plotting import figure, output_file, show
 import matplotlib
 import numpy as np
@@ -97,6 +98,20 @@ def bokeh_plot(figure_title, legend, dataframe, y_max):
     p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
            top = 'stackdepthNext', color = 'color',
            source=cds, line_color="lightgrey");
+
+    xMax = dataframe['end'].max();
+    yMax = dataframe['stackdepthNext'].max();
+
+    averageDuration = dataframe['durations'].mean();
+    maxDuration = dataframe['durations'].max();
+
+    text = "Average duration: " + '{0:,.0f}'.format(averageDuration) + \
+           ". Maximum duration: " + '{0:,.0f}'.format(maxDuration) + ".";
+    mytext = Label(x=0, y=yMax, text=text,
+                   text_color = "grey", text_font = "helvetica",
+                   text_font_size = "10pt",
+                   text_font_style = "italic");
+    p.add_layout(mytext);
 
     #p.quad(left = dataframe.head(num)['start'],
     #       right = dataframe.head(num)['end'],
