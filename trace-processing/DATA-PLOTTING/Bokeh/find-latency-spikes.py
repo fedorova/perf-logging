@@ -495,8 +495,28 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
     for fname in sorted(perFileDataFrame.keys()):
 
         fileDF = perFileDataFrame[fname];
-        bucketDF = fileDF.loc[(fileDF['start'] >= lowerBound)
-                              & (fileDF['start'] < upperBound)];
+
+        # Select operations whose start timestamp falls within
+        # the current interval, delimited by lowerBound and upperBound.
+        #
+        startInBucket = fileDF.loc[(fileDF['start'] >= lowerBound)
+                                   & (fileDF['start'] < upperBound)];
+
+        # Select operations whose end timestamp falls within
+        # the current interval, delimited by lowerBound and upperBound.
+        #
+        endInBucket = fileDF.loc[(fileDF['end'] > lowerBound)
+                                   & (fileDF['end'] <= upperBound)];
+
+        # Select operations that begin before this interval and end after
+        # this interval, but continue throughout this interval. The interval
+        # is delimited by lowerBound and upperBound.
+        #
+        spanBucket = fileDF.loc[(fileDF['start'] < lowerBound)
+                                   & (fileDF['end'] > upperBound)];
+
+        frames = [startInBucket, endInBucket, spanBucket];
+        bucketDF = pd.concat(frames).drop_duplicates().reset_index(drop=True);
 
         if (bucketDF.size == 0):
             continue;
