@@ -224,7 +224,7 @@ def normalizeIntervalData():
     global firstTimeStamp;
     global perFileDataFrame;
 
-    print(color.BLUE + color.BOLD + "Cleaning data..." + color.END);
+    print(color.BLUE + color.BOLD + "Normalizing data..." + color.END);
 
     for file, df in perFileDataFrame.iteritems():
         df['origstart'] = df['start'];
@@ -520,6 +520,20 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
 
         if (bucketDF.size == 0):
             continue;
+
+        # If the end of the function is outside the interval, let's pretend
+        # that it is within the interval, otherwise we won't see any data about
+        # it when we hover. This won't have the effect of showing wrong
+        # data to the user.
+        #
+        mask = bucketDF.end >= upperBound;
+        bucketDF.loc[mask, 'end'] = upperBound-1;
+
+        # Same adjustment as above if the start of the operation falls outside
+        # the interval's lower bound.
+        #
+        mask = bucketDF.start < lowerBound;
+        bucketDF.loc[mask, 'start'] = lowerBound;
 
         largestStackDepth = bucketDF['stackdepthNext'].max();
         figureTitle = fname + ": " + intervalTitle;
