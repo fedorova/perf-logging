@@ -15,6 +15,10 @@ import pandas as pd
 import sys
 import traceback
 
+# Names of the image files we use
+arrowLeftImg = "arrow-left.png";
+arrowRightImg = "arrow-right.png";
+
 # A directory where we store cross-file plots for each bucket of the outlier
 # histogram.
 #
@@ -584,6 +588,112 @@ def generateTSSlicesForBuckets():
 
     return bucketFilenames;
 
+# Here we are making a line that will be inserted into an HTML file for
+# a given bucket (execution slice). This line will have links to the
+# previous slice and to the next slice, so we can navigate between slices
+# by clicking those links.
+#
+def makeLineWithLinks(previous, next):
+
+    global arrowLeftImg;
+    global arrowRightImg;
+
+    previousLink = "";
+    nextLink = "";
+
+    # Strip the directory component out of the file name.
+    #
+    if previous is not None:
+        words = previous.split("/");
+        previousStripped = words[len(words)-1];
+        previousLink =  "<a href=\"" + previousStripped + "\">" + \
+                        "<img src=\"" + arrowLeftImg + \
+                        "\" height=\"30\" style=\"float:left\"></a><p>&nbsp;";
+
+
+    if next is not None:
+        words = next.split("/");
+        nextStripped = words[len(words)-1];
+        nextLink = "<a href=\"" + nextStripped + "\">" + \
+                   "<img src=\"" + arrowRightImg + \
+                   "\" height=\"30\" style=\"float:right\"></a><p>&nbsp;";
+
+    line = previousLink + " " + nextLink + "\n";
+    return line;
+
+
+# Into the current file insert links to the previous one and to te next one.
+# The rewritten file is saved under a new file name.
+#
+def linkFiles(current, previous, next):
+
+    curFile = None;
+    newFile = None;
+    newFileName = current + ".new";
+
+    try:
+        curFile = open(current, "r");
+    except:
+        print(color.RED + color.BOLD),
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback);
+        print("Could not open file " + current + " for reading.");
+        print(color.END);
+        return None;
+
+    try:
+        newFile = open(newFileName, "w");
+    except:
+        print(color.RED + color.BOLD),
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback);
+        print("Could not open file " + newFileName + " for writing.");
+        print(color.END);
+        return None;
+
+    curFileLines = curFile.readlines();
+
+    for i in range(len(curFileLines)):
+        line = curFileLines[i];
+
+        insertedLine = makeLineWithLinks(previous, next);
+        print insertedLine;
+
+        if "<body>" in line:
+            curFileLines.insert(i+1, insertedLine);
+        elif "</body>" in line:
+            curFileLines.insert(i, insertedLine);
+
+    for line in curFileLines:
+        newFile.write(line);
+
+    curFile.close();
+    newFile.close();
+
+    os.rename(newFileName, current);
+
+# We have a list of bucket files. Each one is an HTML file showing a slice of
+# the execution. To be able to easily navigate between consecutive execution
+# slices we insert links into each slice-file that take us to the previous
+# slice and to the next slice.
+#
+def interlinkFiles(fnameList):
+
+    for i in range(len(fnameList)):
+        current = fnameList[i];
+
+        if i > 0:
+            previous = fnameList[i-1];
+        else:
+            previous = None;
+
+        if (i < len(fnameList)-1):
+            next = fnameList[i+1];
+        else:
+            next = None;
+
+        linkFiles(current, previous, next);
+
 def processFile(fname):
 
     global perFileDataFrame;
@@ -836,6 +946,8 @@ def parseConfigFile(fname):
 
 def main():
 
+    global arrowLeftImg;
+    global arrowRightImg;
     global bucketDir;
     global perFuncDF;
 
@@ -872,6 +984,20 @@ def main():
               " greater than the average runtime for that function."
               + color.END);
 
+
+    # Create a directory for the files that display the data summarized
+    # in each bucket of the outlier histogram. We call these "bucket files".
+    #
+    if not os.path.exists(bucketDir):
+        os.makedirs(bucketDir);
+
+    # Copy the image files that we will need later into bucketDir
+    scriptLocation = os.path.dirname(os.path.realpath(__file__));
+    os.system("cp " + scriptLocation + "/" + arrowLeftImg + " " + bucketDir +
+              "/" + arrowLeftImg);
+    os.system("cp " + scriptLocation + "/" + arrowRightImg + " " + bucketDir +
+              "/" + arrowRightImg);
+
     # Parallelize this later, so we are working on files in parallel.
     for fname in args.files:
         processFile(fname);
@@ -879,16 +1005,16 @@ def main():
     # Normalize all intervals by subtracting the first timestamp.
     normalizeIntervalData();
 
-    # Create a directory for the files that display the data summarized
-    # in each bucket of the outlier histogram. We call these "bucket files".
-    #
-    if not os.path.exists(bucketDir):
-        os.makedirs(bucketDir)
-
     # Generate plots of time series slices across all files for each bucket
     # in the outlier histogram. Save each cross-file slice to an HTML file.
     #
     fileNameList = generateTSSlicesForBuckets();
+
+    # Rewrite the files, so that they have links to one another. This way
+    # you can navigate from one slice to the next by clicking the link inside
+    # the file.
+    #
+    interlinkFiles(fileNameList);
 
     totalFuncs = len(perFuncDF.keys());
     i = 0;
