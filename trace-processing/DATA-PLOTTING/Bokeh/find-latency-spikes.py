@@ -629,8 +629,8 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
     if (durationThreshold < 0): # this is a stdev multiplier
         mult = -durationThreshold;
         stdDev = funcDF['durations'].std();
-    durationThreshold = averageDuration + mult * stdDev;
-    durationThresholdDescr = '{0:,.0f}'.format(durationThreshold) \
+        durationThreshold = averageDuration + mult * stdDev;
+        durationThresholdDescr = '{0:,.0f}'.format(durationThreshold) \
                                  + " measurement units (" + str(mult) + \
                                  " standard deviations)";
 
