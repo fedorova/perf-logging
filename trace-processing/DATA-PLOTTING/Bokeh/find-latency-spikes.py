@@ -463,6 +463,26 @@ def generateEmptyDataset():
 
     return pd.DataFrame(data=dict);
 
+# When we have no data for a trace interva we generate an empty file
+# for that interval.
+#
+def createNoDataFile(filename):
+
+    try:
+        f = open(filename, "w");
+    except:
+        print(color.RED + color.BOLD),
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback);
+        print("Could not open file " + filename + " for writing.");
+        print(color.END);
+        return;
+
+    f.write("<body>\n");
+    f.write("<p style=\"text-align:center;\">");
+    f.write("No data was generated for this trace interval.</p>\n");
+    f.write("</body>\n");
+    f.close()
 #
 # Here we generate plots that span all the input files. Each plot shows
 # the timelines for all files, stacked vertically. The timeline shows
@@ -552,9 +572,10 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
         savedFileName = save(column(figuresForAllFiles),
                              filename = fileName, title=intervalTitle,
                              resources=CDN);
-        return fileName;
     else:
-        return "no-data.html";
+        createNoDataFile(fileName);
+
+    return fileName;
 
 # Generate plots of time series slices across all files for each bucket
 # in the outlier histogram. Save each cross-file slice to an HTML file.
@@ -622,7 +643,7 @@ def makeLineWithLinks(previous, next):
     return line;
 
 
-# Into the current file insert links to the previous one and to te next one.
+# Into the current file insert links to the previous one and to the next one.
 # The rewritten file is saved under a new file name.
 #
 def linkFiles(current, previous, next):
@@ -657,7 +678,6 @@ def linkFiles(current, previous, next):
         line = curFileLines[i];
 
         insertedLine = makeLineWithLinks(previous, next);
-        print insertedLine;
 
         if "<body>" in line:
             curFileLines.insert(i+1, insertedLine);
