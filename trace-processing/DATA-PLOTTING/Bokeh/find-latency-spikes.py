@@ -402,7 +402,8 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
     p.yaxis.ticker = FixedTicker(ticks = range(0, y_max+1));
     p.ygrid.ticker = FixedTicker(ticks = range(0, y_max+1));
 
-    p.xaxis.formatter = NumeralTickFormatter(format="0,")
+    p.xaxis.formatter = NumeralTickFormatter(format="0,");
+    p.title.text_font_style = "normal";
 
     p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
            top = 'stackdepthNext', color = 'color', line_color = "lightgrey",
@@ -493,7 +494,7 @@ def createNoDataFile(filename):
 # across the timelines for all files. We call it a bucket, because it
 # corresponds to a bucket in the outlier histogram.
 #
-def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
+def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
 
     global bucketDir;
     global colorAlreadyUsedInLegend;
@@ -503,15 +504,22 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
 
     reset_output();
 
+
+    intervalTitle = "Interval " + "{:,}".format(lowerBound) + \
+                    " to " + "{:,}".format(upperBound) + \
+                    " CPU cycles.";
+
+    # Generate a navigator chart, which shows where we are in the
+    # trace and allows moving around the trace.
+    #
+    navigatorFigure = generateNavigatorFigure(navigatorDF, i, intervalTitle);
+    figuresForAllFiles.append(navigatorFigure);
+
     # The following dictionary keeps track of legends. We need
     # a legend for each new HTML file. So we reset the dictionary
     # before generating a new file.
     #
     colorAlreadyUsedInLegend = {};
-
-    intervalTitle = "Interval " + "{:,}".format(lowerBound) + \
-                    " to " + "{:,}".format(upperBound) + \
-                    " CPU cycles";
 
     # Select from the dataframe for this file the records whose 'start'
     # and 'end' timestamps fall within the lower and upper bound.
@@ -560,7 +568,7 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
         bucketDF.loc[mask, 'start'] = lowerBound;
 
         largestStackDepth = bucketDF['stackdepthNext'].max();
-        figureTitle = fname + ": " + intervalTitle;
+        figureTitle = fname;
 
         figure = generateBucketChartForFile(figureTitle, bucketDF,
                                             largestStackDepth,
@@ -577,6 +585,102 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound):
 
     return fileName;
 
+# Generate a plot that shows a view of the entire timeline in a form of
+# intervals. By clicking on an interval we can navigate to that interval.
+#
+def generateNavigatorFigure(dataframe, i, title):
+
+    global pixelsForTitle;
+    global pixelsPerHeightUnit;
+    global plotWidth;
+
+    # Generate the colors, such that the current interval is shown in a
+    # different color than the rest.
+    #
+    numIntervals = dataframe['intervalnumber'].size;
+    color = ["white" for x in range(numIntervals)];
+    color[i] = "red";
+    dataframe['color'] = color;
+
+    cds = ColumnDataSource(dataframe);
+
+    title = title + " CLICK TO NAVIGATE";
+
+    hover = HoverTool(tooltips = [
+        ("interval start", "@intervalbegin{0,0}"),
+        ("interval end", "@intervalend{0,0}")]);
+
+    TOOLS = [hover, "tap"];
+
+    p = figure(title = title, plot_width = plotWidth,
+               x_range = (0, numIntervals),
+               plot_height =  2 * pixelsPerHeightUnit + pixelsForTitle,
+               x_axis_label = "",
+               y_axis_label = "", tools = TOOLS,
+               toolbar_location="above");
+
+    # No minor ticks or labels on the y-axis
+    p.yaxis.major_tick_line_color = None;
+    p.yaxis.minor_tick_line_color = None;
+    p.yaxis.major_label_text_font_size = '0pt';
+    p.yaxis.ticker = FixedTicker(ticks = range(0, 1));
+    p.ygrid.ticker = FixedTicker(ticks = range(0, 1));
+
+    p.xaxis.formatter = NumeralTickFormatter(format="0,");
+
+    p.title.align = "center";
+    p.title.text_font_style = "normal";
+
+    p.quad(left = 'intervalnumber', right = 'intervalnumbernext',
+           bottom = 0, top = 2, color = 'color', source = cds,
+           nonselection_fill_color='color',
+           nonselection_fill_alpha = 1.0,
+           line_color = "aliceblue",
+           selection_fill_color = "white",
+           selection_line_color="lightgrey"
+    );
+
+    url = "@bucketfiles";
+    taptool = p.select(type=TapTool);
+    taptool.callback = OpenURL(url=url);
+
+    return p;
+
+
+# Create a dataframe describing all time intervals, which will later be used
+# to generate a plot allowing us to navigate along the execution by clicking
+# on different intervals.
+#
+def createIntervalNavigatorDF(numBuckets, timeUnitsPerBucket):
+
+    global bucketDir;
+
+    bucketFiles = [];
+    bucketID = [];
+    intervalBegin = [];
+    intervalEnd = [];
+
+    for i in range(numBuckets):
+
+        lBound = i * timeUnitsPerBucket;
+        uBound = (i+1) * timeUnitsPerBucket;
+        fileName = "bucket-" + str(i) + ".html";
+
+        bucketID.append(i);
+        intervalBegin.append(lBound);
+        intervalEnd.append(uBound);
+        bucketFiles.append(fileName);
+
+    data = {};
+    data['bucketfiles'] = bucketFiles;
+    data['intervalbegin'] =  intervalBegin;
+    data['intervalend'] =  intervalEnd;
+    data['intervalnumber'] = bucketID;
+
+    dataframe = pd.DataFrame(data=data);
+    dataframe['intervalnumbernext'] = dataframe['intervalnumber'] + 1;
+    return dataframe;
+
 # Generate plots of time series slices across all files for each bucket
 # in the outlier histogram. Save each cross-file slice to an HTML file.
 #
@@ -592,12 +696,14 @@ def generateTSSlicesForBuckets():
     numBuckets = plotWidth / pixelsPerWidthUnit;
     timeUnitsPerBucket = (lastTimeStamp - firstTimeStamp) / numBuckets;
 
+    navigatorDF = createIntervalNavigatorDF(numBuckets, timeUnitsPerBucket);
+
     for i in range(numBuckets):
         lowerBound = i * timeUnitsPerBucket;
         upperBound = (i+1) * timeUnitsPerBucket;
 
-        fileName = generateCrossFilePlotsForBucket(i, lowerBound,
-                                                       upperBound);
+        fileName = generateCrossFilePlotsForBucket(i, lowerBound, upperBound,
+                                                   navigatorDF);
 
         percentComplete = float(i) / float(numBuckets) * 100;
         print(color.BLUE + color.BOLD + " Generating timeline charts... "),
