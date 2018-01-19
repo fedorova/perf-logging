@@ -312,12 +312,6 @@ def createCallstackSeries(data, logfilename):
             beginIntervals.append(intervalBegin);
             endIntervals.append(intervalEnd);
             functionNames.append(function);
-            #stackDepths.append(stackDepth);
-            #stackDepthsNext.append(stackDepth + 1);
-
-            #print("Begin: " + str(intervalBegin)),
-            #print(" Func: " + function),
-            #print(" Stack depth: " + str(stackDepth));
 
         else:
             print("Invalid event in this line:");
