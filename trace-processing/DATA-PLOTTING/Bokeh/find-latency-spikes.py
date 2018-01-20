@@ -540,7 +540,7 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
 
     reset_output();
 
-    intervalTitle = "Interval " + "{:,}".format(lowerBound) + \
+    intervalTitle = "Interval #" + str(i) + ". {:,}".format(lowerBound) + \
                     " to " + "{:,}".format(upperBound) + \
                     " CPU cycles.";
 
@@ -643,6 +643,7 @@ def generateNavigatorFigure(dataframe, i, title):
     title = title + " CLICK TO NAVIGATE";
 
     hover = HoverTool(tooltips = [
+        ("interval #", "@intervalnumber"),
         ("interval start", "@intervalbegin{0,0}"),
         ("interval end", "@intervalend{0,0}")]);
 
