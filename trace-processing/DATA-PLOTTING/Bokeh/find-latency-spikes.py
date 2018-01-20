@@ -345,7 +345,7 @@ def createCallstackSeries(data, logfilename):
 #
 colorAlreadyUsedInLegend = {};
 
-def createLegendFigure(legendDict, i):
+def createLegendFigure(legendDict):
 
     global pixelsForTitle;
     global plotWidth;
@@ -519,26 +519,6 @@ def generateEmptyDataset():
 
     return pd.DataFrame(data=dict);
 
-# When we have no data for a trace interva we generate an empty file
-# for that interval.
-#
-def createNoDataFile(filename):
-
-    try:
-        f = open(filename, "w");
-    except:
-        print(color.RED + color.BOLD),
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        traceback.print_exception(exc_type, exc_value, exc_traceback);
-        print("Could not open file " + filename + " for writing.");
-        print(color.END);
-        return;
-
-    f.write("<body>\n");
-    f.write("<p style=\"text-align:center;\">");
-    f.write("No data was generated for this trace interval.</p>\n");
-    f.write("</body>\n");
-    f.close()
 #
 # Here we generate plots that span all the input files. Each plot shows
 # the timelines for all files, stacked vertically. The timeline shows
@@ -633,15 +613,11 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
 
     # Create the legend for this file and insert it after the navigator figure
     if (len(aggregateLegendDict) > 0):
-        legendFigure = createLegendFigure(aggregateLegendDict, i);
+        legendFigure = createLegendFigure(aggregateLegendDict);
         figuresForAllFiles.insert(1, legendFigure);
 
-    if (len(figuresForAllFiles) > 0):
-        savedFileName = save(column(figuresForAllFiles),
-                             filename = fileName, title=intervalTitle,
-                             resources=CDN);
-    else:
-        createNoDataFile(fileName);
+    save(column(figuresForAllFiles), filename = fileName,
+         title=intervalTitle, resources=CDN);
 
     return fileName;
 
