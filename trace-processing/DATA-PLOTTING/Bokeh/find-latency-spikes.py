@@ -3,7 +3,7 @@
 import argparse
 from bokeh.layouts import column
 from bokeh.models import ColumnDataSource, CustomJS, HoverTool, FixedTicker
-from bokeh.models import Legend, LegendItem
+from bokeh.models import  LabelSet, Legend, LegendItem
 from bokeh.models import NumeralTickFormatter, OpenURL, Range1d, TapTool
 from bokeh.models.annotations import Label
 from bokeh.plotting import figure, output_file, reset_output, save, show
@@ -147,9 +147,6 @@ def getIntervalData(intervalBeginningsStack, intervalEnd, logfile):
         else:
             matchFound = True;
 
-    # This value determines how deep we are in the callstack
-    # stackDepth = len(intervalBeginningsStack);
-
     return intervalBegin[0], intervalEnd[0], intervalEnd[2], errorOccurred;
 
 def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
@@ -175,7 +172,8 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
                                        * pixelsPerHeightUnit + \
                                        pixelsForTitle)),
                x_axis_label = "Execution timeline (CPU cycles)",
-               y_axis_label = "Number of outliers", tools = TOOLS);
+               y_axis_label = "Number of outliers",
+               tools = TOOLS, toolbar_location="above");
 
     y_ticker_max = p.plot_height / pixelsPerHeightUnit;
     y_ticker_step = max(1, (maxOutliers + 1)/y_ticker_max);
@@ -342,27 +340,109 @@ def createCallstackSeries(data, logfilename):
 
     return dataframe;
 
-def addLegend(p, legendItems, numLegends):
-
-    legend = Legend(items=legendItems, orientation = "horizontal");
-    p.add_layout(legend, place='above');
-    legendItems[:] = [];  # Empty the list.
-
-    return (numLegends + 1);
-
 # For each function we only show the legend once. In this dictionary we
 # keep track of colors already used.
 #
 colorAlreadyUsedInLegend = {};
 
+def createLegendFigure(legendDict):
+
+    global pixelsForTitle;
+    global plotWidth;
+
+    FUNCS_PER_ROW = 5;
+    HSPACE_BETWEEN_FUNCS = 10;
+    VSPACE_BETWEEN_FUNCS = 1;
+
+    funcs = [];
+    colors = [];
+    x_coords = [];
+    y_coords = [];
+    pixelsForLegendItem = 25;
+
+    # Get a sorted list of functions and their
+    # corresponding colors.
+    #
+    for func in sorted(legendDict.keys()):
+        funcs.append(func);
+        colors.append(legendDict[func]);
+
+    # Figure out the coordinates of functions on the plot
+    #
+    for i in range(len(funcs)):
+
+        x_coord = i % (FUNCS_PER_ROW) + 1;
+        x_coord += i % (FUNCS_PER_ROW) *  HSPACE_BETWEEN_FUNCS;
+        x_coords.append(x_coord);
+
+        y_coord = (i/FUNCS_PER_ROW) + 1;
+        y_coord += (i/FUNCS_PER_ROW) *  VSPACE_BETWEEN_FUNCS;
+        y_coords.append(y_coord);
+
+    data = {};
+    data['func'] = funcs;
+    data['color'] = colors;
+    data['left'] = x_coords;
+    data['bottom'] = y_coords;
+
+    df = pd.DataFrame(data=data);
+
+    max_ycoord = df['bottom'].max();
+    df['bottom'] = (max_ycoord + 1) - df['bottom'];
+
+    df['right'] = df['left'] + 1;
+    df['top'] = df['bottom'] + 1;
+
+    cds = ColumnDataSource(df);
+
+    p = figure(title="TRACKED FUNCTIONS",
+               plot_width=plotWidth,
+               plot_height = max_ycoord * pixelsForLegendItem,
+               tools = [], toolbar_location="above",
+               x_range = (0, (FUNCS_PER_ROW + 1)* HSPACE_BETWEEN_FUNCS),
+               x_axis_label = "",
+               y_axis_label = "");
+
+    p.title.align = "center";
+    p.title.text_font_style = "normal";
+
+    p.xaxis.axis_line_color = "lightgrey";
+    p.xaxis.major_tick_line_color = None;
+    p.xaxis.minor_tick_line_color = None;
+    p.xaxis.major_label_text_font_size = '0pt';
+
+    p.yaxis.axis_line_color = "lightgrey";
+    p.yaxis.major_tick_line_color = None;
+    p.yaxis.minor_tick_line_color = None;
+    p.yaxis.major_label_text_font_size = '0pt';
+
+    p.xgrid.grid_line_color = None;
+    p.ygrid.grid_line_color = None;
+
+    p.outline_line_width = 1
+    p.outline_line_alpha = 1
+    p.outline_line_color = "lightgrey"
+
+    p.quad(left = 'left', right = 'right', bottom = 'bottom',
+           top = 'top', color = 'color', line_color = "lightgrey",
+           line_width = 0.5, source=cds);
+
+    labels = LabelSet(x='right', y='bottom', text='func', level='glyph',
+                      text_font_size = "10pt",
+                      x_offset=3, y_offset=0, source=cds, render_mode='canvas');
+    p.add_layout(labels);
+
+    return p;
+
 def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
 
     global colorAlreadyUsedInLegend;
     global funcToColor;
+    global plotWidth;
 
-    MAX_ITEMS_PER_LEGEND = 5;
+    MAX_ITEMS_PER_LEGEND = 10;
     numLegends = 0;
-    legendItems = [];
+    legendItems = {};
     pixelsPerStackLevel = 30;
     pixelsPerLegend = 60;
     pixelsForTitle = 30;
@@ -377,13 +457,12 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
 
     TOOLS = [hover];
 
-    p = figure(title=figureName, plot_width=1200,
+    p = figure(title=figureName, plot_width=plotWidth,
                x_range = (x_min, x_max),
                y_range = (0, y_max+1),
                x_axis_label = "Time (CPU cycles)",
                y_axis_label = "Stack depth",
-               tools = TOOLS
-    );
+               tools = TOOLS, toolbar_location="above");
 
     # No minor ticks or labels on the y-axis
     p.yaxis.major_tick_line_color = None;
@@ -393,7 +472,7 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
     p.ygrid.ticker = FixedTicker(ticks = range(0, y_max+1));
 
     p.xaxis.formatter = NumeralTickFormatter(format="0,");
-    p.title.text_font_style = "normal";
+    p.title.text_font_style = "bold";
 
     p.quad(left = 'start', right = 'end', bottom = 'stackdepth',
            top = 'stackdepthNext', color = 'color', line_color = "lightgrey",
@@ -418,28 +497,13 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
         else:
             colorAlreadyUsedInLegend[fColor] = True;
 
-        r = p.quad(left=0, right=1, bottom=0, top=1, color=fColor);
-
-        lItem = LegendItem(label = func,
-                           renderers = [r]);
-        legendItems.append(lItem);
-
-        # Cap the number of items in a legend, so it can
-        # fit horizontally.
-        if (len(legendItems) == MAX_ITEMS_PER_LEGEND):
-            numLegends = addLegend(p, legendItems, numLegends);
-
-    # Add whatever legend items did not get added
-    if (len(legendItems) > 0):
-        numLegends = addLegend(p, legendItems, numLegends);
+        legendItems[func] = fColor;
 
     # Plot height is the function of the maximum call stack and the number of
     # legends
-    p.plot_height =  (numLegends * pixelsPerLegend) \
-                     + max((y_max+1) * pixelsPerStackLevel, 100) \
-                     + pixelsForTitle;
+    p.plot_height =  max((y_max+1) * pixelsPerStackLevel, 100) + pixelsForTitle;
 
-    return p;
+    return p, legendItems;
 
 def generateEmptyDataset():
 
@@ -489,11 +553,11 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
     global bucketDir;
     global colorAlreadyUsedInLegend;
 
+    aggregateLegendDict = {};
     figuresForAllFiles = [];
     fileName = bucketDir + "/bucket-" + str(i) + ".html";
 
     reset_output();
-
 
     intervalTitle = "Interval " + "{:,}".format(lowerBound) + \
                     " to " + "{:,}".format(upperBound) + \
@@ -560,11 +624,15 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
         largestStackDepth = bucketDF['stackdepthNext'].max();
         figureTitle = fname;
 
-        figure = generateBucketChartForFile(figureTitle, bucketDF,
-                                            largestStackDepth,
-                                            lowerBound, upperBound);
-
+        figure, legendDict = generateBucketChartForFile(figureTitle, bucketDF,
+                                                        largestStackDepth,
+                                                        lowerBound, upperBound);
+        aggregateLegendDict.update(legendDict);
         figuresForAllFiles.append(figure);
+
+    # Create the legend for this file and insert it after the navigator figure
+    legendFigure = createLegendFigure(aggregateLegendDict);
+    figuresForAllFiles.insert(1, legendFigure);
 
     if (len(figuresForAllFiles) > 0):
         savedFileName = save(column(figuresForAllFiles),
