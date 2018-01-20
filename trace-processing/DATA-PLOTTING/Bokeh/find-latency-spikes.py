@@ -345,7 +345,7 @@ def createCallstackSeries(data, logfilename):
 #
 colorAlreadyUsedInLegend = {};
 
-def createLegendFigure(legendDict):
+def createLegendFigure(legendDict, i):
 
     global pixelsForTitle;
     global plotWidth;
@@ -358,7 +358,7 @@ def createLegendFigure(legendDict):
     colors = [];
     x_coords = [];
     y_coords = [];
-    pixelsForLegendItem = 25;
+    pixelsForLegendItem = 20;
 
     # Get a sorted list of functions and their
     # corresponding colors.
@@ -400,7 +400,7 @@ def createLegendFigure(legendDict):
                plot_height = max((max_ycoord + 2) * pixelsForLegendItem, 90),
                tools = [], toolbar_location="above",
                x_range = (0, (FUNCS_PER_ROW + 1)* HSPACE_BETWEEN_FUNCS),
-               y_range = (-0.5, max_ycoord + 2),
+               y_range = (0, max_ycoord + 2),
                x_axis_label = "",
                y_axis_label = "");
 
@@ -632,8 +632,9 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
         figuresForAllFiles.append(figure);
 
     # Create the legend for this file and insert it after the navigator figure
-    legendFigure = createLegendFigure(aggregateLegendDict);
-    figuresForAllFiles.insert(1, legendFigure);
+    if (len(aggregateLegendDict) > 0):
+        legendFigure = createLegendFigure(aggregateLegendDict, i);
+        figuresForAllFiles.insert(1, legendFigure);
 
     if (len(figuresForAllFiles) > 0):
         savedFileName = save(column(figuresForAllFiles),
