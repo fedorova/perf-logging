@@ -1,4 +1,31 @@
 #!/usr/bin/env python
+#
+# Public Domain 2014-2018 MongoDB, Inc.
+# Public Domain 2008-2014 WiredTiger, Inc.
+#
+# This is free and unencumbered software released into the public domain.
+#
+# Anyone is free to copy, modify, publish, use, compile, sell, or
+# distribute this software, either in source code form or as a compiled
+# binary, for any purpose, commercial or non-commercial, and by any
+# means.
+#
+# In jurisdictions that recognize copyright laws, the author or authors
+# of this software dedicate any and all copyright interest in the
+# software to the public domain. We make this dedication for the benefit
+# of the public at large and to the detriment of our heirs and
+# successors. We intend this dedication to be an overt act of
+# relinquishment in perpetuity of all present and future rights to this
+# software under copyright law.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#!/usr/bin/env python
 
 import argparse
 from bokeh.layouts import column
@@ -26,16 +53,16 @@ colorList = [];
 # Codes for various colors for printing of informational and error messages.
 #
 class color:
-   PURPLE = '\033[95m'
-   CYAN = '\033[96m'
-   DARKCYAN = '\033[36m'
-   BLUE = '\033[94m'
-   GREEN = '\033[92m'
-   YELLOW = '\033[93m'
-   RED = '\033[91m'
-   BOLD = '\033[1m'
-   UNDERLINE = '\033[4m'
-   END = '\033[0m'
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
 
 # A function name mapped to its corresponding color.
 #
@@ -71,11 +98,16 @@ pixelsForTitle = 30;
 pixelsPerHeightUnit = 30;
 pixelsPerWidthUnit = 5;
 
+# The name of the time units that were used when recording timestamps.
+# We assume that it's nanoseconds by default. Alternative units can be
+# set in the configuration file.
+#
+timeUnitString = "nanoseconds";
+
 # The coefficient by which we multiply the standard deviation when
 # setting the outlier threshold, in case it is not specified by the user.
 #
 STDEV_MULT = 2;
-
 
 def initColorList():
 
@@ -104,7 +136,6 @@ def getColorForFunction(function):
         lastColorUsed += 1;
 
     return funcToColor[function];
-
 
 #
 # An intervalEnd is a tuple of three items.
@@ -155,6 +186,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
     global pixelsForTitle;
     global pixelsPerHeightUnit;
     global plotWidth;
+    global timeUnitString;
 
     cds = ColumnDataSource(dataframe);
 
@@ -171,7 +203,7 @@ def plotOutlierHistogram(dataframe, maxOutliers, func, durationThreshold,
                plot_height = min(500, (max(5, (maxOutliers + 1)) \
                                        * pixelsPerHeightUnit + \
                                        pixelsForTitle)),
-               x_axis_label = "Execution timeline (CPU cycles)",
+               x_axis_label = "Execution timeline (" + timeUnitString + ")",
                y_axis_label = "Number of outliers",
                tools = TOOLS, toolbar_location="above");
 
@@ -317,10 +349,15 @@ def createCallstackSeries(data, logfilename):
             continue;
 
     if (len(intervalBeginningsStack) > 0):
-        logfile.write(str(len(intervalBeginningsStack)) + " operations had a " +
+        logfile.write("The following " +
+                      str(len(intervalBeginningsStack)) + " operations had a " +
                       "begin record, but no matching end records. " +
                       "Please check that your operation tracking macros " +
-                      "are properly inserted.\n");
+                      "are properly inserted. Skipping:\n");
+        for j in range(len(intervalBeginningsStack)):
+            row = intervalBeginningsStack[j];
+            logfile.write(str(row[0]) + " " + str(row[1]) + " "
+                          + str(row[2]) + "\n");
         if (not errorReported):
             errorReported = reportDataError(logfile, logfilename);
         intervalBeginningsStack = [];
@@ -440,6 +477,7 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
     global colorAlreadyUsedInLegend;
     global funcToColor;
     global plotWidth;
+    global timeUnitString;
 
     MAX_ITEMS_PER_LEGEND = 10;
     numLegends = 0;
@@ -461,7 +499,7 @@ def generateBucketChartForFile(figureName, dataframe, y_max, x_min, x_max):
     p = figure(title=figureName, plot_width=plotWidth,
                x_range = (x_min, x_max),
                y_range = (0, y_max+1),
-               x_axis_label = "Time (CPU cycles)",
+               x_axis_label = "Time (" + timeUnitString + ")",
                y_axis_label = "Stack depth",
                tools = TOOLS, toolbar_location="above");
 
@@ -533,6 +571,7 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
 
     global bucketDir;
     global colorAlreadyUsedInLegend;
+    global timeUnitString;
 
     aggregateLegendDict = {};
     figuresForAllFiles = [];
@@ -542,7 +581,7 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
 
     intervalTitle = "Interval #" + str(i) + ". {:,}".format(lowerBound) + \
                     " to " + "{:,}".format(upperBound) + \
-                    " CPU cycles.";
+                    " " + timeUnitString + ".";
 
     # Generate a navigator chart, which shows where we are in the
     # trace and allows moving around the trace.
@@ -626,9 +665,12 @@ def generateCrossFilePlotsForBucket(i, lowerBound, upperBound, navigatorDF):
 #
 def generateNavigatorFigure(dataframe, i, title):
 
+    global firstTimeStamp;
+    global lastTimeStamp;
     global pixelsForTitle;
     global pixelsPerHeightUnit;
     global plotWidth;
+    global timeUnitString;
 
     # Generate the colors, such that the current interval is shown in a
     # different color than the rest.
@@ -649,11 +691,16 @@ def generateNavigatorFigure(dataframe, i, title):
 
     TOOLS = [hover, "tap"];
 
+    totalTime = lastTimeStamp - firstTimeStamp;
+    xLabel = "Total trace time: " + '{0:,.0f}'.format(totalTime) + \
+             " " + timeUnitString + ".";
+
     p = figure(title = title, plot_width = plotWidth,
                x_range = (0, numIntervals),
-               plot_height =  2 * pixelsPerHeightUnit + pixelsForTitle,
-               x_axis_label = "",
-               y_axis_label = "", tools = TOOLS,
+               plot_height =  2 * pixelsPerHeightUnit + 2 * pixelsForTitle,
+               x_axis_label = xLabel,
+               y_axis_label = "",
+               tools = TOOLS,
                toolbar_location="above");
 
     # No minor ticks or labels on the y-axis
@@ -797,6 +844,7 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
     global lastTimeStamp;
     global plotWidth;
     global pixelsPerWidthUnit;
+    global timeUnitString;
     global STDEV_MULT;
 
     durationThreshold = 0;
@@ -833,7 +881,7 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
         stdDev = funcDF['durations'].std();
         durationThreshold = averageDuration + mult * stdDev;
         durationThresholdDescr = '{0:,.0f}'.format(durationThreshold) \
-                                 + " measurement units (" + str(mult) + \
+                                 + " " + timeUnitString + " (" + str(mult) + \
                                  " standard deviations)";
 
     numBuckets = plotWidth / pixelsPerWidthUnit;
@@ -874,6 +922,22 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
     return plotOutlierHistogram(dataframe, maxOutliers, func,
                                 durationThresholdDescr, averageDuration,
                                 maxDuration);
+
+#
+# Return the string naming the time units used to measure time stamps,
+# depending on how many time units there are in a second.
+#
+def getTimeUnitString(unitsPerSecond):
+
+    if unitsPerSecond == 1000:
+        return "milliseconds";
+    elif unitsPerSecond == 1000000:
+        return "microseconds";
+    elif unitsPerSecond == 1000000000:
+        return "nanoseconds";
+    else:
+        return "CPU cycles";
+
 #
 # The configuration file tells us which functions should be considered
 # outliers. All comment lines must begin with '#'.
@@ -882,8 +946,9 @@ def createOutlierHistogramForFunction(func, funcDF, bucketFilenames):
 # the measurement units in the trace file. It must have a single number
 # telling us how many time units are contained in a second. This should
 # be the same time units used in the trace file. For example, if the trace
-# file contains timestamps measured in milliseconds, the number would be 1000.
-# If timestamps were measured in clock cycles, as is typically done, the number
+# file contains timestamps measured in milliseconds, the number would be 1000,
+# it the timestamp is in nanoseconds, the number would be 1000000000.
+# If timestamps were measured in clock cycles, the number
 # must tell us how many times the CPU clock ticks per second on the processor
 # where the trace was gathered.
 #
@@ -917,6 +982,7 @@ def parseConfigFile(fname):
 
     global outlierThresholdDict;
     global outlierPrettyNames;
+    global timeUnitString;
 
     configFile = None;
     firstNonCommentLine = True;
@@ -942,6 +1008,8 @@ def parseConfigFile(fname):
                 unitsPerMillisecond = unitsPerSecond / 1000;
                 unitsPerMicrosecond = unitsPerSecond / 1000000;
                 unitsPerNanosecond  = unitsPerSecond / 1000000000;
+
+                timeUnitString = getTimeUnitString(unitsPerSecond);
 
                 firstNonCommentLine = False;
             except ValueError:
@@ -1051,6 +1119,9 @@ def main():
 
     # Parallelize this later, so we are working on files in parallel.
     for fname in args.files:
+        if not ".txt" in fname:
+            print(color.RED + color.BOLD + "Warning: " + fname +
+                  " may not be a text file." + color.END);
         processFile(fname);
 
     # Normalize all intervals by subtracting the first timestamp.
@@ -1083,6 +1154,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
