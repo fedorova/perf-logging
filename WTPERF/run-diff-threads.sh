@@ -8,8 +8,8 @@ else
 fi
 
 #DB_HOME=/tmp/WT_TEST/
-#DB_HOME=/mnt/fast/sasha/WT_TEST/
-DB_HOME=$HOME/Work/WiredTiger/WT_TEST
+DB_HOME=/mnt/fast/sasha/WT_TEST/
+#DB_HOME=$HOME/Work/WiredTiger/WT_TEST
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 #SCRIPT_HOME=${WT_HOME}/../bench/wtperf/runners
 #OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
@@ -70,7 +70,7 @@ do
 	    if [ "$OSTYPE" == 'darwin' ]; then
 		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPTRACK=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=true,path=.\)\"
 	    else
-		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\)\"
+		DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=true,path=.\)\"
 	    fi
 	    popd
 	fi
@@ -80,8 +80,6 @@ do
 	mv ${DB_HOME}/latency.* ${OUTPUT}/${i}/.
 	mv ${DB_HOME}/monitor ${OUTPUT}/${i}/.
 	mv ${DB_HOME}/WiredTigerStat* ${OUTPUT}/${i}/.
-	python ${WT_HOME}/../tools/wtstats/wtstats.py --clear ${OUTPUT}/${i}/WiredTigerStat*
-	mv wtstats.html ${OUTPUT}/${i}/.
 	mv ${DB_HOME}/optrack* ${OUTPUT}/${i}/.
     done
 done

@@ -6,9 +6,10 @@ else
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 #    WT_HOME=/tmpfs/${BRANCH}/build_posix
 fi
+
 #DB_HOME=/tmp/WT_TEST
-#DB_HOME=/mnt/fast/sasha/WT_TEST/
-DB_HOME=${HOME}/Work/WiredTiger/WT_TEST
+DB_HOME=/mnt/fast/sasha/WT_TEST/
+#DB_HOME=${HOME}/Work/WiredTiger/WT_TEST
 SCRIPTS_HOME=$HOME/Work/WiredTiger/perf-logging/WTPERF
 
 mkdir ${DB_HOME}
