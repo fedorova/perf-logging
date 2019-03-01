@@ -7,12 +7,14 @@ else
 fi
 
 DB_HOME=/mnt/fast/sasha/WT_TEST/
-SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
-OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
+#SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
+SCRIPT_HOME=${HOME}/Work/WiredTiger/wt-dev/bench/wtperf/runners
+#OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 OUTPUT_ROOT=.
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
+ENABLE_OPTRACK=false
 #WORKLOAD="500m-btree-50r50u.wtperf"
 #WORKLOAD="500m-btree-80r20u.wtperf"
 #WORKLOAD="500m-btree-populate.wtperf"
@@ -20,9 +22,9 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 #WORKLOAD="checkpoint-stress-schema-ops-run.wtperf"
 #WORKLOAD="evict-btree.wtperf"
 #WORKLOAD="evict-btree-run.wtperf"
-#WORKLOAD="evict-btree-stress-multi.wtperf"
+WORKLOAD="evict-btree-stress-multi.wtperf"
 #WORKLOAD="evict-btree-stress.wtperf"
-WORKLOAD="evict-btree-stress-multi-run.wtperf"
+#WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="evict-lsm-readonly.wtperf"
 #WORKLOAD="many-table-stress.wtperf"
 #WORKLOAD="medium-btree.wtperf"
@@ -57,9 +59,9 @@ do
 	mkdir ${OUTPUT}/${i}
 	pushd ${WT_HOME}/bench/wtperf
 	if [ "$OSTYPE" == 'darwin' ]; then
-	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPTRACK=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=true,path=.\)\"
+	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPTRACK=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=.\)\"
 	else
-	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=true,path=.\)\"
+	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=.\)\"
 	fi
 	popd
 
