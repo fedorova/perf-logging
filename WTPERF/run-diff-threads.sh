@@ -15,7 +15,8 @@ DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 ENABLE_OPTRACK=false
-PERF="perf record" 
+PERF="perf stat -e 'syscalls:sys_enter_*'"
+#PERF="perf record -e page-faults -g"
 #PERF=""
 
 #WORKLOAD="500m-btree-50r50u.wtperf"
