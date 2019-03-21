@@ -15,7 +15,8 @@ DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 ENABLE_OPTRACK=false
-PERF="perf stat -e 'syscalls:sys_enter_*'"
+#PERF="perf stat -e 'syscalls:sys_enter_*'"
+PERF="perf record -e sched:sched_stat_sleep -e sched:sched_switch -e sched:sched_process_exit -a -g -o perf.data.raw"
 #PERF="perf record -e page-faults -g"
 #PERF=""
 
@@ -70,8 +71,8 @@ do
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPTRACK=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=${OPTRACK_DIR}\)\"
 	else
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${PERF} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=${OPTRACK_DIR}\)\"
-	    if [ -f perf.data ]; then
-		mv perf.data ${OUTPUT}/${i}
+	    if ls perf.data.* 1> /dev/null 2>&1; then
+		mv perf.data.* ${OUTPUT}/${i}
 	    fi
 	fi
 	popd
