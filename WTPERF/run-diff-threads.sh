@@ -7,8 +7,8 @@ else
 fi
 
 DB_HOME=/mnt/data0/sasha/WT_TEST/
-#SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
-SCRIPT_HOME=${HOME}/Work/WiredTiger/wt-dev/bench/wtperf/runners
+SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
+#SCRIPT_HOME=${HOME}/Work/WiredTiger/wt-dev/bench/wtperf/runners
 #OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
 OUTPUT_ROOT=/mnt/data0/sasha/WTPERF
 DATE=`date +%Y-%b-%d-%H:%M`
@@ -16,8 +16,8 @@ EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 ENABLE_OPTRACK=false
 #PERF="perf stat -e 'syscalls:sys_enter_*'"
-PERF="perf record -e sched:sched_stat_sleep -e sched:sched_switch -e sched:sched_process_exit -a -g -o perf.data.raw"
-#PERF="perf record -e page-faults -g"
+#PERF="perf record -e sched:sched_stat_sleep -e sched:sched_switch -e sched:sched_process_exit -a -g -o perf.data.raw"
+PERF="perf record -g"
 #PERF=""
 
 #WORKLOAD="500m-btree-50r50u.wtperf"
@@ -71,8 +71,8 @@ do
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPTRACK=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=${OPTRACK_DIR}\)\"
 	else
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${PERF} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=${OPTRACK_DIR}\)\"
-	    if ls perf.data.* 1> /dev/null 2>&1; then
-		mv perf.data.* ${OUTPUT}/${i}
+	    if ls perf.data* 1> /dev/null 2>&1; then
+		mv perf.data* ${OUTPUT}/${i}
 	    fi
 	fi
 	popd
