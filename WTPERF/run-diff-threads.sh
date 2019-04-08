@@ -17,8 +17,7 @@ INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
 ENABLE_OPTRACK=false
 #PERF="perf stat -e 'syscalls:sys_enter_*'"
 #PERF="perf record -e sched:sched_stat_sleep -e sched:sched_switch -e sched:sched_process_exit -a -g -o perf.data.raw"
-#PERF="perf record -g"
-#PERF=""
+PERF="perf stat -d -o perf.data.stat"
 
 #WORKLOAD="500m-btree-50r50u.wtperf"
 #WORKLOAD="500m-btree-80r20u.wtperf"
@@ -31,7 +30,7 @@ ENABLE_OPTRACK=false
 #WORKLOAD="evict-btree-stress.wtperf"
 #WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="evict-lsm-readonly.wtperf"
-#WORKLOAD="lsm-read.wtperf"
+WORKLOAD="lsm-read.wtperf"
 #WORKLOAD="lsm-populate.wtperf"
 #WORKLOAD="lsm-update.wtperf"
 #WORKLOAD="many-table-stress.wtperf"
@@ -41,7 +40,7 @@ ENABLE_OPTRACK=false
 #WORKLOAD="mongodb-secondary-apply-run.wtperf"
 #WORKLOAD="multi-btree-read-heavy-stress-run.wtperf"
 #WORKLOAD="multi-btree-zipfian-workload.wtperf"
-WORKLOAD="small-btree-run.wtperf"
+#WORKLOAD="small-btree-run.wtperf"
 
 #DINAMITE_TRACE_DIR="/mnt/fast/sasha"
 DINAMITE_TRACE_DIR="/dev/shm"
