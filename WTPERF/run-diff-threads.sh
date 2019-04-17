@@ -6,7 +6,7 @@ else
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 fi
 
-DB_HOME=/mnt/data0/sasha/WT_TEST/
+DB_HOME=/mnt/data0/sasha/WT_TEST
 SCRIPT_HOME=${HOME}/Work/WiredTiger/perf-logging/WTPERF
 #SCRIPT_HOME=${HOME}/Work/WiredTiger/wt-dev/bench/wtperf/runners
 #OUTPUT_ROOT=${HOME}/Work/WiredTiger/WTPERF/EVICTION
@@ -14,10 +14,11 @@ OUTPUT_ROOT=/mnt/data0/sasha/WTPERF
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
-ENABLE_OPTRACK=false
+ENABLE_OPTRACK=true
 #PERF="perf stat -e 'syscalls:sys_enter_*'"
 #PERF="perf record -e sched:sched_stat_sleep -e sched:sched_switch -e sched:sched_process_exit -a -g -o perf.data.raw"
-PERF="perf stat -d -o perf.data.stat"
+#PERF="perf stat -d -o perf.data.stat"
+#PERF="perf record"
 
 #WORKLOAD="500m-btree-50r50u.wtperf"
 #WORKLOAD="500m-btree-80r20u.wtperf"
@@ -30,8 +31,9 @@ PERF="perf stat -d -o perf.data.stat"
 #WORKLOAD="evict-btree-stress.wtperf"
 #WORKLOAD="evict-btree-stress-multi-run.wtperf"
 #WORKLOAD="evict-lsm-readonly.wtperf"
-WORKLOAD="lsm-read.wtperf"
-#WORKLOAD="lsm-populate.wtperf"
+#WORKLOAD="lsm-read.wtperf"
+#WORKLOAD="lsm-read-9GB.wtperf"
+WORKLOAD="lsm-populate.wtperf"
 #WORKLOAD="lsm-update.wtperf"
 #WORKLOAD="many-table-stress.wtperf"
 #WORKLOAD="medium-btree.wtperf"
