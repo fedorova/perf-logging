@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=wt-dev
+BRANCH=wt-4637
 if [ "$OSTYPE" == 'darwin' ]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
 else
@@ -16,7 +16,7 @@ OUTPUT_ROOT=/mnt/data0/sasha/WTPERF
 DATE=`date +%Y-%b-%d-%H:%M`
 EVICT_WORKERS=DEF
 INST_LIB=${HOME}/Work/DINAMITE/LLVM/llvm-3.5.0.src/projects/dinamite/library
-ENABLE_OPTRACK=false
+ENABLE_OPTRACK=true
 #PERF="perf stat -e 'syscalls:sys_enter_*'"
 #PERF="perf record -e sched:sched_stat_sleep -e sched:sched_switch -e sched:sched_process_exit -a -g -o perf.data.raw"
 #PERF="perf stat -d -o perf.data.stat"
@@ -75,15 +75,17 @@ do
 	mkdir ${OUTPUT}/${i}
 	OPTRACK_DIR=${OUTPUT}/${i}
 	pushd ${WT_HOME}/bench/wtperf
-	LC_TIME=en_US.UTF-8 iostat -k -t -x 1 > ${OUTPUT}/${i}/iostat.log &
-	IOSTAT_PID=$!
+
+	#export WIREDTIGER_CONFIG="statistics=(cache_walk),statistics_log=(wait=1,sources=(\"file:\"))"
+	#export WIREDTIGER_CONFIG="statistics=(fast),statistics_log=(wait=1,json=true),verbose=(evictserver)"
+	export WIREDTIGER_CONFIG="statistics=(fast),statistics_log=(wait=5,json=true)"
+	echo $WIREDTIGER_CONFIG
 
 	if [ "$OSTYPE" == 'darwin' ]; then
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} DYLD_LIBRARY_PATH=${INST_LIB} WIREDTIGER_OPTRACK=${HOME}/Work/WiredTiger/WTPERF ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"statistics=\(fast\),statistics_log=\(wait=1\),operation_tracking=\(enabled=${ENABLE_OPTRACK},path=${OPTRACK_DIR}\)\"
 	else
-	    export WIREDTIGER_CONFIG="statistics=(cache_walk),statistics_log=(wait=1,sources=(\"file:\"))"
-	    export WIREDTIGER_CONFIG="statistics=(all),statistics_log=(wait=1,json=true)"
-	    echo $WIREDTIGER_CONFIG
+	    LC_TIME=en_US.UTF-8 iostat -k -t -x 1 > ${OUTPUT}/${i}/iostat.log &
+	    IOSTAT_PID=$!
 	    DINAMITE_TRACE_PREFIX=${DINAMITE_TRACE_DIR} LD_LIBRARY_PATH=${INST_LIB} ${PERF} ${WT_HOME}/bench/wtperf/wtperf -h ${DB_HOME} -O ${SCRIPT_HOME}/${WORKLOAD} -o conn_config=\"operation_tracking=\(enabled=${ENABLE_OPTRACK},path=${OPTRACK_DIR}\)\"
 	    if ls perf.data* 1> /dev/null 2>&1; then
 		mv perf.data* ${OUTPUT}/${i}
