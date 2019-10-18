@@ -1,6 +1,6 @@
 #!/bin/bash
-BRANCH=wt-dev
-if [ "$OSTYPE" == 'darwin' ]; then
+BRANCH=wt-dev-orig
+if [[ "$OSTYPE" == *"darwin"* ]]; then
     WT_HOME=${HOME}/Work/WiredTiger/${BRANCH}/build_posix
     DB_HOME=$HOME/Work/WiredTiger/WT_TEST/
 else
