@@ -123,6 +123,7 @@ do
 	cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
 	./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 	cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat
+	cp ${DB_HOME}/monitor ${OUTPUT_BASE}/${branch}/${workload}.monitor
     done
 done
 
