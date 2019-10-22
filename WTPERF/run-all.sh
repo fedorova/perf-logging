@@ -1,9 +1,9 @@
 #!/bin/bash
 
 TEST_WORKLOADS="
+500m-btree-populate.wtperf
 500m-btree-50r50u.wtperf
 500m-btree-80r20u.wtperf
-500m-btree-populate.wtperf
 500m-btree-rdonly.wtperf
 checkpoint-latency-0.wtperf
 checkpoint-latency-1.wtperf
@@ -120,8 +120,8 @@ do
 
 	echo ${workload} ${branch}
 
-	cd ${HOME}/Work/WiredTiger/${branch}/build_posix
-	./bench/wtperf/wtperf -h ${DB_HOME} -O ../bench/wtperf/runners/${workload}
+	cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
+	./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 	cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat
     done
 done
