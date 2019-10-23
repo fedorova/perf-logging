@@ -70,6 +70,12 @@ update-lsm.wtperf
 update-only-btree.wtperf
 update-shrink-stress.wtperf"
 
+TEST_WORKLOADS="
+500m-btree-50r50u.wtperf
+500m-btree-80r20u.wtperf
+checkpoint-stress-schema-ops.wtperf
+"
+
 TEST_BRANCH=wt-dev
 ORIG_BRANCH=wt-dev-orig
 
@@ -121,9 +127,17 @@ do
 	echo ${workload} ${branch}
 
 	cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
-	./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
-	cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat
-	cp ${DB_HOME}/monitor ${OUTPUT_BASE}/${branch}/${workload}.monitor
+
+	for iter in 1 2 3;
+	do
+	    echo Iteration ${iter}
+	    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
+	    # Save the test results
+	    cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
+	    # Save the stats
+	    mkdir ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT
+	    cp ${DB_HOME}/WiredTigerStat* ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT/.
+	done
     done
 done
 
