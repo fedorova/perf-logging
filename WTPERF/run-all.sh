@@ -71,9 +71,8 @@ update-only-btree.wtperf
 update-shrink-stress.wtperf"
 
 TEST_WORKLOADS="
-500m-btree-50r50u.wtperf
-500m-btree-80r20u.wtperf
-checkpoint-stress-schema-ops.wtperf
+evict-btree-readonly.wtperf
+evict-lsm-readonly.wtperf
 "
 
 TEST_BRANCH=wt-dev
@@ -130,6 +129,7 @@ do
 
 	for iter in 1 2 3;
 	do
+	    rm -rf ${DB_HOME}/*
 	    echo Iteration ${iter}
 	    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 	    # Save the test results
