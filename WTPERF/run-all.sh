@@ -71,8 +71,41 @@ update-only-btree.wtperf
 update-shrink-stress.wtperf"
 
 TEST_WORKLOADS="
-evict-btree-readonly.wtperf
-evict-lsm-readonly.wtperf
+index-pareto-btree.wtperf
+insert-rmw.wtperf
+large-lsm.wtperf
+log.wtperf
+long-txn-btree.wtperf
+long-txn-lsm.wtperf
+many-table-stress.wtperf
+medium-btree.wtperf
+medium-lsm-async.wtperf
+medium-lsm-compact.wtperf
+medium-lsm.wtperf
+medium-multi-btree-log-partial.wtperf
+medium-multi-btree-log.wtperf
+medium-multi-lsm-noprefix.wtperf
+medium-multi-lsm.wtperf
+metadata-split-test.wtperf
+modify-force-update-large-record-btree.wtperf
+modify-large-record-btree.wtperf
+mongodb-large-oplog.wtperf
+mongodb-oplog.wtperf
+mongodb-secondary-apply.wtperf
+mongodb-small-oplog.wtperf
+multi-btree-long.wtperf
+multi-btree-read-heavy-stress.wtperf
+multi-btree-stress.wtperf
+multi-btree-zipfian-populate.wtperf
+multi-btree-zipfian-workload.wtperf
+multi-btree.wtperf
+overflow-10k.wtperf
+overflow-130k.wtperf
+parallel-pop-btree.wtperf
+parallel-pop-lsm.wtperf
+parallel-pop-stress.wtperf
+small-btree.wtperf
+small-lsm.wtperf
 "
 
 TEST_BRANCH=wt-dev
@@ -100,7 +133,7 @@ OUTPUT_BASE=${HOME}/Work/WiredTiger/WTPERF/OUTPUT
 for dest in ${TEST_BRANCH} ${ORIG_BRANCH};
 do
     if [ ! -d ${OUTPUT_BASE}/${dest} ]; then
-	mkdir ${OUTPUT_BASE}/${dest}
+        mkdir ${OUTPUT_BASE}/${dest}
     fi
 done
 
@@ -110,7 +143,7 @@ done
 for home in ${TEST_BRANCH} ${ORIG_BRANCH};
 do
     if [ ! -d ${TEST_BASE}/${home} ]; then
-	mkdir ${TEST_BASE}/${home}
+        mkdir ${TEST_BASE}/${home}
     fi
 done
 
@@ -120,24 +153,24 @@ for workload in ${TEST_WORKLOADS};
 do
     for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
     do
-	# Run the test workload
-	DB_HOME=${TEST_BASE}/${branch}
+        # Run the test workload
+        DB_HOME=${TEST_BASE}/${branch}
 
-	echo ${workload} ${branch}
+        echo ${workload} ${branch}
 
-	cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
+        cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
 
-	for iter in 1 2 3;
-	do
-	    rm -rf ${DB_HOME}/*
-	    echo Iteration ${iter}
-	    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
-	    # Save the test results
-	    cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
-	    # Save the stats
-	    mkdir ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT
-	    cp ${DB_HOME}/WiredTigerStat* ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT/.
-	done
+        for iter in 1 2 3;
+        do
+            rm -rf ${DB_HOME}/*
+            echo Iteration ${iter}
+            ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
+            # Save the test results
+            cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
+            # Save the stats
+            mkdir ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT
+            cp ${DB_HOME}/WiredTigerStat* ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT/.
+        done
     done
 done
 
