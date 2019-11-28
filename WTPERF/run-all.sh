@@ -71,42 +71,8 @@ update-only-btree.wtperf
 update-shrink-stress.wtperf"
 
 TEST_WORKLOADS="
-index-pareto-btree.wtperf
-insert-rmw.wtperf
-large-lsm.wtperf
 log.wtperf
-long-txn-btree.wtperf
-long-txn-lsm.wtperf
-many-table-stress.wtperf
-medium-btree.wtperf
-medium-lsm-async.wtperf
-medium-lsm-compact.wtperf
-medium-lsm.wtperf
-medium-multi-btree-log-partial.wtperf
-medium-multi-btree-log.wtperf
-medium-multi-lsm-noprefix.wtperf
-medium-multi-lsm.wtperf
-metadata-split-test.wtperf
-modify-force-update-large-record-btree.wtperf
-modify-large-record-btree.wtperf
-mongodb-large-oplog.wtperf
-mongodb-oplog.wtperf
-mongodb-secondary-apply.wtperf
-mongodb-small-oplog.wtperf
-multi-btree-long.wtperf
-multi-btree-read-heavy-stress.wtperf
-multi-btree-stress.wtperf
-multi-btree-zipfian-populate.wtperf
-multi-btree-zipfian-workload.wtperf
-multi-btree.wtperf
-overflow-10k.wtperf
-overflow-130k.wtperf
-parallel-pop-btree.wtperf
-parallel-pop-lsm.wtperf
-parallel-pop-stress.wtperf
-small-btree.wtperf
-small-lsm.wtperf
-"
+update-large-lsm.wtperf"
 
 TEST_BRANCH=wt-dev
 ORIG_BRANCH=wt-dev-orig
@@ -152,6 +118,7 @@ done
 for workload in ${TEST_WORKLOADS};
 do
     for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
+#    for branch in ${ORIG_BRANCH};
     do
         # Run the test workload
         DB_HOME=${TEST_BASE}/${branch}
