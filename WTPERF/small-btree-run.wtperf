@@ -3,6 +3,6 @@ conn_config="cache_size=500MB"
 table_config="type=file"
 icount=500000
 report_interval=5
-run_time=20
+run_time=120
 create=false
-threads=((count=1,reads=1))
+threads=((count=8,reads=1))
