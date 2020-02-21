@@ -71,12 +71,22 @@ update-lsm.wtperf
 update-only-btree.wtperf
 update-shrink-stress.wtperf"
 
-#TEST_WORKLOADS="
-#evict-btree-1.wtperf
-#evict-btree-stress.wtperf
-#evict-btree.wtperf"
+TEST_WORKLOADS="
+index-pareto-btree.wtperf
+insert-rmw.wtperf
+log.wtperf
+many-table-stress.wtperf
+medium-multi-btree-log-partial.wtperf
+medium-multi-lsm.wtperf
+medium-multi-lsm-noprefix.wtperf
+overflow-130k.wtperf
+update-lsm.wtperf"
 
-TEST_BRANCH=wt-5170-mmap
+TEST_WORKLOADS="
+update-shrink-stress.wtperf"
+
+TEST_BRANCH=wt-5170-mods
+TEST_ORIG_BRANCH=wt-5170-mmap
 ORIG_BRANCH=wt-dev-orig
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
@@ -119,7 +129,7 @@ done
 #
 for workload in ${TEST_WORKLOADS};
 do
-    for branch in ${ORIG_BRANCH};
+    for branch in ${ORIG_BRANCH} ${TEST_ORIG_BRANCH} ${TEST_BRANCH};
 #    for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
 #    for branch in ${TEST_BRANCH};
     do
