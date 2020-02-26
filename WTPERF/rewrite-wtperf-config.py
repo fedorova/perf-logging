@@ -36,7 +36,6 @@ def parse_new_table_config(newConfig):
         newConfigSingles.append(kv_pairs[0]);
         return 0;
 
-    print(color.BOLD + "Parsing key-value pairs:" + color.END);
     for kvpair in kv_pairs:
         if (len(kvpair) == 0):
             continue;
@@ -87,9 +86,6 @@ def compareAndChoose(old, new):
     oldNumbersLetters = re.split('(\d+)', old);
     newNumbersLetters = re.split('(\d+)', new);
 
-    print(oldNumbersLetters);
-    print(newNumbersLetters);
-
     oldNumber, oldLetter = parseNL(oldNumbersLetters);
     newNumber, newLetter = parseNL(newNumbersLetters);
 
@@ -105,9 +101,10 @@ def modify(oldKVPair):
 
     oldKV = oldKVPair.split("=");
 
+    # We don't support augmenting complex configuration strings.
+    # Return as is.
+    #
     if (len(oldKV) !=2):
-        print(color.BOLD + "Unexpected key-value pair: " + color.RED +
-               oldKVPair + color.END);
         return oldKVPair;
 
     for idx, newKV in enumerate(newConfigPairs):
@@ -115,7 +112,6 @@ def modify(oldKVPair):
             continue;
 
         winningValue = compareAndChoose(oldKV[1], newKV[1]);
-        print("Old: "+ oldKV[1] + ", new:" + newKV[1] + ", winning: " + winningValue);
 
         # We augmented this config option, so let's remove it,
         # otherwise it will be added as is.
@@ -147,19 +143,18 @@ def augmentConfigString(line, configStringName):
         newConfigWords.append("\"\n");
         return s.join(newConfigWords);
 
+    # We do not support augmenting these complex strings.
+    # Return as is.
     if (len(configValueTokens) != 2):
         print(color.BOLD + "Unexpected configuation string: "+ color.RED +
-               line + color.END);
-        return;
+              line + color.END);
+        return line;
 
     configValues = configValueTokens[1].strip().strip("\"");
-    print(configValues);
 
     configKVPairs = configValues.split(",");
     for oldKV in configKVPairs:
-        print("Old: " + oldKV);
         newKV = modify(oldKV);
-        print("New: " + newKV);
         newConfigWords.append(newKV)
         newConfigWords.append(",");
 
@@ -195,7 +190,7 @@ def processFile(oldFileName, newFileName, configStringName):
 
 def modify_files(files, newSuffix, configStringName):
 
-    print(color.BOLD + "Processing files...\n" + color.END);
+    print(color.BOLD + "Processing files..." + color.END);
 
     for file in files:
         if (not os.path.exists(file)):
