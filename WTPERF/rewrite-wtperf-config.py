@@ -5,8 +5,8 @@ import os
 import re
 import sys
 
-newConfigPairs = [];
-newConfigSingles = [];
+suppliedConfigPairs = [];
+suppliedConfigSingles = [];
 
 # Codes for various colors for printing of informational and error messages.
 #
@@ -33,7 +33,7 @@ def parse_new_table_config(newConfig):
 
     print(color.BOLD + "New configuration string: " + color.END + newConfig);
     if (len(kv_pairs) < 2):
-        newConfigSingles.append(kv_pairs[0]);
+        suppliedConfigSingles.append(kv_pairs[0]);
         return 0;
 
     for kvpair in kv_pairs:
@@ -46,7 +46,7 @@ def parse_new_table_config(newConfig):
             return -1;
         else:
             print(str(kv[0]) + "=" + str(kv[1]));
-            newConfigPairs.append((kv[0], kv[1]));
+            suppliedConfigPairs.append((kv[0], kv[1]));
 
     return 0;
 
@@ -97,7 +97,7 @@ def compareAndChoose(old, new):
     else:
         return new;
 
-def modify(oldKVPair):
+def modify(oldKVPair, newConfigPairs):
 
     oldKV = oldKVPair.split("=");
 
@@ -121,7 +121,7 @@ def modify(oldKVPair):
 
     return oldKVPair;
 
-def augmentConfigString(line, configStringName):
+def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingles):
 
     newConfigWords = [];
     s = '';
@@ -154,7 +154,7 @@ def augmentConfigString(line, configStringName):
 
     configKVPairs = configValues.split(",");
     for oldKV in configKVPairs:
-        newKV = modify(oldKV);
+        newKV = modify(oldKV, newConfigPairs);
         newConfigWords.append(newKV)
         newConfigWords.append(",");
 
@@ -177,12 +177,19 @@ def processFile(oldFileName, newFileName, configStringName):
     oldFile = open(oldFileName);
     newFile = open(newFileName, "w");
 
+    # Create copies of new config values, because they will be
+    # modified.
+    newConfigPairs = suppliedConfigPairs.copy();
+    newConfigSingles = suppliedConfigSingles.copy();
+
     lines = oldFile.readlines();
     for line in lines:
         if not line.startswith(configStringName):
             newFile.write(line);
         else:
-            augmentedConfigString = augmentConfigString(line, configStringName);
+            augmentedConfigString = augmentConfigString(line, configStringName,
+                                                        newConfigPairs,
+                                                        newConfigSingles);
             newFile.write(augmentedConfigString);
 
     oldFile.close();
