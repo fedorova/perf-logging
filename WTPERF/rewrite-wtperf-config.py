@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import sys
+from shutil import copyfile
 
 suppliedConfigPairs = [];
 suppliedConfigSingle = [];
@@ -230,9 +231,11 @@ def modify_files(files, newSuffix, configStringName):
             print("File " + file + " does not exist.");
             return;
 
-        fname_comps = file.split(".wtperf");
-        newFileName = fname_comps[0] + "." + newSuffix + ".wtperf";
-        processFile(file, newFileName, configStringName);
+        oldFileName = file + ".old." + newSuffix;
+        copyfile(file, oldFileName);
+        newFileName = file;
+
+        processFile(oldFileName, newFileName, configStringName);
 
 def main():
 
