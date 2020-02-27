@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import os
@@ -6,7 +6,7 @@ import re
 import sys
 
 suppliedConfigPairs = [];
-suppliedConfigSingles = [];
+suppliedConfigSingle = [];
 
 # Codes for various colors for printing of informational and error messages.
 #
@@ -29,12 +29,12 @@ class color:
 #
 def parse_new_table_config(newConfig):
 
+    global suppliedConfigSingle;
+    global suppliedConfigPairs;
+
     kv_pairs = newConfig.strip().split(",");
 
     print(color.BOLD + "New configuration string: " + color.END + newConfig);
-    if (len(kv_pairs) < 2):
-        suppliedConfigSingles.append(kv_pairs[0]);
-        return 0;
 
     for kvpair in kv_pairs:
         if (len(kvpair) == 0):
@@ -42,11 +42,13 @@ def parse_new_table_config(newConfig):
 
         kv = kvpair.split("=");
         if (len(kv) < 2):
-            print("Invalid key-value pair in configuration: " + kvpair);
-            return -1;
-        else:
+            suppliedConfigSingle.append(kv_pairs[0]);
+        elif (len(kv) == 2):
             print(str(kv[0]) + "=" + str(kv[1]));
             suppliedConfigPairs.append((kv[0], kv[1]));
+        else:
+            print(color.BOLD + color.RED + "We don't support complex config strings: " +
+                  kvpair + color.END);
 
     return 0;
 
@@ -97,14 +99,23 @@ def compareAndChoose(old, new):
     else:
         return new;
 
-def modify(oldKVPair, newConfigPairs):
+def modify(oldKVPair, newConfigPairs, newConfigSingle):
 
     oldKV = oldKVPair.split("=");
+
+    # If we have a single configuration value, as opposed to key-value pairs,
+    # treat it specially.
+    #
+    if (len(oldKV) == 1):
+        s = newConfigSingle[0];
+        del newConfigSingle[0];
+        return s;
 
     # We don't support augmenting complex configuration strings.
     # Return as is.
     #
     if (len(oldKV) !=2):
+        print(str(len(oldKV)));
         return oldKVPair;
 
     for idx, newKV in enumerate(newConfigPairs):
@@ -121,7 +132,7 @@ def modify(oldKVPair, newConfigPairs):
 
     return oldKVPair;
 
-def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingles):
+def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingle):
 
     newConfigWords = [];
     s = '';
@@ -132,16 +143,6 @@ def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingles
     #
     configValueTokens = line.split(configStringName + "=");
     newConfigWords.append(configStringName + "=\"");
-
-    # If we have a single configuration value, as opposed to key-value pairs,
-    # treat it specially.
-    #
-    if (len(configValueTokens) == 1):
-        w = ",";
-        w = w.join(newConfigSingles);
-        newConfigWords.append(w);
-        newConfigWords.append("\"\n");
-        return s.join(newConfigWords);
 
     # We do not support augmenting these complex strings.
     # Return as is.
@@ -154,7 +155,7 @@ def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingles
 
     configKVPairs = configValues.split(",");
     for oldKV in configKVPairs:
-        newKV = modify(oldKV, newConfigPairs);
+        newKV = modify(oldKV, newConfigPairs, newConfigSingle);
         newConfigWords.append(newKV)
         newConfigWords.append(",");
 
@@ -164,6 +165,11 @@ def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingles
         newConfigWords.append(newKV[0] + "=" + newKV[1]);
         newConfigWords.append(",");
 
+    # Now delete everything from this list, so these options
+    # are not added later again.
+    #
+    del newConfigPairs[:];
+
     # Remove the last comma we added "
     del newConfigWords[-1];
 
@@ -171,6 +177,9 @@ def augmentConfigString(line, configStringName, newConfigPairs, newConfigSingles
     return s.join(newConfigWords);
 
 def processFile(oldFileName, newFileName, configStringName):
+
+    global suppliedConfigPairs;
+    global suppliedConfigSingle;
 
     print(oldFileName + " --> " + newFileName);
 
@@ -180,7 +189,7 @@ def processFile(oldFileName, newFileName, configStringName):
     # Create copies of new config values, because they will be
     # modified.
     newConfigPairs = suppliedConfigPairs.copy();
-    newConfigSingles = suppliedConfigSingles.copy();
+    newConfigSingle = suppliedConfigSingle.copy();
 
     lines = oldFile.readlines();
     for line in lines:
@@ -189,8 +198,25 @@ def processFile(oldFileName, newFileName, configStringName):
         else:
             augmentedConfigString = augmentConfigString(line, configStringName,
                                                         newConfigPairs,
-                                                        newConfigSingles);
+                                                        newConfigSingle);
             newFile.write(augmentedConfigString);
+
+    if (not line.endswith("\n")):
+        newFile.write("\n");
+
+    # If there are any configuration options that were not encountered
+    # in the original file and thus not augmented, just copy them
+    # to the end of the file.
+    #
+    if (len(newConfigSingle) > 0):
+        s = configStringName + "=" + newConfigSingle[0] + "\n";
+        newFile.write(s);
+    if (len(newConfigPairs) > 0):
+        s = configStringName + "=\"";
+        for kvpair in newConfigPairs:
+            s = s + kvpair[0] + "=" + kvpair[1] + ",";
+        s = s +  "\"";
+        newFile.write(s);
 
     oldFile.close();
     newFile.close();
