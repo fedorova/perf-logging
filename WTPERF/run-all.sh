@@ -1,13 +1,11 @@
 #!/bin/bash
 
-EXP_TAG="NVRAM"
+EXP_TAG="CACHE"
 
 #500m-btree-populate.wtperf
 #
 
-#500m-btree-50r50u.wtperf
-#500m-btree-80r20u.wtperf
-#500m-btree-rdonly.wtperf
+
 
 # DO NOT RUN THESE WORKLOADS
 # These workloads crash
@@ -57,8 +55,6 @@ EXP_TAG="NVRAM"
 #
 # Others excluded either due to crash or not interesting for performance:
 # checkpoint-stress-schema-ops.wtperf
-# checkpoint-stress.wtperf
-# large-lsm.wtperf
 # parallel-pop-btree.wtperf
 # parallel-pop-lsm.wtperf
 # parallel-pop-stress.wtperf
@@ -68,55 +64,30 @@ EXP_TAG="NVRAM"
 #
 #
 
-TEST_WORKLOADS="
-checkpoint-schema-race.wtperf
-evict-btree-1.wtperf
-evict-btree-stress-multi.wtperf
-evict-btree-stress.wtperf
-evict-btree.wtperf
-evict-btree-scan.wtperf
-evict-fairness.wtperf
-evict-lsm-1.wtperf
-evict-lsm.wtperf
-insert-rmw.wtperf
-log.wtperf
-long-txn-btree.wtperf
-long-txn-lsm.wtperf
-medium-btree.wtperf
-medium-lsm-compact.wtperf
-medium-lsm.wtperf
-medium-multi-btree-log-partial.wtperf
-medium-multi-btree-log.wtperf
-medium-multi-lsm-noprefix.wtperf
-medium-multi-lsm.wtperf
-modify-force-update-large-record-btree.wtperf
-modify-large-record-btree.wtperf
-small-btree.wtperf
-small-lsm.wtperf
-update-btree.wtperf
-update-checkpoint-btree.wtperf
-update-checkpoint-lsm.wtperf
-update-delta-mix1.wtperf
-update-delta-mix2.wtperf
-update-delta-mix3.wtperf
-update-grow-stress.wtperf
-update-large-lsm.wtperf
-update-large-record-btree.wtperf
-update-lsm.wtperf
-update-only-btree.wtperf
-update-shrink-stress.wtperf"
 
 TEST_WORKLOADS="
+500m-btree-50r50u.wtperf
+500m-btree-80r20u.wtperf
+500m-btree-rdonly.wtperf
+checkpoint-stress.wtperf
+evict-btree-scan.wtperf
+large-lsm.wtperf
+modify-force-update-large-record-btree.wtperf
+modify-large-record-btree.wtperf
+overflow-10k.wtperf
+overflow-130k.wtperf
+update-checkpoint-btree.wtperf
+update-checkpoint-lsm.wtperf
 update-large-record-btree.wtperf"
 
 TEST_BRANCH=wt-dev
-ORIG_BRANCH=wt-dev-compress
+ORIG_BRANCH=wt-dev-morecache
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
 else
 #    TEST_BASE=/altroot/sasha/WTPERF
-    TEST_BASE=/mnt/pmem/sasha
+    TEST_BASE=/mnt/data0/sasha
 fi
 
 #
@@ -147,9 +118,7 @@ done
 #
 for workload in ${TEST_WORKLOADS};
 do
-#    for branch in ${ORIG_BRANCH} ${TEST_ORIG_BRANCH} ${TEST_BRANCH};
     for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
-#    for branch in ${TEST_BRANCH};
     do
         # Run the test workload
         DB_HOME=${TEST_BASE}/WT_TEST
@@ -158,7 +127,7 @@ do
 
         cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
 
-        for iter in 1;
+        for iter in {1..3};
         do
             rm -rf ${DB_HOME}/*
             echo Iteration ${iter}
@@ -166,7 +135,7 @@ do
 	    if [[ "$workload" == *"500m-btree"* ]]; then
 		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf
 	    fi
-            perf record ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
+            ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 	    # Save the configuration
 	    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
 	    # Save the database file size
