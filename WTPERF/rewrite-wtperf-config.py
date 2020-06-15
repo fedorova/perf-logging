@@ -4,7 +4,7 @@ import argparse
 import os
 import re
 import sys
-from shutil import copyfile
+from argparse import RawTextHelpFormatter
 
 suppliedConfigPairs = [];
 suppliedConfigSingle = [];
@@ -35,8 +35,6 @@ def parse_new_table_config(newConfig):
 
     kv_pairs = newConfig.strip().split(",");
 
-    print(color.BOLD + "New configuration string: " + color.END + newConfig);
-
     for kvpair in kv_pairs:
         if (len(kvpair) == 0):
             continue;
@@ -45,7 +43,6 @@ def parse_new_table_config(newConfig):
         if (len(kv) < 2):
             suppliedConfigSingle.append(kv_pairs[0]);
         elif (len(kv) == 2):
-            print(str(kv[0]) + "=" + str(kv[1]));
             suppliedConfigPairs.append((kv[0], kv[1]));
         else:
             print(color.BOLD + color.RED + "We don't support complex config strings: " +
@@ -115,8 +112,7 @@ def modify(oldKVPair, newConfigPairs, newConfigSingle):
     # We don't support augmenting complex configuration strings.
     # Return as is.
     #
-    if (len(oldKV) !=2):
-        print(str(len(oldKV)));
+    if (len(oldKV) != 2):
         return oldKVPair;
 
     for idx, newKV in enumerate(newConfigPairs):
@@ -182,8 +178,6 @@ def processFile(oldFileName, newFileName, configStringName):
     global suppliedConfigPairs;
     global suppliedConfigSingle;
 
-    print(oldFileName + " --> " + newFileName);
-
     oldFile = open(oldFileName);
     newFile = open(newFileName, "w");
 
@@ -222,7 +216,18 @@ def processFile(oldFileName, newFileName, configStringName):
     oldFile.close();
     newFile.close();
 
+#
+# Strip the old suffix and replace it with the new one
+#
+def makeNewFilename(fname, newSuffix):
+
+    nameComponents = fname.split(".");
+    newName = ''.join(nameComponents[:-1]) + "." + newSuffix;
+    return newName;
+
 def modify_files(files, newSuffix, configStringName):
+
+    newFileList = [];
 
     print(color.BOLD + "Processing files..." + color.END);
 
@@ -231,25 +236,46 @@ def modify_files(files, newSuffix, configStringName):
             print("File " + file + " does not exist.");
             return;
 
-        oldFileName = file + ".old." + newSuffix;
-        copyfile(file, oldFileName);
-        newFileName = file;
+        oldFileName = file;
+        newFileName = makeNewFilename(file, newSuffix);
+        newFileList.append(newFileName);
 
+        print(oldFileName + " --> " + newFileName);
         processFile(oldFileName, newFileName, configStringName);
+
+    return newFileList;
+
+def deleteIntermediateFiles(fileNames):
+
+    for fname in fileNames:
+        if (os.path.exists(fname)):
+            os.remove(fname);
 
 def main():
 
+    global suppliedConfigSingle;
+    global suppliedConfigPairs;
+
+    oldFileList = [];
+    newFileList = [];
+
     parser = argparse.ArgumentParser(description=
-                                 'Rewrite WTPERF table configuration.');
+                                     "Rewrite WTPERF table configuration. For example:\n" +
+                                     "\t rewrite-wrperf-config-py " +
+                                     "--name=\"conn_config\" --value=\"allocation_size=32K\" " +
+                                     "--name=\"compression\" --value=\"snappy\"",
+                                     formatter_class=RawTextHelpFormatter);
     parser.add_argument('files', type=str, nargs='*',
                         help='WTPERF configuration files to process');
-    parser.add_argument('-n', '--name', dest='configStringName', default='',
+    parser.add_argument('-n', '--name', dest='configStringNames',
+                        action='append', nargs='+',
                         help='Name of WTPERF config string that will be augmented.');
-    parser.add_argument('-c', '--config', dest='configStringValue', default='',
-                        help='WTPERF configuration string that will be \
-                        augmented. If the new parameter is smaller \
+    parser.add_argument('-v', '--value', dest='configStringValues',
+                        action='append', nargs='+',
+                        help='Value of the WTPERF configuration string that will be \
+                        augmented or inserted. If the new parameter is smaller \
                         than the old parameter, we will keep the old value.');
-    parser.add_argument('-s', '--suffix', dest='newSuffix', default='new',
+    parser.add_argument('-s', '--suffix', dest='newSuffix', default='wtperf.new',
                         help='Suffix to add to names of the modified config files');
 
     args = parser.parse_args();
@@ -258,15 +284,51 @@ def main():
         parser.print_help();
         sys.exit(1);
 
-    if (len(args.configStringName) == 0 or len(args.configStringValue) == 0):
+    if (len(args.configStringNames) == 0 or len(args.configStringValues) == 0):
         parser.print_help();
         sys.exit(1);
 
-    if (parse_new_table_config(args.configStringValue) != 0):
+    if (len(args.configStringNames) != len(args.configStringValues)):
+        print("The number of configuration string names does not equal the number "
+              "of values.");
         parser.print_help();
         sys.exit(1);
 
-    modify_files(args.files, args.newSuffix, args.configStringName);
+    # We modify the file by changing one configuration name at a time
+    #
+    oldFileList = args.files;
+    for i in range(len(args.configStringNames)):
+
+        newSuffix = '';
+        # We need to reset these global tables for each new config name
+        #
+        suppliedConfigSingle = [];
+        suppliedConfigPairs = [];
+
+        print(color.BOLD + "\nWorking on:" + color.END +
+              str(args.configStringNames[i][0]) + "="
+              + str(args.configStringValues[i][0]));
+
+        if (parse_new_table_config(args.configStringValues[i][0]) != 0):
+            parser.print_help();
+            sys.exit(1);
+
+        if (i == (len(args.configStringNames) - 1)):
+            newSuffix =  args.newSuffix; # Final filename
+        else:
+            newSuffix = str(i);
+
+        newFileList = modify_files(oldFileList, newSuffix,
+                                    args.configStringNames[i][0]);
+        #
+        # If this is not the first iteration we created a bunch of
+        # intermediate files. Let's delete them.
+        #
+        if (i != 0):
+            deleteIntermediateFiles(oldFileList);
+
+        oldFileList = newFileList;
+
 
 if __name__ == '__main__':
     main()
