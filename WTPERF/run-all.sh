@@ -1,93 +1,95 @@
 #!/bin/bash
 
-EXP_TAG="CACHE"
+EXP_TAG="PMEM-2"
 
 #500m-btree-populate.wtperf
-#
 
+#checkpoint-latency-0.wtperf
+#checkpoint-latency-1.wtperf
+#evict-btree-readonly.wtperf
+#evict-btree-scan.wtperf
+#evict-lsm-readonly.wtperf
+#many-table-stress.wtperf
+#medium-lsm-async.wtperf
+#metadata-split-test.wtperf
 
+# These don't produce any interesting numbers
+#mongodb-large-oplog.wtperf
+#mongodb-oplog.wtperf
+#mongodb-secondary-apply.wtperf
+#mongodb-small-oplog.wtperf
 
-# DO NOT RUN THESE WORKLOADS
-# These workloads crash
-#
-# checkpoint-latency-0.wtperf
-# checkpoint-latency-1.wtperf
-# evict-btree-readonly.wtperf
-# evict-lsm-readonly.wtperf
+# These store output in multiple directories
+#multi-btree-long.wtperf
+#multi-btree-read-heavy-stress.wtperf
+#multi-btree-stress.wtperf
+#multi-btree.wtperf
+#multi-btree-zipfian-populate.wtperf
+#multi-btree-zipfian-workload.wtperf
 
-# Runs out of space
-#
-# many-table-stress.wtperf
+#parallel-pop-btree.wtperf
+#parallel-pop-lsm.wtperf
+#parallel-pop-stress.wtperf
 
-# Bug in the config-update script
-#
-# metadata-split-test.wtperf
-
-# ?
-# index-to-pareto.wtperf
-# medium-lsm-async.wtperf
-
-# These always produce the same number of ops/second
-#
-# mongodb-small-oplog.wtperf
-# mongodb-large-oplog.wtperf
-# mongodb-oplog.wtperf
-# mongodb-secondary-apply.wtperf
-#
-# Takes 10 hours. Have to copy all content out of D0* directories.
-# multi-btree-long.wtperf
-#
-# Need to copy output data from a bunch of directories.
-# multi-btree.wtperf
-# multi-btree-stress.wtperf
-# multi-btree-zipfian-populate.wtperf
-# multi-btree-zipfian-workload.wtperf
-#
-#
-# Crashes for whatever reason.
-# multi-btree-read-heavy-stress.wtperf
-#
-# These are okay. Removing for now, because
-# they use compression by default.
-#
-# overflow-10k.wtperf
-# overflow-130k.wtperf
-#
-# Others excluded either due to crash or not interesting for performance:
-# checkpoint-stress-schema-ops.wtperf
-# parallel-pop-btree.wtperf
-# parallel-pop-lsm.wtperf
-# parallel-pop-stress.wtperf
-#
-# truncate-btree-populate.wtperf
-# truncate-btree-workload.wtperf
-#
-#
-
+#truncate-btree-populate.wtperf
+#truncate-btree-workload.wtperf
 
 TEST_WORKLOADS="
-500m-btree-50r50u.wtperf
-500m-btree-80r20u.wtperf
-500m-btree-rdonly.wtperf
+checkpoint-schema-race.wtperf
+checkpoint-stress-schema-ops.wtperf
 checkpoint-stress.wtperf
-evict-btree-scan.wtperf
+evict-btree-1.wtperf
+evict-btree-stress-multi.wtperf
+evict-btree-stress.wtperf
+evict-btree.wtperf
+evict-fairness.wtperf
+evict-lsm-1.wtperf
+evict-lsm.wtperf
+index-pareto-btree.wtperf
+insert-rmw.wtperf
 large-lsm.wtperf
+log.wtperf
+long-txn-btree.wtperf
+long-txn-lsm.wtperf
+medium-btree.wtperf
+medium-lsm-compact.wtperf
+medium-lsm.wtperf
+medium-multi-btree-log-partial.wtperf
+medium-multi-btree-log.wtperf
+medium-multi-lsm-noprefix.wtperf
+medium-multi-lsm.wtperf
 modify-force-update-large-record-btree.wtperf
 modify-large-record-btree.wtperf
 overflow-10k.wtperf
 overflow-130k.wtperf
+small-btree.wtperf
+small-lsm.wtperf
+update-btree.wtperf
 update-checkpoint-btree.wtperf
 update-checkpoint-lsm.wtperf
-update-large-record-btree.wtperf"
+update-delta-mix1.wtperf
+update-delta-mix2.wtperf
+update-delta-mix3.wtperf
+update-grow-stress.wtperf
+update-large-lsm.wtperf
+update-large-record-btree.wtperf
+update-lsm.wtperf
+update-only-btree.wtperf
+update-shrink-stress.wtperf"
+
+TEST_WORKLOADS="
+500m-btree-50r50u.wtperf
+500m-btree-80r20u.wtperf
+500m-btree-rdonly.wtperf"
 
 TEST_BRANCH=wt-dev
-ORIG_BRANCH=wt-dev-morecache
+#ORIG_BRANCH=wt-dev-morecache
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
 else
-#    TEST_BASE=/altroot/sasha/WTPERF
-    TEST_BASE=/mnt/data0/sasha
+    TEST_BASE=/mnt/pmem/sasha
+#    TEST_BASE=/mnt/ssd/sasha
 fi
 
 #
@@ -107,7 +109,8 @@ if [ ! -d ${OUTPUT_BASE} ]; then
     mkdir ${OUTPUT_BASE}
 fi
 
-for dest in ${TEST_BRANCH} ${ORIG_BRANCH};
+#for dest in ${TEST_BRANCH} ${ORIG_BRANCH};
+for dest in ${TEST_BRANCH};
 do
     if [ ! -d ${OUTPUT_BASE}/${dest} ]; then
         mkdir ${OUTPUT_BASE}/${dest}
@@ -116,9 +119,11 @@ done
 
 # Run the workloads
 #
+export WIREDTIGER_CONFIG="mmap_all=true"
 for workload in ${TEST_WORKLOADS};
 do
-    for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
+    #    for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
+    for branch in ${TEST_BRANCH};
     do
         # Run the test workload
         DB_HOME=${TEST_BASE}/WT_TEST
