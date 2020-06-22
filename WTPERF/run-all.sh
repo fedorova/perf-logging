@@ -1,6 +1,11 @@
 #!/bin/bash
 
-EXP_TAG="PMEM-2"
+EXP_TAG="COMPR-RATIO"
+POSTFIX=".new"
+
+#export WIREDTIGER_CONFIG="mmap_all=true"
+#export WIREDTIGER_CONFIG="statistics=(all)"
+export WIREDTIGER_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
 
 #500m-btree-populate.wtperf
 
@@ -35,52 +40,54 @@ EXP_TAG="PMEM-2"
 #truncate-btree-workload.wtperf
 
 TEST_WORKLOADS="
-checkpoint-schema-race.wtperf
-checkpoint-stress-schema-ops.wtperf
-checkpoint-stress.wtperf
-evict-btree-1.wtperf
-evict-btree-stress-multi.wtperf
-evict-btree-stress.wtperf
-evict-btree.wtperf
-evict-fairness.wtperf
-evict-lsm-1.wtperf
-evict-lsm.wtperf
-index-pareto-btree.wtperf
-insert-rmw.wtperf
-large-lsm.wtperf
-log.wtperf
-long-txn-btree.wtperf
-long-txn-lsm.wtperf
-medium-btree.wtperf
-medium-lsm-compact.wtperf
-medium-lsm.wtperf
-medium-multi-btree-log-partial.wtperf
-medium-multi-btree-log.wtperf
-medium-multi-lsm-noprefix.wtperf
-medium-multi-lsm.wtperf
-modify-force-update-large-record-btree.wtperf
-modify-large-record-btree.wtperf
-overflow-10k.wtperf
-overflow-130k.wtperf
-small-btree.wtperf
-small-lsm.wtperf
-update-btree.wtperf
-update-checkpoint-btree.wtperf
-update-checkpoint-lsm.wtperf
-update-delta-mix1.wtperf
-update-delta-mix2.wtperf
-update-delta-mix3.wtperf
-update-grow-stress.wtperf
-update-large-lsm.wtperf
-update-large-record-btree.wtperf
-update-lsm.wtperf
-update-only-btree.wtperf
-update-shrink-stress.wtperf"
-
-TEST_WORKLOADS="
-500m-btree-50r50u.wtperf
-500m-btree-80r20u.wtperf
-500m-btree-rdonly.wtperf"
+500m-btree-50r50u.wtperf${POSTFIX}
+500m-btree-80r20u.wtperf${POSTFIX}
+500m-btree-rdonly.wtperf${POSTFIX}
+checkpoint-schema-race.wtperf${POSTFIX}
+checkpoint-stress-schema-ops.wtperf${POSTFIX}
+checkpoint-stress.wtperf${POSTFIX}
+evict-btree-1.wtperf${POSTFIX}
+evict-btree-stress-multi.wtperf${POSTFIX}
+evict-btree-stress.wtperf${POSTFIX}
+evict-btree.wtperf${POSTFIX}
+evict-fairness.wtperf${POSTFIX}
+evict-lsm-1.wtperf${POSTFIX}
+evict-lsm.wtperf${POSTFIX}
+index-pareto-btree.wtperf${POSTFIX}
+insert-rmw.wtperf${POSTFIX}
+large-lsm.wtperf${POSTFIX}
+log.wtperf${POSTFIX}
+long-txn-btree.wtperf${POSTFIX}
+long-txn-lsm.wtperf${POSTFIX}
+medium-btree.wtperf${POSTFIX}
+medium-lsm-compact.wtperf${POSTFIX}
+medium-lsm.wtperf${POSTFIX}
+medium-multi-btree-log-partial.wtperf${POSTFIX}
+medium-multi-btree-log.wtperf${POSTFIX}
+medium-multi-lsm-noprefix.wtperf${POSTFIX}
+medium-multi-lsm.wtperf${POSTFIX}
+modify-force-update-large-record-btree.wtperf${POSTFIX}
+modify-large-record-btree.wtperf${POSTFIX}
+mongodb-large-oplog.wtperf${POSTFIX}
+mongodb-oplog.wtperf${POSTFIX}
+mongodb-secondary-apply.wtperf${POSTFIX}
+mongodb-small-oplog.wtperf${POSTFIX}
+overflow-10k.wtperf${POSTFIX}
+overflow-130k.wtperf${POSTFIX}
+small-btree.wtperf${POSTFIX}
+small-lsm.wtperf${POSTFIX}
+update-btree.wtperf${POSTFIX}
+update-checkpoint-btree.wtperf${POSTFIX}
+update-checkpoint-lsm.wtperf${POSTFIX}
+update-delta-mix1.wtperf${POSTFIX}
+update-delta-mix2.wtperf${POSTFIX}
+update-delta-mix3.wtperf${POSTFIX}
+update-grow-stress.wtperf${POSTFIX}
+update-large-lsm.wtperf${POSTFIX}
+update-large-record-btree.wtperf${POSTFIX}
+update-lsm.wtperf${POSTFIX}
+update-only-btree.wtperf${POSTFIX}
+update-shrink-stress.wtperf${POSTFIX}"
 
 TEST_BRANCH=wt-dev
 #ORIG_BRANCH=wt-dev-morecache
@@ -88,8 +95,8 @@ TEST_BRANCH=wt-dev
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
 else
-    TEST_BASE=/mnt/pmem/sasha
-#    TEST_BASE=/mnt/ssd/sasha
+#    TEST_BASE=/mnt/pmem/sasha
+    TEST_BASE=/mnt/data0/sasha
 fi
 
 #
@@ -100,7 +107,7 @@ if [ ! -d ${HOME}/Work/WiredTiger/WTPERF ]; then
 fi
 
 if [ ! -d ${HOME}/Work/WiredTiger/WTPERF/OUTPUT ]; then
-    mkdir ${HOME}/Work/WiredTiger/WTPERF/OUTPUT
+    mkdir ${HOME}/Work/WsiredTiger/WTPERF/OUTPUT
 fi
 
 OUTPUT_BASE=${HOME}/Work/WiredTiger/WTPERF/OUTPUT/${EXP_TAG}
@@ -119,7 +126,7 @@ done
 
 # Run the workloads
 #
-export WIREDTIGER_CONFIG="mmap_all=true"
+
 for workload in ${TEST_WORKLOADS};
 do
     #    for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
@@ -138,7 +145,7 @@ do
             echo Iteration ${iter}
 	    # Populate the new database every time for 500m-btree workloads
 	    if [[ "$workload" == *"500m-btree"* ]]; then
-		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf
+		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
 	    fi
             ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 	    # Save the configuration
