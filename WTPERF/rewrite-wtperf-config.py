@@ -261,7 +261,7 @@ def main():
 
     parser = argparse.ArgumentParser(description=
                                      "Rewrite WTPERF table configuration. For example:\n" +
-                                     "\t rewrite-wrperf-config-py " +
+                                     "\t rewrite-wtperf-config-py " +
                                      "--name=\"conn_config\" --value=\"allocation_size=32K\" " +
                                      "--name=\"compression\" --value=\"snappy\"",
                                      formatter_class=RawTextHelpFormatter);
