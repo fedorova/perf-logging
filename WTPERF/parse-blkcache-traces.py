@@ -6,6 +6,10 @@ import os.path
 import sys
 from argparse import RawTextHelpFormatter
 
+# Globals
+#
+blockCache = {};
+
 # Codes for various colors for printing of informational and error messages.
 #
 class color:
@@ -23,24 +27,37 @@ class color:
 class supportedOps:
     CORRECTNESS = 'correctness'
 
-class blockOps:
+class cacheOps:
     INSERT = 'inserted'
     FOUND  = 'found'
+    NOTFOUND = 'not found'
+    REMOVED = 'removed'
 
 class Block:
-    def __init__(self, fname, offset, size):
+    def __init__(self, fname, offset, size, line):
         self.fname = fname;
-        self.offset = off;
+        self.offset = offset;
         self.size = size;
+        self.line = line; # line in trace file during insert
 
     def printBlock(self):
-        print("\t" color.GREEN + self.fname + " " + str(self.offset) +
-              " " + str(self.size);
+        print("\t" + color.GREEN + self.fname + " off=" + str(self.offset) +
+              " size=" + str(self.size) + ", insert line=" + str(self.line) + color.END);
 
-blockCache = {};
+    def __eq__(self, other):
+        return other and self.fname == other.fname and self.offset == other.offset \
+            and self.size == other.size
 
-def processCorrectness(line):
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
+    def __hash__(self):
+        return hash((self.fname, self.offset, self.size))
+
+
+def processCorrectness(line, lineNum):
+
+    global blockCache;
     fname = "";
     offset = 0;
     size = 0;
@@ -48,7 +65,16 @@ def processCorrectness(line):
     if (not "[WT_VERB_BLKCACHE]" in line):
         return;
 
-    words = line.split(" ");
+    if ("initialized" in line or "destroy" in line):
+        print(color.BOLD + color.BLUE +
+              "The following command will reset the block cache. \n" +
+              "Block cache currently contains " + str(len(blockCache)) + " blocks." +
+              color.END);
+        print(line);
+        blockCache = {};
+        return;
+
+    words = line.strip().split(" ");
 
     for word in words:
         if ("file:" in word):
@@ -62,13 +88,40 @@ def processCorrectness(line):
         print(color.RED + "Invalid block parameters:\n\t" + line + color.END);
         return;
 
-    block = Block(fname, offset, size);
+    newBlock = Block(fname, offset, size, lineNum);
 
-    if (hash(block) in blockCache):
-        print("Block already in cache:\n");
-        block.printBlock();
+    if (cacheOps.INSERT in line):
+        print("Inserting new block: \n");
+        newBlock.printBlock();
+        print(str(lineNum) + ": " + line);
 
-    blockCache[hash(block)] = block;
+        if (hash(newBlock) in blockCache):
+            print(color.RED + color.BOLD + "Block already in cache:" + color.END);
+            blockCache[hash(newBlock)].printBlock();
+        else:
+            blockCache[hash(newBlock)] = newBlock;
+            print("Block inserted\n");
+
+    elif (cacheOps.NOTFOUND in line):
+        if (hash(newBlock) in blockCache):
+            print(color.RED + color.BOLD + "Block expected to be in cache, but NOT found:"
+                  + color.END);
+            blockCache[hash(newBlock)].printBlock();
+            print(str(lineNum) + ": " + line);
+    elif (cacheOps.FOUND in line):
+        if (hash(newBlock) not in blockCache):
+            print(color.RED + color.BOLD + "Block NOT expected to be in cache, but found:"
+                  + color.END);
+            newBlock.printBlock();
+            print(str(lineNum) + ": " + line);
+    elif (cacheOps.REMOVED in line):
+        if (hash(newBlock) not in blockCache):
+            print(color.RED + color.BOLD + "Block to be removed expected in cache, but NOT found:"
+                  + color.END);
+            newBlock.printBlock();
+            print(str(lineNum) + ": " + line);
+        else:
+            blockCache.pop(hash(block));
 
     return;
 
@@ -97,7 +150,7 @@ def parse_file(fname, ops, startString):
 
         for op in ops:
             if (op == supportedOps.CORRECTNESS):
-                processCorrectness(line);
+                processCorrectness(line, i);
 
 def main():
 
@@ -125,7 +178,7 @@ def main():
         sys.exit(1);
 
     if (args.ops == None):
-        print("No operations suppied. Defaulting to " + supportedOps.CORRECTNESS);
+        print("No operations supplied. Defaulting to " + supportedOps.CORRECTNESS);
         ops.append(supportedOps.CORRECTNESS);
     else:
         ops = args.ops;
