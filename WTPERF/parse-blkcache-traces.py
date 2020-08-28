@@ -96,7 +96,7 @@ def processCorrectness(line, lineNum):
         print(str(lineNum) + ": " + line);
 
         if (hash(newBlock) in blockCache):
-            print(color.RED + color.BOLD + "Block already in cache:" + color.END);
+            print(color.RED + color.BOLD + "ERROR: Block already in cache:" + color.END);
             blockCache[hash(newBlock)].printBlock();
         else:
             blockCache[hash(newBlock)] = newBlock;
@@ -104,20 +104,20 @@ def processCorrectness(line, lineNum):
 
     elif (cacheOps.NOTFOUND in line):
         if (hash(newBlock) in blockCache):
-            print(color.RED + color.BOLD + "Block expected to be in cache, but NOT found:"
+            print(color.RED + color.BOLD + "ERROR: Block expected to be in cache, but NOT found:"
                   + color.END);
             blockCache[hash(newBlock)].printBlock();
             print(str(lineNum) + ": " + line);
     elif (cacheOps.FOUND in line):
         if (hash(newBlock) not in blockCache):
-            print(color.RED + color.BOLD + "Block NOT expected to be in cache, but found:"
+            print(color.RED + color.BOLD + "ERROR: Block NOT expected to be in cache, but found:"
                   + color.END);
             newBlock.printBlock();
             print(str(lineNum) + ": " + line);
     elif (cacheOps.REMOVED in line):
         if (hash(newBlock) not in blockCache):
-            print(color.RED + color.BOLD + "Block to be removed expected in cache, but NOT found:"
-                  + color.END);
+            print(color.RED + color.BOLD +
+                  "ERROR: Block to be removed expected in cache, but NOT found:" + color.END);
             newBlock.printBlock();
             print(str(lineNum) + ": " + line);
         else:
