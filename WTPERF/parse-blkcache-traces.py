@@ -26,23 +26,31 @@ class color:
 
 class supportedOps:
     CORRECTNESS = 'correctness'
+    LATENCY = 'latency'
 
 class cacheOps:
     INSERT = 'inserted'
     FOUND  = 'found'
     NOTFOUND = 'not found'
     REMOVED = 'removed'
+    MEMORY_LATENCY = 'memory read latency'
+
+class blockStatus:
+    UNCACHED = 0
+    CACHED = 1
 
 class Block:
     def __init__(self, fname, offset, size, line):
-        self.fname = fname;
-        self.offset = offset;
-        self.size = size;
+        self.fname = fname.rstrip(',');
+        self.offset = offset.rstrip(',');
+        self.size = size.rstrip(',');
         self.line = line; # line in trace file during insert
+        self.status = blockStatus.UNCACHED;
 
-    def printBlock(self):
-        print("\t" + color.GREEN + self.fname + " off=" + str(self.offset) +
-              " size=" + str(self.size) + ", insert line=" + str(self.line) + color.END);
+    def printBlock(self, printColor):
+        print("\t" + printColor + self.fname + ", off=" + str(self.offset) +
+              ", size=" + str(self.size) + ", insert line=" + str(self.line) +
+              ", status=" + str(self.status) + color.END);
 
     def __eq__(self, other):
         return other and self.fname == other.fname and self.offset == other.offset \
@@ -54,6 +62,40 @@ class Block:
     def __hash__(self):
         return hash((self.fname, self.offset, self.size))
 
+def blockCached(block):
+
+    global blockCache;
+
+    if (hash(block) in blockCache):
+        if (blockCache[hash(block)].status == blockStatus.CACHED):
+            return True;
+        else:
+            return False;
+    else:
+        return False;
+
+def insertBlock(newBlock):
+
+    global blockCache;
+
+    if (hash(newBlock) not in blockCache):
+        blockCache[hash(newBlock)] = newBlock;
+    blockCache[hash(newBlock)].status = blockStatus.CACHED;
+
+def removeBlock(block):
+
+    blockCache[hash(block)].status = blockStatus.UNCACHED;
+
+def printVerbose(message, block, line):
+
+    print(color.BLUE + "line: " + str(line) + " " + message + "\n" + color.END);
+    block.printBlock(color.BLUE);
+
+def printError(message, block, line):
+
+    print(color.RED + color.BOLD + "line: " + str(line) +
+          " ERROR: " + message + color.END);
+    block.printBlock(color.RED + color.BOLD);
 
 def processCorrectness(line, lineNum):
 
@@ -91,39 +133,36 @@ def processCorrectness(line, lineNum):
     newBlock = Block(fname, offset, size, lineNum);
 
     if (cacheOps.INSERT in line):
-        print("Inserting new block: \n");
-        newBlock.printBlock();
-        print(str(lineNum) + ": " + line);
+        printVerbose("Inserting new block.", newBlock, lineNum);
 
-        if (hash(newBlock) in blockCache):
-            print(color.RED + color.BOLD + "ERROR: Block already in cache:" + color.END);
-            blockCache[hash(newBlock)].printBlock();
+        if (blockCached(newBlock)):
+            printError("Block already cached.", blockCache[hash(newBlock)], lineNum);
         else:
-            blockCache[hash(newBlock)] = newBlock;
-            print("Block inserted\n");
+            insertBlock(newBlock);
 
     elif (cacheOps.NOTFOUND in line):
-        if (hash(newBlock) in blockCache):
-            print(color.RED + color.BOLD + "ERROR: Block expected to be in cache, but NOT found:"
-                  + color.END);
-            blockCache[hash(newBlock)].printBlock();
-            print(str(lineNum) + ": " + line);
+        if (blockCached(newBlock)):
+            printError("Block expected to be in cache, but NOT found.",
+                       blockCache[hash(newBlock)], lineNum);
     elif (cacheOps.FOUND in line):
-        if (hash(newBlock) not in blockCache):
-            print(color.RED + color.BOLD + "ERROR: Block NOT expected to be in cache, but found:"
-                  + color.END);
-            newBlock.printBlock();
-            print(str(lineNum) + ": " + line);
+        if (not blockCached(newBlock)):
+            printError("Block NOT expected to be in cache, but found.",
+                       newBlock, lineNum);
     elif (cacheOps.REMOVED in line):
-        if (hash(newBlock) not in blockCache):
-            print(color.RED + color.BOLD +
-                  "ERROR: Block to be removed expected in cache, but NOT found:" + color.END);
-            newBlock.printBlock();
-            print(str(lineNum) + ": " + line);
+        if (not blockCached(newBlock)):
+            printError("Block to be removed expected in cache, but NOT found:" +
+                       newBlock, lineNum);
         else:
-            blockCache.pop(hash(block));
+            removeBlock(newBlock);
 
     return;
+
+def processLatency(line, lineNum):
+
+    global blockCache;
+
+    if (not "[WT_VERB_BLKCACHE]" in line):
+        return;
 
 def parse_file(fname, ops, startString):
 
@@ -151,6 +190,8 @@ def parse_file(fname, ops, startString):
         for op in ops:
             if (op == supportedOps.CORRECTNESS):
                 processCorrectness(line, i);
+            if (op == supportedOps.LATENCY):
+                processLatency(line, i);
 
 def main():
 
@@ -166,7 +207,7 @@ def main():
     parser.add_argument('-o', '--ops', dest='ops',
                         action='append', nargs='+',
                         help='Operations to perform on the trace. Supported values \
-                        are: correctness.');
+                        are: correctness, latency');
     parser.add_argument('-s', '--start', dest='startString', default='',
                         help='Parsing begins after we the line containing \
                         this string');
@@ -178,8 +219,15 @@ def main():
         sys.exit(1);
 
     if (args.ops == None):
-        print("No operations supplied. Defaulting to " + supportedOps.CORRECTNESS);
-        ops.append(supportedOps.CORRECTNESS);
+        print("No operations supplied. Defaulting to all:");
+
+        members = [attr for attr in dir(supportedOps) \
+                   if not callable(getattr(supportedOps, attr)) \
+                   and not attr.startswith("__")]
+
+        for var in members:
+            print("\t " + getattr(supportedOps, var));
+            ops.append(getattr(supportedOps,var));
     else:
         ops = args.ops;
 
