@@ -30,7 +30,7 @@ class supportedOps:
 
 class cacheOps:
     INSERT = 'inserted'
-    FOUND  = 'found'
+    FOUND  = ' found '
     NOTFOUND = 'not found'
     REMOVED = 'removed'
     MEMORY_LATENCY = 'memory read latency'
