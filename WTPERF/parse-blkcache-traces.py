@@ -60,12 +60,18 @@ class Block:
               ", misses=" + str(self.misses));
 
         print("\tFile system latencies:");
+        sumFSL = 0;
         for fsl in self.fileSystemLatencies:
             print("\t\t" + str(fsl));
+            sumFSL += int(fsl);
+        print("\t\tAVERAGE: " + str(sumFSL/len(self.fileSystemLatencies)));
 
         print("\tMemory latencies:");
+        sumML = 0;
         for ml in self.memoryAccessLatencies:
             print("\t\t" + str(ml));
+            sumML += int(ml);
+        print("\t\tAVERAGE: " + str(sumML/len(self.memoryAccessLatencies)));
 
         print(color.END);
 
