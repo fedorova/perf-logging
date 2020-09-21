@@ -52,6 +52,27 @@ class Block:
         self.misses = 0;
         self.fileSystemLatencies = [];
         self.memoryAccessLatencies = [];
+        self.averageFSL = 0.0;
+        self.averageML = 0.0;
+
+    def getAverageFSL(self):
+        return self.averageFSL;
+
+    def getAverageML(self):
+        return self.averageML;
+
+    def computeAverageLatencies(self):
+        sumFSL = 0;
+        sumML = 0;
+        for fsl in self.fileSystemLatencies:
+            sumFSL += int(fsl);
+        if (len(self.fileSystemLatencies) > 0):
+            self.averageFSL = sumFSL/len(self.fileSystemLatencies);
+
+        for ml in self.memoryAccessLatencies:
+            sumML += int(ml);
+        if (len(self.memoryAccessLatencies) > 0):
+            self.averageML = sumML/len(self.memoryAccessLatencies);
 
     def printBlock(self, printColor):
         print("\t" + printColor + self.fname + ", off=" + str(self.offset) +
@@ -59,21 +80,17 @@ class Block:
               ", status=" + str(self.status) + ", hits=" + str(self.hits) +
               ", misses=" + str(self.misses));
 
+        self.computeAverageLatencies();
+
         print("\tFile system latencies:");
-        sumFSL = 0;
         for fsl in self.fileSystemLatencies:
             print("\t\t" + str(fsl));
-            sumFSL += int(fsl);
-        if (len(self.fileSystemLatencies) > 0):
-            print("\t\tAVERAGE FSL: " + str(int(sumFSL/len(self.fileSystemLatencies))));
+        print("\t\tAVERAGE FSL: " + str(int(self.averageFSL)));
 
         print("\tMemory latencies:");
-        sumML = 0;
         for ml in self.memoryAccessLatencies:
             print("\t\t" + str(ml));
-            sumML += int(ml);
-        if (len(self.memoryAccessLatencies) > 0):
-            print("\t\tAVERAGE ML: " + str(int(sumML/len(self.memoryAccessLatencies))));
+        print("\t\tAVERAGE ML: " + str(int(self.averageML)));
 
         print(color.END);
 
@@ -90,9 +107,18 @@ class Block:
 def printCache():
 
     global blockCache;
+    accumAvgFSL = 0.0;
+    accumAvgML  = 0.0;
 
     for hashV, block in blockCache.items():
         block.printBlock(color.PURPLE);
+        accumAvgFSL += block.getAverageFSL();
+        accumAvgML += block.getAverageML();
+
+    print(color.BOLD + color.PURPLE);
+    print("\tCache-wide AVERAGE FSL: " + str(int(accumAvgFSL/len(blockCache))));
+    print("\tCache-wide AVERAGE ML: " + str(int(accumAvgML/len(blockCache))));
+    print(color.END);
 
 def blockCached(block):
 
