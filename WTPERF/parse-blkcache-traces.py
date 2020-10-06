@@ -10,6 +10,11 @@ from argparse import RawTextHelpFormatter
 #
 blockCache = {};
 
+totalFS_ReadLatencySamples = 0;
+totalFS_WriteLatencySamples = 0;
+totalMemoryReadLatencySamples = 0;
+totalMemoryWriteLatencySamples = 0;
+
 # Codes for various colors for printing of informational and error messages.
 #
 class color:
@@ -72,6 +77,18 @@ class Block:
 
     def getAverageWriteML(self):
         return self.averageWriteML;
+
+    def getFSLReadSamples(self):
+        return len(self.fileSystemReadLatencies);
+
+    def getFSLWriteSamples(self):
+        return len(self.fileSystemWriteLatencies);
+
+    def getMLReadSamples(self):
+        return len(self.memoryAccessReadLatencies);
+
+    def getMLWriteSamples(self):
+        return len(self.memoryAccessWriteLatencies);
 
     def computeAverageLatencies(self):
 
@@ -150,6 +167,11 @@ class Block:
 def printCache():
 
     global blockCache;
+    global totalFS_ReadLatencySamples;
+    global totalFS_WriteLatencySamples;
+    global totalMemoryReadLatencySamples;
+    global totalMemoryWriteLatencySamples;
+
     accumAvgReadFSL = 0.0;
     accumAvgWriteFSL = 0.0;
     accumAvgReadML  = 0.0;
@@ -157,16 +179,24 @@ def printCache():
 
     for hashV, block in blockCache.items():
         block.printBlock(color.PURPLE);
-        accumAvgReadFSL += block.getAverageReadFSL();
-        accumAvgWriteFSL += block.getAverageWriteFSL();
-        accumAvgReadML += block.getAverageReadML();
-        accumAvgWriteML += block.getAverageWriteML();
+        if (totalFS_ReadLatencySamples > 0):
+            accumAvgReadFSL += block.getAverageReadFSL() * \
+                float(block.getFSLReadSamples()) / float(totalFS_ReadLatencySamples);
+        if (totalFS_WriteLatencySamples > 0):
+            accumAvgWriteFSL += block.getAverageWriteFSL() * \
+                float(block.getFSLWriteSamples()) / float(totalFS_WriteLatencySamples);
+        if (totalMemoryReadLatencySamples > 0):
+            accumAvgReadML += block.getAverageReadML() * \
+                float(block.getMLReadSamples()) / float(totalMemoryReadLatencySamples);
+        if (totalMemoryWriteLatencySamples > 0):
+            accumAvgWriteML += block.getAverageWriteML() * \
+                float(block.getMLWriteSamples()) / float(totalMemoryWriteLatencySamples);
 
     print(color.BOLD + color.PURPLE);
-    print("\tCache-wide AVERAGE Read FSL: " + str(int(accumAvgReadFSL/len(blockCache))));
-    print("\tCache-wide AVERAGE Write FSL: " + str(int(accumAvgWriteFSL/len(blockCache))));
-    print("\tCache-wide AVERAGE Read ML: " + str(int(accumAvgReadML/len(blockCache))));
-    print("\tCache-wide AVERAGE Write ML: " + str(int(accumAvgWriteML/len(blockCache))));
+    print("\tCache-wide AVERAGE Read FSL: " + str(int(accumAvgReadFSL)));
+    print("\tCache-wide AVERAGE Write FSL: " + str(int(accumAvgWriteFSL)));
+    print("\tCache-wide AVERAGE Read ML: " + str(int(accumAvgReadML)));
+    print("\tCache-wide AVERAGE Write ML: " + str(int(accumAvgWriteML)));
     print(color.END);
 
 def blockCached(block):
@@ -315,6 +345,10 @@ def processCorrectness(line, lineNum):
 def processLatency(block, line, lineNum):
 
     global blockCache;
+    global totalFS_ReadLatencySamples;
+    global totalFS_WriteLatencySamples;
+    global totalMemoryReadLatencySamples;
+    global totalMemoryWriteLatencySamples;
 
     addToCacheStructure(block);
 
@@ -323,16 +357,19 @@ def processLatency(block, line, lineNum):
     if (cacheOps.FS_READ_LATENCY in line):
         latency = getLatency(line);
         blockRef.fileSystemReadLatencies.append(latency);
+        totalFS_ReadLatencySamples += 1;
     elif (cacheOps.FS_WRITE_LATENCY in line):
         latency = getLatency(line);
         blockRef.fileSystemWriteLatencies.append(latency);
+        totalFS_WriteLatencySamples += 1;
     elif (cacheOps.MEMORY_READ_LATENCY in line):
         latency = getLatency(line);
         blockRef.memoryAccessReadLatencies.append(latency);
+        totalMemoryReadLatencySamples += 1;
     elif (cacheOps.MEMORY_WRITE_LATENCY in line):
         latency = getLatency(line);
         blockRef.memoryAccessWriteLatencies.append(latency);
-
+        totalMemoryWriteLatencySamples += 1;
 
 def parse_file(fname, ops, startString):
 
