@@ -33,8 +33,10 @@ class cacheOps:
     FOUND  = ' found '
     NOTFOUND = 'not found'
     REMOVED = 'removed'
-    MEMORY_LATENCY = 'memory read'
-    FS_LATENCY = 'file system read'
+    MEMORY_READ_LATENCY = 'memory read'
+    FS_READ_LATENCY = 'file system read'
+    MEMORY_WRITE_LATENCY = 'memory write'
+    FS_WRITE_LATENCY = 'file system write'
 
 class blockStatus:
     UNCACHED = 0
@@ -50,29 +52,60 @@ class Block:
         #
         self.hits = 0;
         self.misses = 0;
-        self.fileSystemLatencies = [];
-        self.memoryAccessLatencies = [];
-        self.averageFSL = 0.0;
-        self.averageML = 0.0;
+        self.fileSystemReadLatencies = [];
+        self.memoryAccessReadLatencies = [];
+        self.fileSystemWriteLatencies = [];
+        self.memoryAccessWriteLatencies = [];
+        self.averageReadFSL = 0.0;
+        self.averageReadML = 0.0;
+        self.averageWriteFSL = 0.0;
+        self.averageWriteML = 0.0;
 
-    def getAverageFSL(self):
-        return self.averageFSL;
+    def getAverageReadFSL(self):
+        return self.averageReadFSL;
 
-    def getAverageML(self):
-        return self.averageML;
+    def getAverageReadML(self):
+        return self.averageReadML;
+
+    def getAverageWriteFSL(self):
+        return self.averageWriteFSL;
+
+    def getAverageWriteML(self):
+        return self.averageWriteML;
 
     def computeAverageLatencies(self):
-        sumFSL = 0;
-        sumML = 0;
-        for fsl in self.fileSystemLatencies:
-            sumFSL += int(fsl);
-        if (len(self.fileSystemLatencies) > 0):
-            self.averageFSL = sumFSL/len(self.fileSystemLatencies);
 
-        for ml in self.memoryAccessLatencies:
+        sumFSL = 0;
+        for fsl in self.fileSystemReadLatencies:
+            sumFSL += int(fsl);
+        if (len(self.fileSystemReadLatencies) > 0):
+            self.averageReadFSL = sumFSL/len(self.fileSystemReadLatencies);
+        else:
+            self.averageReadFSL = 0;
+
+        sumFSL = 0;
+        for fsl in self.fileSystemWriteLatencies:
+            sumFSL += int(fsl);
+        if (len(self.fileSystemWriteLatencies) > 0):
+            self.averageWriteFSL = sumFSL/len(self.fileSystemWriteLatencies);
+        else:
+            self.averageWriteFSL = 0;
+
+        sumML = 0;
+        for ml in self.memoryAccessReadLatencies:
             sumML += int(ml);
-        if (len(self.memoryAccessLatencies) > 0):
-            self.averageML = sumML/len(self.memoryAccessLatencies);
+        if (len(self.memoryAccessReadLatencies) > 0):
+            self.averageReadML = sumML/len(self.memoryAccessReadLatencies);
+        else:
+            self.averageReadML = 0;
+
+        sumML = 0;
+        for ml in self.memoryAccessWriteLatencies:
+            sumML += int(ml);
+        if (len(self.memoryAccessWriteLatencies) > 0):
+            self.averageWriteML = sumML/len(self.memoryAccessWriteLatencies);
+        else:
+            self.averageWriteML = 0;
 
     def printBlock(self, printColor):
         print("\t" + printColor + self.fname + ", off=" + str(self.offset) +
@@ -82,15 +115,25 @@ class Block:
 
         self.computeAverageLatencies();
 
-        print("\tFile system latencies:");
-        for fsl in self.fileSystemLatencies:
+        print("\tFile system read latencies:");
+        for fsl in self.fileSystemReadLatencies:
             print("\t\t" + str(fsl));
-        print("\t\tAVERAGE FSL: " + str(int(self.averageFSL)));
+        print("\t\tAVERAGE READ FSL: " + str(int(self.averageReadFSL)));
 
-        print("\tMemory latencies:");
-        for ml in self.memoryAccessLatencies:
+        print("\tFile system write latencies:");
+        for fsl in self.fileSystemWriteLatencies:
+            print("\t\t" + str(fsl));
+        print("\t\tAVERAGE WRITE FSL: " + str(int(self.averageWriteFSL)));
+
+        print("\tMemory read latencies:");
+        for ml in self.memoryAccessReadLatencies:
             print("\t\t" + str(ml));
-        print("\t\tAVERAGE ML: " + str(int(self.averageML)));
+        print("\t\tAVERAGE READ ML: " + str(int(self.averageReadML)));
+
+        print("\tMemory write latencies:");
+        for ml in self.memoryAccessWriteLatencies:
+            print("\t\t" + str(ml));
+        print("\t\tAVERAGE WRITE ML: " + str(int(self.averageWriteML)));
 
         print(color.END);
 
@@ -107,17 +150,23 @@ class Block:
 def printCache():
 
     global blockCache;
-    accumAvgFSL = 0.0;
-    accumAvgML  = 0.0;
+    accumAvgReadFSL = 0.0;
+    accumAvgWriteFSL = 0.0;
+    accumAvgReadML  = 0.0;
+    accumAvgWriteML  = 0.0;
 
     for hashV, block in blockCache.items():
         block.printBlock(color.PURPLE);
-        accumAvgFSL += block.getAverageFSL();
-        accumAvgML += block.getAverageML();
+        accumAvgReadFSL += block.getAverageReadFSL();
+        accumAvgWriteFSL += block.getAverageWriteFSL();
+        accumAvgReadML += block.getAverageReadML();
+        accumAvgWriteML += block.getAverageWriteML();
 
     print(color.BOLD + color.PURPLE);
-    print("\tCache-wide AVERAGE FSL: " + str(int(accumAvgFSL/len(blockCache))));
-    print("\tCache-wide AVERAGE ML: " + str(int(accumAvgML/len(blockCache))));
+    print("\tCache-wide AVERAGE Read FSL: " + str(int(accumAvgReadFSL/len(blockCache))));
+    print("\tCache-wide AVERAGE Write FSL: " + str(int(accumAvgWriteFSL/len(blockCache))));
+    print("\tCache-wide AVERAGE Read ML: " + str(int(accumAvgReadML/len(blockCache))));
+    print("\tCache-wide AVERAGE Write ML: " + str(int(accumAvgWriteML/len(blockCache))));
     print(color.END);
 
 def blockCached(block):
@@ -271,12 +320,18 @@ def processLatency(block, line, lineNum):
 
     blockRef = blockCache[hash(block)];
 
-    if (cacheOps.FS_LATENCY in line):
+    if (cacheOps.FS_READ_LATENCY in line):
         latency = getLatency(line);
-        blockRef.fileSystemLatencies.append(latency);
-    elif (cacheOps.MEMORY_LATENCY in line):
+        blockRef.fileSystemReadLatencies.append(latency);
+    elif (cacheOps.FS_WRITE_LATENCY in line):
         latency = getLatency(line);
-        blockRef.memoryAccessLatencies.append(latency);
+        blockRef.fileSystemWriteLatencies.append(latency);
+    elif (cacheOps.MEMORY_READ_LATENCY in line):
+        latency = getLatency(line);
+        blockRef.memoryAccessReadLatencies.append(latency);
+    elif (cacheOps.MEMORY_WRITE_LATENCY in line):
+        latency = getLatency(line);
+        blockRef.memoryAccessWriteLatencies.append(latency);
 
 
 def parse_file(fname, ops, startString):
