@@ -1,41 +1,20 @@
 #!/bin/bash
 
-EXP_TAG="COMPR-RATIO"
-POSTFIX=".new"
+EXP_TAG="BASELINE"
+POSTFIX=""
+COMMAND_PREFIX=""
 
 #export WIREDTIGER_CONFIG="mmap_all=true"
-#export WIREDTIGER_CONFIG="statistics=(all)"
-export WIREDTIGER_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
+export WIREDTIGER_CONFIG="statistics=(all)"
+#export WIREDTIGER_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
 
 #500m-btree-populate.wtperf
-
-#checkpoint-latency-0.wtperf
-#checkpoint-latency-1.wtperf
-#evict-btree-readonly.wtperf
-#evict-btree-scan.wtperf
-#evict-lsm-readonly.wtperf
-#many-table-stress.wtperf
-#medium-lsm-async.wtperf
-#metadata-split-test.wtperf
 
 # These don't produce any interesting numbers
 #mongodb-large-oplog.wtperf
 #mongodb-oplog.wtperf
 #mongodb-secondary-apply.wtperf
 #mongodb-small-oplog.wtperf
-
-# These store output in multiple directories
-#multi-btree-long.wtperf
-#multi-btree-read-heavy-stress.wtperf
-#multi-btree-stress.wtperf
-#multi-btree.wtperf
-#multi-btree-zipfian-populate.wtperf
-#multi-btree-zipfian-workload.wtperf
-
-#parallel-pop-btree.wtperf
-#parallel-pop-lsm.wtperf
-#parallel-pop-stress.wtperf
-
 #truncate-btree-populate.wtperf
 #truncate-btree-workload.wtperf
 
@@ -43,15 +22,20 @@ TEST_WORKLOADS="
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
 500m-btree-rdonly.wtperf${POSTFIX}
+checkpoint-latency-0.wtperf
+checkpoint-latency-1.wtperf
 checkpoint-schema-race.wtperf${POSTFIX}
 checkpoint-stress-schema-ops.wtperf${POSTFIX}
 checkpoint-stress.wtperf${POSTFIX}
 evict-btree-1.wtperf${POSTFIX}
+evict-btree-readonly.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}
 evict-btree-stress-multi.wtperf${POSTFIX}
 evict-btree-stress.wtperf${POSTFIX}
 evict-btree.wtperf${POSTFIX}
 evict-fairness.wtperf${POSTFIX}
 evict-lsm-1.wtperf${POSTFIX}
+evict-lsm-readonly.wtperf${POSTFIX}
 evict-lsm.wtperf${POSTFIX}
 index-pareto-btree.wtperf${POSTFIX}
 insert-rmw.wtperf${POSTFIX}
@@ -59,21 +43,29 @@ large-lsm.wtperf${POSTFIX}
 log.wtperf${POSTFIX}
 long-txn-btree.wtperf${POSTFIX}
 long-txn-lsm.wtperf${POSTFIX}
+many-table-stress.wtperf${POSTFIX}
 medium-btree.wtperf${POSTFIX}
+medium-lsm-async.wtperf${POSTFIX}
 medium-lsm-compact.wtperf${POSTFIX}
 medium-lsm.wtperf${POSTFIX}
 medium-multi-btree-log-partial.wtperf${POSTFIX}
 medium-multi-btree-log.wtperf${POSTFIX}
 medium-multi-lsm-noprefix.wtperf${POSTFIX}
 medium-multi-lsm.wtperf${POSTFIX}
+metadata-split-test.wtperf${POSTFIX}
 modify-force-update-large-record-btree.wtperf${POSTFIX}
 modify-large-record-btree.wtperf${POSTFIX}
-mongodb-large-oplog.wtperf${POSTFIX}
-mongodb-oplog.wtperf${POSTFIX}
-mongodb-secondary-apply.wtperf${POSTFIX}
-mongodb-small-oplog.wtperf${POSTFIX}
+multi-btree-long.wtperf${POSTFIX}
+multi-btree-read-heavy-stress.wtperf${POSTFIX}
+multi-btree-stress.wtperf${POSTFIX}
+multi-btree-zipfian-populate.wtperf${POSTFIX}
+multi-btree-zipfian-workload.wtperf${POSTFIX}
+multi-btree.wtperf${POSTFIX}
 overflow-10k.wtperf${POSTFIX}
 overflow-130k.wtperf${POSTFIX}
+parallel-pop-btree.wtperf${POSTFIX}
+parallel-pop-lsm.wtperf${POSTFIX}
+parallel-pop-stress.wtperf${POSTFIX}
 small-btree.wtperf${POSTFIX}
 small-lsm.wtperf${POSTFIX}
 update-btree.wtperf${POSTFIX}
@@ -89,14 +81,14 @@ update-lsm.wtperf${POSTFIX}
 update-only-btree.wtperf${POSTFIX}
 update-shrink-stress.wtperf${POSTFIX}"
 
-TEST_BRANCH=wt-dev
+TEST_BRANCH=wt-6022
 #ORIG_BRANCH=wt-dev-morecache
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
 else
 #    TEST_BASE=/mnt/pmem/sasha
-    TEST_BASE=/mnt/data0/sasha
+    TEST_BASE=/mnt/ssd/sasha
 fi
 
 #
@@ -107,7 +99,7 @@ if [ ! -d ${HOME}/Work/WiredTiger/WTPERF ]; then
 fi
 
 if [ ! -d ${HOME}/Work/WiredTiger/WTPERF/OUTPUT ]; then
-    mkdir ${HOME}/Work/WsiredTiger/WTPERF/OUTPUT
+    mkdir ${HOME}/Work/WiredTiger/WTPERF/OUTPUT
 fi
 
 OUTPUT_BASE=${HOME}/Work/WiredTiger/WTPERF/OUTPUT/${EXP_TAG}
@@ -139,19 +131,34 @@ do
 
         cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
 
-        for iter in {1..3};
+        for iter in {1..2};
         do
             rm -rf ${DB_HOME}/*
             echo Iteration ${iter}
-	    # Populate the new database every time for 500m-btree workloads
-	    if [[ "$workload" == *"500m-btree"* ]]; then
+	    #
+	    # Populate the new database every time for 500m-btree read/write workloads
+	    # We run the read-only workload after we ran both read/write workloads, so
+	    # we don't populate the database for it.
+	    #
+	    if [[ "$workload" == 500m-btree-*r*u.* ]]; then
 		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
 	    fi
-            ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
+	    #
+	    # For the zipfian workload, run 'populate' only once
+	    #
+	    if [[ "$workload" == multi-btree-zipfian-populate.wtperf* ]]; then
+		if [[ "$iter" == '2' ]]; then
+		    continue
+		fi
+	    fi
+	    #
+	    # Run the workload
+	    #
+            ${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 	    # Save the configuration
 	    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
-	    # Save the database file size
-	    ls -lh ${DB_HOME}/*.wt > ${OUTPUT_BASE}/${branch}/${workload}.lsh.${iter}
+	    # Save the amount of disk space used by the database
+	    du -sh  ${DB_HOME} > ${OUTPUT_BASE}/${branch}/${workload}.disksize.${iter}
             # Save the test results
             cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
 	    # Save any profiling output
