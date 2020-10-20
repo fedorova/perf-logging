@@ -4,10 +4,18 @@ EXP_TAG="BASELINE"
 POSTFIX=""
 COMMAND_PREFIX=""
 
-#export WIREDTIGER_CONFIG="mmap_all=true"
+TEST_BRANCH=wt-6022
+#ORIG_BRANCH=wt-dev-morecache
+
+# For situation when I want to run as root, but
+# have the output land in my home directory, set HOME explicitly
+#
+HOME=/home/sasha
+
 export WIREDTIGER_CONFIG="statistics=(all)"
 #export WIREDTIGER_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
 
+# We run this one explicitly before relevant workload benchmarks
 #500m-btree-populate.wtperf
 
 # These don't produce any interesting numbers
@@ -81,8 +89,9 @@ update-lsm.wtperf${POSTFIX}
 update-only-btree.wtperf${POSTFIX}
 update-shrink-stress.wtperf${POSTFIX}"
 
-TEST_BRANCH=wt-6022
-#ORIG_BRANCH=wt-dev-morecache
+#TEST_WORKLOADS="
+#evict-btree.wtperf${POSTFIX}
+#evict-btree-readonly.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -133,6 +142,10 @@ do
 
         for iter in {1..2};
         do
+	    # Drop caches
+	    #
+	    echo 3 > /proc/sys/vm/drop_caches
+
             rm -rf ${DB_HOME}/*
             echo Iteration ${iter}
 	    #
@@ -141,24 +154,27 @@ do
 	    # we don't populate the database for it.
 	    #
 	    if [[ "$workload" == 500m-btree-*r*u.* ]]; then
-		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+		${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
 	    fi
 	    #
-	    # For the zipfian workload, run 'populate' only once
+	    # For the zipfian workload, run 'populate' before it executes
 	    #
-	    if [[ "$workload" == multi-btree-zipfian-populate.wtperf* ]]; then
-		if [[ "$iter" == '2' ]]; then
-		    continue
-		fi
+	    if [[ "$workload" == multi-btree-zipfian-workload.wtperf* ]]; then
+		${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/multi-btree-zipfian-populate.wtperf${POSTFIX}
 	    fi
+
 	    #
 	    # Run the workload
 	    #
             ${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
+
 	    # Save the configuration
 	    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
+	    cat ${DB_HOME}/WiredTiger.basecfg >> ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
 	    # Save the amount of disk space used by the database
 	    du -sh  ${DB_HOME} > ${OUTPUT_BASE}/${branch}/${workload}.disksize.${iter}
+	    # Save the amount of page cache used by the benchmark
+	    free -h > ${OUTPUT_BASE}/${branch}/${workload}.free-h.${iter}
             # Save the test results
             cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
 	    # Save any profiling output
