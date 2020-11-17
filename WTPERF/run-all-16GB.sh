@@ -1,21 +1,18 @@
 #!/bin/bash
 
-EXP_TAG="32GB-NVCACHE"
+ulimit -c unlimited
+
+EXP_TAG="16GB"
 POSTFIX=""
 #COMMAND_PREFIX="cgexec -g memory:8G "
 
 # Create a huge ramdisk file to limit the size of
-# available DRAM. The amount of free memory on howesound is about 178GB
-# when the OS is booted and nothing is running, so if I wanted to limit
-# the amount of RAM to 32GB, I'd create a 146GB file on ramdisk
+# available DRAM. The amount of DRAM on howesound is about 188GB.
+# To limit the amount of RAM to 16GB, I create a 172GB file on ramdisk
 #
 echo "Creating a file on ramdisk"
-dd < /dev/zero bs=1048576 count=149504 > /mnt/ramdisk/sasha/testfile
+#dd < /dev/zero bs=1048576 count=176128 > /mnt/ramdisk/sasha/testfile
 ls -lh /mnt/ramdisk/sasha
-
-# Drop caches
-#
-# echo 3 > /proc/sys/vm/drop_caches
 
 free -h
 
@@ -29,10 +26,10 @@ if [[ "$OSTYPE" == *"linux"* ]]; then
     HOME=/home/sasha
 fi
 
-#export WIREDTIGER_CONFIG="statistics=(all)"
-#export WIREDTIGER_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
-export WIREDTIGER_CONFIG="statistics=(all),block_cache=[enabled=true,size=230GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768]"
-export MEMKIND_HOG_MEMORY=1
+WIREDTIGER_BASE_CONFIG="statistics=(all)"
+#export WIREDTIGER_BASE_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
+#export WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=230GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768]"
+#export MEMKIND_HOG_MEMORY=1
 
 env
 
@@ -68,11 +65,14 @@ env
 #many-table-stress.wtperf${POSTFIX}
 
 # Include only the workloads whose total disk and
-# cache size exceeds 8GB
+# cache size exceeds 16GB
 #
 TEST_WORKLOADS="
-evict-btree-scan.wtperf${POSTFIX}"
-
+500m-btree-50r50u.wtperf${POSTFIX}
+500m-btree-80r20u.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}
+large-lsm.wtperf${POSTFIX}
+update-large-lsm.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -108,20 +108,36 @@ done
 # Run the workloads
 #
 
+CACHE_SIZE_LIMIT_GB=16
+
 for workload in ${TEST_WORKLOADS};
 do
     #    for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
     for branch in ${TEST_BRANCH};
     do
         # Run the test workload
-        DB_HOME=${TEST_BASE}/WT_TEST1
+        DB_HOME=${TEST_BASE}/WT_TEST
 
         echo ${workload} ${branch}
 
         cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
 
+	unset WIREDTIGER_CONFIG
+	WIREDTIGER_CONFIG=${WIREDTIGER_BASE_CONFIG}
+
+	# If we are memory-limiting, adjust the cache size to
+	# correspond to the memory limit
+	#
+	export WIREDTIGER_CONFIG=${WIREDTIGER_CONFIG},"cache_size=${CACHE_SIZE_LIMIT_GB}G"
+	echo $WIREDTIGER_CONFIG
+	continue
+
         for iter in {1..2};
         do
+	    # Drop caches
+	    #
+	    echo 3 > /proc/sys/vm/drop_caches
+
             rm -rf ${DB_HOME}/*
             echo Iteration ${iter}
 	    #
@@ -143,7 +159,12 @@ do
 	    #
             ${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
 
+	    pid=$!
+
 	    # Save the configuration
+	    echo $pid > ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}
+	    cp ${DB_HOME}/*core* ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}.core
+	    cp /var/crash/*core8 ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}.core-varcrash
 	    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
 	    cat ${DB_HOME}/WiredTiger.basecfg >> ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
 	    # Save the amount of disk space used by the database
