@@ -414,7 +414,7 @@ def main():
                                      formatter_class=RawTextHelpFormatter);
 
     parser.add_argument('files', type=str, nargs='*',
-                        help='WTPERF configuration files to process');
+                        help='Trace files to process');
     parser.add_argument('-o', '--ops', dest='ops',
                         action='append', nargs='+',
                         help='Operations to perform on the trace. Supported values \
