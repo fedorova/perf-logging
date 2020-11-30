@@ -2,11 +2,12 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM"
-MEMORY_LIMIT_GB=32
+EXP_KIND="DRAM"
+MEMORY_LIMIT_GB=64
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
+export MEMKIND_HOG_MEMORY=1
 
 # Create a huge ramdisk file to limit the size of
 # available DRAM. The amount of DRAM on howesound is about 188GB.
@@ -17,8 +18,15 @@ echo "Creating a file on ramdisk with ${block_count} 1MB blocks"
 dd < /dev/zero bs=1048576 count=${block_count} > /mnt/ramdisk/sasha/testfile
 ls -lh /mnt/ramdisk/sasha
 
+# Set the swapiness
+sysctl vm.swappiness=100
+echo "Set swappiness to..."
+cat /proc/sys/vm/swappiness
+
+echo "Checking the swap: "
+swapon
+
 TEST_BRANCH=wt-6022
-#ORIG_BRANCH=wt-dev-morecache
 
 # For situation when I want to run as root, but
 # have the output land in my home directory, set HOME explicitly
@@ -35,7 +43,6 @@ fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
 
-export MEMKIND_HOG_MEMORY=1
 #export WIREDTIGER_BASE_CONFIG="statistics=(all),statistics_log=(sources=(\"file:\"))"
 env
 
@@ -70,15 +77,59 @@ env
 # This one fails with "Too many open files" error
 #many-table-stress.wtperf${POSTFIX}
 
-# Include only the workloads whose total disk and
-# cache size exceeds 16GB
-#
 TEST_WORKLOADS="
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
 evict-btree-scan.wtperf${POSTFIX}
 large-lsm.wtperf${POSTFIX}
 update-large-lsm.wtperf${POSTFIX}"
+
+TEST_WORKLOADS="
+500m-btree-80r20u.wtperf${POSTFIX}
+update-large-lsm.wtperf${POSTFIX}"
+
+TEST_WORKLOADS="
+500m-btree-50r50u.wtperf${POSTFIX}
+500m-btree-80r20u.wtperf${POSTFIX}
+500m-btree-rdonly.wtperf${POSTFIX}
+checkpoint-schema-race.wtperf${POSTFIX}
+checkpoint-stress.wtperf${POSTFIX}
+checkpoint-stress-schema-ops.wtperf${POSTFIX}
+evict-btree.wtperf${POSTFIX}
+evict-btree-1.wtperf${POSTFIX}
+evict-btree-readonly.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}
+evict-btree-stress-multi.wtperf${POSTFIX}
+evict-fairness.wtperf${POSTFIX}
+evict-lsm.wtperf${POSTFIX}
+evict-lsm-1.wtperf${POSTFIX}
+evict-lsm-readonly.wtperf${POSTFIX}
+insert-rmw.wtperf${POSTFIX}
+large-lsm.wtperf${POSTFIX}
+long-txn-lsm.wtperf${POSTFIX}
+medium-btree.wtperf${POSTFIX}
+medium-lsm.wtperf${POSTFIX}
+medium-lsm-async.wtperf${POSTFIX}
+medium-lsm-async.wtperf${POSTFIX}
+medium-lsm-compact.wtperf${POSTFIX}
+medium-multi-btree-log.wtperf${POSTFIX}
+medium-multi-btree-log-partial.wtperf${POSTFIX}
+medium-multi-lsm.wtperf${POSTFIX}
+medium-multi-lsm-noprefix.wtperf${POSTFIX}
+modify-force-update-large-record-btree.wtperf${POSTFIX}
+modify-large-record-btree.wtperf${POSTFIX}
+multi-btree-zipfian-populate.wtperf${POSTFIX}
+multi-btree-zipfian-workload.wtperf${POSTFIX}
+overflow-10k.wtperf${POSTFIX}
+overflow-130k.wtperf${POSTFIX}
+update-btree.wtperf${POSTFIX}
+update-checkpoint-btree.wtperf${POSTFIX}
+update-checkpoint-lsm.wtperf${POSTFIX}
+update-large-lsm.wtperf${POSTFIX}
+update-large-record-btree.wtperf${POSTFIX}
+update-lsm.wtperf${POSTFIX}
+update-only-btree.wtperf${POSTFIX}"
+
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -98,6 +149,7 @@ if [ ! -d ${HOME}/Work/WiredTiger/WTPERF/OUTPUT ]; then
 fi
 
 OUTPUT_BASE=${HOME}/Work/WiredTiger/WTPERF/OUTPUT/${EXP_TAG}
+echo Output stored in ${OUTPUT_BASE}
 
 if [ ! -d ${OUTPUT_BASE} ]; then
     mkdir ${OUTPUT_BASE}
@@ -125,7 +177,7 @@ do
 
         echo ${workload} ${branch}
 
-        cd ${HOME}/Work/WiredTiger/${branch}/build_posix/bench/wtperf
+        cd /mnt/ssd/sasha/${branch}/build_posix/bench/wtperf
 
 	unset WIREDTIGER_CONFIG
 	export WIREDTIGER_CONFIG=${WIREDTIGER_BASE_CONFIG}
@@ -171,14 +223,15 @@ do
 	    #
 	    # Run the workload
 	    #
-            ${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload}
-
-	    pid=$!
+            ${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload} &
+	    pid="$!"
+	    echo "Waiting for pid $pid"
+	    wait $pid
 
 	    # Save the configuration
 	    echo $pid > ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}
-	    cp ${DB_HOME}/*core* ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}.core
-	    cp /var/crash/*core* ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}.core-varcrash
+	    mv core ${workload}.${pid}.${iter}.core
+
 	    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
 	    cat ${DB_HOME}/WiredTiger.basecfg >> ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
 	    # Save the amount of disk space used by the database
@@ -199,3 +252,5 @@ do
 done
 
 
+# Reset swappiness to a normal value
+sysctl vm.swappiness=10
