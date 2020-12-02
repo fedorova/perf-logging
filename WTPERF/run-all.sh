@@ -3,7 +3,7 @@
 ulimit -c unlimited
 
 EXP_KIND="DRAM"
-MEMORY_LIMIT_GB=64
+MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
@@ -62,6 +62,9 @@ env
 # Invalid configuration value
 #checkpoint-latency-1.wtperf${POSTFIX}
 
+# Periodically segfaults
+#index-pareto-btree.wtperf
+
 # Fail with errors.
 #metadata-split-test.wtperf${POSTFIX}
 #multi-btree-stress.wtperf${POSTFIX}
@@ -77,15 +80,22 @@ env
 # This one fails with "Too many open files" error
 #many-table-stress.wtperf${POSTFIX}
 
+# Highly variable performance:
+# medium-lsm-async.wtperf${POSTFIX}
+# medium-multi-btree-log-partial.wtperf${POSTFIX}
+# update-btree.wtperf
+# update-checkpoint-lsm.wtperf${POSTFIX}
+# update-lsm.wtperf
+
+# Run faster with less memory
+# modify-force-update-large-record-btree.wtperf${POSTFIX}
+# update-large-record-btree.wtperf${POSTFIX}
+
 TEST_WORKLOADS="
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
 evict-btree-scan.wtperf${POSTFIX}
 large-lsm.wtperf${POSTFIX}
-update-large-lsm.wtperf${POSTFIX}"
-
-TEST_WORKLOADS="
-500m-btree-80r20u.wtperf${POSTFIX}
 update-large-lsm.wtperf${POSTFIX}"
 
 TEST_WORKLOADS="
@@ -99,6 +109,7 @@ evict-btree.wtperf${POSTFIX}
 evict-btree-1.wtperf${POSTFIX}
 evict-btree-readonly.wtperf${POSTFIX}
 evict-btree-scan.wtperf${POSTFIX}
+evict-btree-stress.wtperf${POSTFIX}
 evict-btree-stress-multi.wtperf${POSTFIX}
 evict-fairness.wtperf${POSTFIX}
 evict-lsm.wtperf${POSTFIX}
@@ -106,28 +117,28 @@ evict-lsm-1.wtperf${POSTFIX}
 evict-lsm-readonly.wtperf${POSTFIX}
 insert-rmw.wtperf${POSTFIX}
 large-lsm.wtperf${POSTFIX}
+long-txn-btree.wtperf${POSTFIX}
 long-txn-lsm.wtperf${POSTFIX}
+long-txn-btree.wtperf${POSTFIX}
 medium-btree.wtperf${POSTFIX}
 medium-lsm.wtperf${POSTFIX}
-medium-lsm-async.wtperf${POSTFIX}
-medium-lsm-async.wtperf${POSTFIX}
 medium-lsm-compact.wtperf${POSTFIX}
 medium-multi-btree-log.wtperf${POSTFIX}
-medium-multi-btree-log-partial.wtperf${POSTFIX}
 medium-multi-lsm.wtperf${POSTFIX}
 medium-multi-lsm-noprefix.wtperf${POSTFIX}
-modify-force-update-large-record-btree.wtperf${POSTFIX}
 modify-large-record-btree.wtperf${POSTFIX}
+multi-btree-read-heavy-stress.wtperf${POSTFIX}
 multi-btree-zipfian-populate.wtperf${POSTFIX}
 multi-btree-zipfian-workload.wtperf${POSTFIX}
 overflow-10k.wtperf${POSTFIX}
 overflow-130k.wtperf${POSTFIX}
-update-btree.wtperf${POSTFIX}
 update-checkpoint-btree.wtperf${POSTFIX}
-update-checkpoint-lsm.wtperf${POSTFIX}
+update-delta-mix1.wtperf${POSTFIX}
+update-delta-mix2.wtperf${POSTFIX}
+update-delta-mix3.wtperf${POSTFIX}
+update-grow-stress.wtperf${POSTFIX}
+update-shrink-stress.wtperf${POSTFIX}
 update-large-lsm.wtperf${POSTFIX}
-update-large-record-btree.wtperf${POSTFIX}
-update-lsm.wtperf${POSTFIX}
 update-only-btree.wtperf${POSTFIX}"
 
 
