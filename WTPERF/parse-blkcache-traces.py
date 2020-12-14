@@ -48,7 +48,8 @@ class blockStatus:
     CACHED = 1
 
 class Block:
-    def __init__(self, fname, offset, size, line):
+    def __init__(self, fname, offset, size, checksum, line):
+        self.checksum = checksum.rstrip(',');
         self.fname = fname.rstrip(',');
         self.offset = offset.rstrip(',');
         self.size = size.rstrip(',');
@@ -126,7 +127,8 @@ class Block:
 
     def printBlock(self, printColor):
         print("\t" + printColor + self.fname + ", off=" + str(self.offset) +
-              ", size=" + str(self.size) + ", line=" + str(self.line) +
+              ", size=" + str(self.size) + ", checksum=" + str(self.checksum) +
+              ", line=" + str(self.line) +
               ", status=" + str(self.status) + ", hits=" + str(self.hits) +
               ", misses=" + str(self.misses));
 
@@ -156,13 +158,13 @@ class Block:
 
     def __eq__(self, other):
         return other and self.fname == other.fname and self.offset == other.offset \
-            and self.size == other.size
+            and self.size == other.size and self.checksum == other.checksum
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __hash__(self):
-        return hash((self.fname, self.offset, self.size))
+        return hash((self.fname, self.offset, self.size, self.checksum))
 
 def printCache():
 
@@ -273,6 +275,7 @@ def getLatency(line):
 def processCorrectness(line, lineNum):
 
     global blockCache;
+    checksum = 0;
     fname = "";
     offset = 0;
     size = 0;
@@ -303,12 +306,14 @@ def processCorrectness(line, lineNum):
             offset = word.split("=")[1];
         if ("size=" in word):
             size = word.split("=")[1];
+        if ("checksum=" in word):
+            checksum = word.split("=")[1];
 
     if (fname == "" or offset == 0 or size == 0):
         print(color.RED + "Invalid block parameters:\n\t" + line + color.END);
         return None;
 
-    newBlock = Block(fname, offset, size, lineNum);
+    newBlock = Block(fname, offset, size, checksum, lineNum);
 
     if (cacheOps.INSERT in line):
         # printVerbose("Inserting new block.", newBlock, lineNum);
