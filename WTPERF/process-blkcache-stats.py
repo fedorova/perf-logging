@@ -94,6 +94,9 @@ def getMostRecentFile(files):
 
 def parseDir(d):
 
+    global statsWeWant;
+    statsNotFound = statsWeWant.copy();
+
     topdir = os.path.abspath(os.curdir);
     os.chdir(d);
 
@@ -101,6 +104,19 @@ def parseDir(d):
 
     mrf = getMostRecentFile(statsFiles);
     os.system("grep '^{' " + mrf + " | jq '.' | grep 'block' > " + mrf + ".txt");
+
+    # Read the lines in the file and search them for all the stats we need
+    # in reverse order
+    #
+    f = open(mrf + ".txt")
+    lines = f.readlines();
+
+    for line in reversed(lines):
+        statFound = getStat(line);
+        statsNotFound.remove(statFound);
+
+        if (len(statsNotFound) == 0):
+            break;
 
     os.chdir(topdir);
 
