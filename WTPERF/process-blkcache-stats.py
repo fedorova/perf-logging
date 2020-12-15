@@ -10,13 +10,16 @@ from pathlib import Path
 
 outF = None;
 
-statsWeWant = ['block cache total bytes',
-               'block cache total bytes inserted on write path',
-               'block cache total blocks inserted on write path',
-               'block cache number of misses',
-               'block cache number of hits',
-               'block cache lookups',
-               'block cache removed blocks'];
+statsWeWant = ['\"blocks written\"',
+               '\"blocks read\"',
+               '\"block cache total bytes inserted on write path\"',
+               '\"block cache total bytes\"',
+               '\"block cache total blocks inserted on write path\"',
+               '\"block cache total blocks\"',
+               '\"block cache removed blocks\"',
+               '\"block cache number of misses, including existence checks\"',
+               '\"block cache number of hits, including existence checks\"',
+               '\"block cache lookups\"'];
 
 # Codes for various colors for printing of informational and error messages.
 #
@@ -92,13 +95,49 @@ def getMostRecentFile(files):
     print("mrf is " + filteredFiles[len(filteredFiles) - 1]);
     return filteredFiles[len(filteredFiles) - 1];
 
-def parseDir(d):
+def extractBenchmarkName(dirname):
+
+    nameParts = dirname.split("/");
+
+    name = nameParts[len(nameParts) - 1];
+    nameParts2 = name.split(".");
+
+    print(nameParts2[0]);
+
+    return nameParts2[0];
+
+#
+# The first argument is the name of the statistic we want to extract.
+# Lines are the lines in the file, in reverse order, because we want to
+# get the most recent stat. We iterate the lines until we find the stat
+# we want.
+#
+def getStat(stat, lines):
+
+    for line in lines:
+        if (not stat in line):
+            continue;
+        else:
+            try:
+                parts = line.split(":");
+                stat = parts[1].strip().rstrip(',');
+                return stat;
+            except:
+                return "-";
+
+def parseDir(d, outF):
 
     global statsWeWant;
-    statsNotFound = statsWeWant.copy();
 
     topdir = os.path.abspath(os.curdir);
     os.chdir(d);
+
+    # Each directory is a new benchmark instance. Each instance gets a line
+    # of statistics in the output CSV file. The very first entry in the line
+    # is the name of the benchmark. We extract the benchmark name from the
+    # directory name.
+    #
+    outF.write(extractBenchmarkName(d) + ",");
 
     statsFiles = list(filter(os.path.isfile, os.listdir()));
 
@@ -109,20 +148,34 @@ def parseDir(d):
     # in reverse order
     #
     f = open(mrf + ".txt")
-    lines = f.readlines();
+    lines = reversed(f.readlines());
 
-    for line in reversed(lines):
-        statFound = getStat(line);
-        statsNotFound.remove(statFound);
+    for stat in statsWeWant:
+        statValue = getStat(stat, lines);
+        outF.write(str(statValue) + ",");
 
-        if (len(statsNotFound) == 0):
-            break;
-
+    outF.write("\n");
     os.chdir(topdir);
 
-def main():
+#
+# The header of the output csv file contains the names of the stats
+# that we want to extract.
+#
+def writeHeader(outF):
 
-    global outF;
+    global statsWeWant;
+
+    # Leave empty space in the first column, which will contain
+    # benchmark names
+    #
+    outF.write(",");
+
+    for stat in statsWeWant:
+        outF.write(stat.strip('"') + ",");
+
+    outF.write("\n");
+
+def main():
 
     parser = argparse.ArgumentParser(description=
                                      "Parse requested wtperf stats and "
@@ -144,12 +197,13 @@ def main():
 
     try:
         outF = open(args.outputFile, "w+");
+        writeHeader(outF);
     except:
         print(color.BOLD + color.RED + "Could not open " + args.outputFile + color.END);
         sys.exit(1);
 
     for d in args.dirs:
-        parseDir(d);
+        parseDir(d, outF);
 
 if __name__ == '__main__':
     main()
