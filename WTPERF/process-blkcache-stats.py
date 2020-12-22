@@ -12,13 +12,16 @@ outF = None;
 
 statsWeWant = ['\"blocks written\"',
                '\"blocks read\"',
+               '\"block cache total bytes inserted on read path\"',
                '\"block cache total bytes inserted on write path\"',
                '\"block cache total bytes\"',
+               '\"block cache total blocks inserted on read path\"',
                '\"block cache total blocks inserted on write path\"',
                '\"block cache total blocks\"',
                '\"block cache removed blocks\"',
-               '\"block cache number of misses, including existence checks\"',
-               '\"block cache number of hits, including existence checks\"',
+               '\"block cache number of bypasses on get\"',
+               '\"block cache number of misses including existence checks\"',
+               '\"block cache number of hits including existence checks\"',
                '\"block cache lookups\"'];
 
 # Codes for various colors for printing of informational and error messages.

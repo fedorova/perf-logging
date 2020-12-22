@@ -2,8 +2,8 @@
 
 ulimit -c unlimited
 
-EXP_KIND="DRAM"
-MEMORY_LIMIT_GB=8
+EXP_KIND="NVRAM-BYPASS"
+MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
@@ -38,7 +38,7 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=230GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768]"
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50]"
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
@@ -94,14 +94,6 @@ env
 TEST_WORKLOADS="
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
-evict-btree-scan.wtperf${POSTFIX}
-large-lsm.wtperf${POSTFIX}
-update-large-lsm.wtperf${POSTFIX}"
-
-TEST_WORKLOADS="
-500m-btree-50r50u.wtperf${POSTFIX}
-500m-btree-80r20u.wtperf${POSTFIX}
-500m-btree-rdonly.wtperf${POSTFIX}
 checkpoint-schema-race.wtperf${POSTFIX}
 checkpoint-stress.wtperf${POSTFIX}
 checkpoint-stress-schema-ops.wtperf${POSTFIX}
@@ -130,17 +122,19 @@ modify-large-record-btree.wtperf${POSTFIX}
 multi-btree-read-heavy-stress.wtperf${POSTFIX}
 multi-btree-zipfian-populate.wtperf${POSTFIX}
 multi-btree-zipfian-workload.wtperf${POSTFIX}
-overflow-10k.wtperf${POSTFIX}
 overflow-130k.wtperf${POSTFIX}
 update-checkpoint-btree.wtperf${POSTFIX}
 update-delta-mix1.wtperf${POSTFIX}
 update-delta-mix2.wtperf${POSTFIX}
 update-delta-mix3.wtperf${POSTFIX}
 update-grow-stress.wtperf${POSTFIX}
-update-shrink-stress.wtperf${POSTFIX}
-update-large-lsm.wtperf${POSTFIX}
-update-only-btree.wtperf${POSTFIX}"
+update-shrink-stress.wtperf${POSTFIX}"
 
+
+TEST_WORKLOADS="
+evict-btree.wtperf${POSTFIX}
+evict-btree-1.wtperf${POSTFIX}
+evict-btree-readonly.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
