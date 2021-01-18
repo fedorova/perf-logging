@@ -2,7 +2,7 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-BYPASS"
+EXP_KIND="NVRAM-WRITE-BYPASS"
 MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
@@ -92,6 +92,7 @@ env
 # update-large-record-btree.wtperf${POSTFIX}
 
 TEST_WORKLOADS="
+evict-btree-scan.wtperf${POSTFIX}
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
 checkpoint-schema-race.wtperf${POSTFIX}
@@ -100,7 +101,6 @@ checkpoint-stress-schema-ops.wtperf${POSTFIX}
 evict-btree.wtperf${POSTFIX}
 evict-btree-1.wtperf${POSTFIX}
 evict-btree-readonly.wtperf${POSTFIX}
-evict-btree-scan.wtperf${POSTFIX}
 evict-btree-stress.wtperf${POSTFIX}
 evict-btree-stress-multi.wtperf${POSTFIX}
 evict-fairness.wtperf${POSTFIX}
@@ -130,11 +130,8 @@ update-delta-mix3.wtperf${POSTFIX}
 update-grow-stress.wtperf${POSTFIX}
 update-shrink-stress.wtperf${POSTFIX}"
 
-
-TEST_WORKLOADS="
-evict-btree.wtperf${POSTFIX}
-evict-btree-1.wtperf${POSTFIX}
-evict-btree-readonly.wtperf${POSTFIX}"
+#TEST_WORKLOADS="
+#evict-btree.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -183,6 +180,9 @@ do
         echo ${workload} ${branch}
 
         cd /mnt/ssd/sasha/${branch}/build_posix/bench/wtperf
+
+	# Save the commit version
+	git show HEAD > ${OUTPUT_BASE}/${branch}/git.version
 
 	unset WIREDTIGER_CONFIG
 	export WIREDTIGER_CONFIG=${WIREDTIGER_BASE_CONFIG}
