@@ -2,8 +2,8 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-WRITE-BYPASS"
-MEMORY_LIMIT_GB=16
+EXP_KIND="NVRAM-NOWRITEALLOC"
+MEMORY_LIMIT_GB=8
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
@@ -38,7 +38,11 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50]"
+    if [[ "$EXP_KIND" == *"NOWRITEALLOC"* ]]; then
+	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,write_allocate=false]"
+    else
+	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50]"
+    fi
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
