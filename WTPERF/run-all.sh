@@ -2,8 +2,8 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-OVERHEAD-BYPASS"
-MEMORY_LIMIT_GB=8
+EXP_KIND="NVRAM-OVERHEAD-BYPASS-10pct"
+MEMORY_LIMIT_GB=64
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
@@ -39,9 +39,9 @@ if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
     if [[ "$EXP_KIND" == *"NOWRITEALLOC"* ]]; then
-	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,write_allocate=false]"
-    else
 	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50]"
+    else
+	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,max_percent_overhead=10]"
     fi
 fi
 
@@ -115,7 +115,6 @@ insert-rmw.wtperf${POSTFIX}
 large-lsm.wtperf${POSTFIX}
 long-txn-btree.wtperf${POSTFIX}
 long-txn-lsm.wtperf${POSTFIX}
-long-txn-btree.wtperf${POSTFIX}
 medium-btree.wtperf${POSTFIX}
 medium-lsm.wtperf${POSTFIX}
 medium-lsm-compact.wtperf${POSTFIX}
@@ -123,7 +122,6 @@ medium-multi-btree-log.wtperf${POSTFIX}
 medium-multi-lsm.wtperf${POSTFIX}
 medium-multi-lsm-noprefix.wtperf${POSTFIX}
 modify-large-record-btree.wtperf${POSTFIX}
-multi-btree-read-heavy-stress.wtperf${POSTFIX}
 multi-btree-zipfian-populate.wtperf${POSTFIX}
 multi-btree-zipfian-workload.wtperf${POSTFIX}
 overflow-130k.wtperf${POSTFIX}
@@ -135,7 +133,7 @@ update-grow-stress.wtperf${POSTFIX}
 update-shrink-stress.wtperf${POSTFIX}"
 
 #TEST_WORKLOADS="
-#evict-btree.wtperf${POSTFIX}"
+#evict-btree-scan.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
