@@ -2,8 +2,8 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-OVERHEAD-BYPASS-10pct"
-MEMORY_LIMIT_GB=64
+EXP_KIND="DRAM-LARGE"
+MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
@@ -132,8 +132,17 @@ update-delta-mix3.wtperf${POSTFIX}
 update-grow-stress.wtperf${POSTFIX}
 update-shrink-stress.wtperf${POSTFIX}"
 
-#TEST_WORKLOADS="
-#evict-btree-scan.wtperf${POSTFIX}"
+TEST_WORKLOADS="
+checkpoint-stress-large.wtperf${POSTFIX}
+evict-btree-large.wtperf${POSTFIX}
+evict-btree-stress-multi-large.wtperf${POSTFIX}
+medium-btree-large.wtperf${POSTFIX}
+overflow-130k-large.wtperf${POSTFIX}
+update-checkpoint-btree-large.wtperf${POSTFIX}
+update-delta-mix1-large.wtperf${POSTFIX}
+update-grow-stress-large.wtperf${POSTFIX}
+large-lsm-large.wtperf${POSTFIX}
+500m-btree-50r50u-large.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -218,7 +227,14 @@ do
 	    # get unpredictable results.
 	    #
 	    if [[ "$workload" == 500m-btree* ]]; then
-		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+		if [[ "$workload" == *large* ]]; then
+		    echo "running 500m-btree-populate-large.wtperf"
+		    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate-large.wtperf${POSTFIX}
+		    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.populate.config.${iter}
+		    cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.populate.test.${iter}
+		else
+		    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+		fi
 	    fi
 	    #
 	    # For the zipfian workload, run 'populate' before it executes
