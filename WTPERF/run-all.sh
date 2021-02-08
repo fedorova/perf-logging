@@ -2,7 +2,7 @@
 
 ulimit -c unlimited
 
-EXP_KIND="DRAM-LARGE"
+EXP_KIND="NVRAM-LARGE-LONG-OB10"
 MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
@@ -38,11 +38,7 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    if [[ "$EXP_KIND" == *"NOWRITEALLOC"* ]]; then
-	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50]"
-    else
-	WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,max_percent_overhead=10]"
-    fi
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,max_percent_overhead=10]"
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
@@ -135,7 +131,6 @@ update-shrink-stress.wtperf${POSTFIX}"
 TEST_WORKLOADS="
 checkpoint-stress-large.wtperf${POSTFIX}
 evict-btree-large.wtperf${POSTFIX}
-evict-btree-stress-multi-large.wtperf${POSTFIX}
 medium-btree-large.wtperf${POSTFIX}
 overflow-130k-large.wtperf${POSTFIX}
 update-checkpoint-btree-large.wtperf${POSTFIX}
@@ -143,6 +138,15 @@ update-delta-mix1-large.wtperf${POSTFIX}
 update-grow-stress-large.wtperf${POSTFIX}
 large-lsm-large.wtperf${POSTFIX}
 500m-btree-50r50u-large.wtperf${POSTFIX}"
+
+# Set the overhead threshold back to 10 percent
+TEST_WORKLOADS="
+evict-btree-large-32GB-long.wtperf${POSTFIX}
+evict-btree-stress-multi-large-long.wtperf${POSTFIX}
+medium-btree-large-32GB-long.wtperf${POSTFIX}
+update-checkpoint-btree-large-long.wtperf${POSTFIX}
+update-delta-mix1-large-20GB-long.wtperf${POSTFIX}
+update-grow-stress-large-20GB-long.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
