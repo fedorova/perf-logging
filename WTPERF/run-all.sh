@@ -2,12 +2,14 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-LARGE-LONG-OB10"
+EXP_KIND="NVRAM-OB10"
 MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
 POSTFIX=""
 export MEMKIND_HOG_MEMORY=1
+
+date
 
 # Create a huge ramdisk file to limit the size of
 # available DRAM. The amount of DRAM on howesound is about 188GB.
@@ -92,7 +94,16 @@ env
 # update-large-record-btree.wtperf${POSTFIX}
 
 TEST_WORKLOADS="
-evict-btree-scan.wtperf${POSTFIX}
+evict-btree-large.wtperf${POSTFIX}
+medium-btree-large.wtperf${POSTFIX}
+overflow-130k-large.wtperf${POSTFIX}
+update-checkpoint-btree-large.wtperf${POSTFIX}
+update-delta-mix1-large.wtperf${POSTFIX}
+update-grow-stress-large.wtperf${POSTFIX}
+large-lsm-large.wtperf${POSTFIX}
+500m-btree-50r50u-large.wtperf${POSTFIX}"
+
+TEST_WORKLOADS="
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
 checkpoint-schema-race.wtperf${POSTFIX}
@@ -109,8 +120,6 @@ evict-lsm-1.wtperf${POSTFIX}
 evict-lsm-readonly.wtperf${POSTFIX}
 insert-rmw.wtperf${POSTFIX}
 large-lsm.wtperf${POSTFIX}
-long-txn-btree.wtperf${POSTFIX}
-long-txn-lsm.wtperf${POSTFIX}
 medium-btree.wtperf${POSTFIX}
 medium-lsm.wtperf${POSTFIX}
 medium-lsm-compact.wtperf${POSTFIX}
@@ -128,25 +137,21 @@ update-delta-mix3.wtperf${POSTFIX}
 update-grow-stress.wtperf${POSTFIX}
 update-shrink-stress.wtperf${POSTFIX}"
 
-TEST_WORKLOADS="
-checkpoint-stress-large.wtperf${POSTFIX}
-evict-btree-large.wtperf${POSTFIX}
-medium-btree-large.wtperf${POSTFIX}
-overflow-130k-large.wtperf${POSTFIX}
-update-checkpoint-btree-large.wtperf${POSTFIX}
-update-delta-mix1-large.wtperf${POSTFIX}
-update-grow-stress-large.wtperf${POSTFIX}
-large-lsm-large.wtperf${POSTFIX}
-500m-btree-50r50u-large.wtperf${POSTFIX}"
 
-# Set the overhead threshold back to 10 percent
 TEST_WORKLOADS="
-evict-btree-large-32GB-long.wtperf${POSTFIX}
 evict-btree-stress-multi-large-long.wtperf${POSTFIX}
+checkpoint-stress-large-long.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}
+evict-btree-large-32GB-long.wtperf${POSTFIX}
 medium-btree-large-32GB-long.wtperf${POSTFIX}
+overflow-130k-large-long.wtperf${POSTFIX}
 update-checkpoint-btree-large-long.wtperf${POSTFIX}
 update-delta-mix1-large-20GB-long.wtperf${POSTFIX}
-update-grow-stress-large-20GB-long.wtperf${POSTFIX}"
+update-grow-stress-large-20GB-long.wtperf${POSTFIX}
+500m-btree-50r50u-large.wtperf${POSTFIX}"
+
+TEST_WORKLOADS="
+evict-btree-scan.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -171,6 +176,7 @@ echo Output stored in ${OUTPUT_BASE}
 if [ ! -d ${OUTPUT_BASE} ]; then
     mkdir ${OUTPUT_BASE}
 fi
+chown -R sasha ${OUTPUT_BASE}
 
 #for dest in ${TEST_BRANCH} ${ORIG_BRANCH};
 for dest in ${TEST_BRANCH};
@@ -281,3 +287,5 @@ done
 
 # Reset swappiness to a normal value
 sysctl vm.swappiness=10
+
+date
