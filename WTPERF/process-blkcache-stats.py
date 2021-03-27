@@ -27,7 +27,8 @@ statsWeWant = ['\"blocks written\"',
                '\"block cache number of bypasses due to overhead on get\"',
                '\"block cache number of bypasses because no-write-allocate setting was on\"',
                '\"block cache lookups\"',
-               '\"block cache file size causing bypass\"'];
+               '\"block cache file size causing bypass\"',
+               '\"block cache evicted blocks\"'];
 
 # Codes for various colors for printing of informational and error messages.
 #
