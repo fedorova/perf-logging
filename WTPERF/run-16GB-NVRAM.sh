@@ -2,7 +2,7 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-LARGE-LONG-48GB-eviction-one-1000"
+EXP_KIND="NVRAM-LARGE-LONG-180GB-NO-EV-REUSE"
 MEMORY_LIMIT_GB=16
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
@@ -41,7 +41,7 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=true,eviction_aggression=-1000,size=48GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,max_percent_overhead=10]"
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=false,eviction_aggression=-5000,size=180GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=50,max_percent_overhead=10]"
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
@@ -145,6 +145,10 @@ evict-btree-stress-multi-large-long.wtperf${POSTFIX}
 evict-btree-scan.wtperf${POSTFIX}
 evict-btree-large-32GB-long.wtperf${POSTFIX}
 medium-btree-large-32GB-long.wtperf${POSTFIX}"
+
+TEST_WORKLOADS="
+evict-btree-stress-multi-large-long.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
