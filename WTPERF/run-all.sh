@@ -2,12 +2,16 @@
 
 ulimit -c unlimited
 
-EXP_KIND="DRAM"
-MEMORY_LIMIT_GB=8
+EXP_KIND="NVRAM-LARGE-NO-CHKPT-ALLOC"
+MEMORY_LIMIT_GB=80
+NVRAM_CACHE_SIZE_GB=16
+EXP_TAG=${EXP_KIND}-${MEMORY_LIMIT_GB}GB-DRAM.${NVRAM_CACHE_SIZE_GB}GB-NVRAM
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
-EXP_TAG=${MEMORY_LIMIT_GB}GB-${EXP_KIND}
+#COMMAND_PREFIX="perf record"
 POSTFIX=""
 export MEMKIND_HOG_MEMORY=1
+
+date
 
 # Create a huge ramdisk file to limit the size of
 # available DRAM. The amount of DRAM on howesound is about 188GB.
@@ -38,7 +42,7 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,size=230GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768]"
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,checkpoint_write_bypass=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10]"
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
@@ -94,21 +98,12 @@ env
 TEST_WORKLOADS="
 500m-btree-50r50u.wtperf${POSTFIX}
 500m-btree-80r20u.wtperf${POSTFIX}
-evict-btree-scan.wtperf${POSTFIX}
-large-lsm.wtperf${POSTFIX}
-update-large-lsm.wtperf${POSTFIX}"
-
-TEST_WORKLOADS="
-500m-btree-50r50u.wtperf${POSTFIX}
-500m-btree-80r20u.wtperf${POSTFIX}
-500m-btree-rdonly.wtperf${POSTFIX}
 checkpoint-schema-race.wtperf${POSTFIX}
 checkpoint-stress.wtperf${POSTFIX}
 checkpoint-stress-schema-ops.wtperf${POSTFIX}
 evict-btree.wtperf${POSTFIX}
 evict-btree-1.wtperf${POSTFIX}
 evict-btree-readonly.wtperf${POSTFIX}
-evict-btree-scan.wtperf${POSTFIX}
 evict-btree-stress.wtperf${POSTFIX}
 evict-btree-stress-multi.wtperf${POSTFIX}
 evict-fairness.wtperf${POSTFIX}
@@ -117,9 +112,6 @@ evict-lsm-1.wtperf${POSTFIX}
 evict-lsm-readonly.wtperf${POSTFIX}
 insert-rmw.wtperf${POSTFIX}
 large-lsm.wtperf${POSTFIX}
-long-txn-btree.wtperf${POSTFIX}
-long-txn-lsm.wtperf${POSTFIX}
-long-txn-btree.wtperf${POSTFIX}
 medium-btree.wtperf${POSTFIX}
 medium-lsm.wtperf${POSTFIX}
 medium-lsm-compact.wtperf${POSTFIX}
@@ -127,19 +119,27 @@ medium-multi-btree-log.wtperf${POSTFIX}
 medium-multi-lsm.wtperf${POSTFIX}
 medium-multi-lsm-noprefix.wtperf${POSTFIX}
 modify-large-record-btree.wtperf${POSTFIX}
-multi-btree-read-heavy-stress.wtperf${POSTFIX}
 multi-btree-zipfian-populate.wtperf${POSTFIX}
 multi-btree-zipfian-workload.wtperf${POSTFIX}
-overflow-10k.wtperf${POSTFIX}
 overflow-130k.wtperf${POSTFIX}
 update-checkpoint-btree.wtperf${POSTFIX}
 update-delta-mix1.wtperf${POSTFIX}
 update-delta-mix2.wtperf${POSTFIX}
 update-delta-mix3.wtperf${POSTFIX}
 update-grow-stress.wtperf${POSTFIX}
-update-shrink-stress.wtperf${POSTFIX}
-update-large-lsm.wtperf${POSTFIX}
-update-only-btree.wtperf${POSTFIX}"
+update-shrink-stress.wtperf${POSTFIX}"
+
+TEST_WORKLOADS="
+evict-btree-large-32GB-long.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}
+evict-btree-stress-multi-large-long.wtperf${POSTFIX}
+medium-multi-btree-large-32GB-long.wtperf${POSTFIX}
+checkpoint-stress-large-long.wtperf${POSTFIX}
+overflow-130k-large-long.wtperf${POSTFIX}
+update-checkpoint-btree-large-long.wtperf${POSTFIX}
+update-delta-mix1-large-20GB-long.wtperf${POSTFIX}
+update-grow-stress-large-20GB-long.wtperf${POSTFIX}
+500m-btree-50r50u-large.wtperf${POSTFIX}"
 
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
@@ -190,6 +190,9 @@ do
 
         cd /mnt/ssd/sasha/${branch}/build_posix/bench/wtperf
 
+	# Save the commit version
+	git show HEAD > ${OUTPUT_BASE}/${branch}/git.version
+
 	unset WIREDTIGER_CONFIG
 	export WIREDTIGER_CONFIG=${WIREDTIGER_BASE_CONFIG}
 
@@ -208,7 +211,8 @@ do
 	fi
 	echo $WIREDTIGER_CONFIG
 
-        for iter in {1..2};
+	for iter in {1..2};
+#	for iter in {1};
         do
 	    # Drop caches
 	    #
@@ -222,7 +226,14 @@ do
 	    # get unpredictable results.
 	    #
 	    if [[ "$workload" == 500m-btree* ]]; then
-		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+		if [[ "$workload" == *large* ]]; then
+		    echo "running 500m-btree-populate-large.wtperf"
+		    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate-large.wtperf${POSTFIX}
+		    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.populate.config.${iter}
+		    cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.populate.test.${iter}
+		else
+		    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+		fi
 	    fi
 	    #
 	    # For the zipfian workload, run 'populate' before it executes
@@ -253,7 +264,7 @@ do
             cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
 	    # Save any profiling output
 	    if [ -f perf.data ]; then
-		cp perf.data ${OUTPUT_BASE}/${branch}/${workload}.perf.data.${iter}
+		mv perf.data ${workload}.${pid}.${iter}.perf.data
 	    fi
             # Save the stats
             mkdir ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT
@@ -262,6 +273,9 @@ do
     done
 done
 
+chown -R sasha ${OUTPUT_BASE}
 
 # Reset swappiness to a normal value
 sysctl vm.swappiness=10
+
+date
