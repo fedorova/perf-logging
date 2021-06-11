@@ -2,10 +2,10 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-LARGE-NO-CHKPT-ALLOC"
+EXP_KIND="NVRAM-YCSB"
 MEMORY_LIMIT_GB=80
 NVRAM_CACHE_SIZE_GB=16
-EXP_TAG=${EXP_KIND}-${MEMORY_LIMIT_GB}GB-DRAM.${NVRAM_CACHE_SIZE_GB}GB-NVRAM
+EXP_TAG=${EXP_KIND}-${NVRAM_CACHE_SIZE_GB}GB-NVRAM.${MEMORY_LIMIT_GB}GB-DRAM
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} - 4`
 #COMMAND_PREFIX="perf record"
 POSTFIX=""
@@ -42,7 +42,7 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,checkpoint_write_bypass=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10]"
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10]"
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
@@ -141,6 +141,12 @@ update-delta-mix1-large-20GB-long.wtperf${POSTFIX}
 update-grow-stress-large-20GB-long.wtperf${POSTFIX}
 500m-btree-50r50u-large.wtperf${POSTFIX}"
 
+TEST_WORKLOADS="
+ycsb-a.wtperf
+ycsb-b.wtperf
+ycsb-c.wtperf
+ycsb-d.wtperf
+ycsb-e.wtperf"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -219,7 +225,8 @@ do
 	    echo 3 > /proc/sys/vm/drop_caches
 	    free -h
 
-            rm -rf ${DB_HOME}/*
+            rm -rf ${DB_HOME}
+	    mkdir ${DB_HOME}
             echo Iteration ${iter}
 	    #
 	    # Populate the new database every time for 500m-btree workloads. Otherwise we
