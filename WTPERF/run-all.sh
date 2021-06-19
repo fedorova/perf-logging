@@ -19,8 +19,8 @@ date
 #
 let block_count="(188 - ${MEMORY_LIMIT_GB}) * 1024"
 echo "Creating a file on ramdisk with ${block_count} 1MB blocks"
-dd < /dev/zero bs=1048576 count=${block_count} > /mnt/ramdisk/sasha/testfile
-ls -lh /mnt/ramdisk/sasha
+dd < /dev/zero bs=1048576 count=${block_count} > /mnt/ramdisk/testfile
+ls -lh /mnt/ramdisk
 
 # Set the swapiness
 sysctl vm.swappiness=100
@@ -42,7 +42,7 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem/sasha,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10]"
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10]"
 fi
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
@@ -146,6 +146,9 @@ ycsb-a.wtperf
 ycsb-b.wtperf
 ycsb-c.wtperf
 ycsb-d.wtperf
+ycsb-e.wtperf"
+
+TEST_WORKLOADS="
 ycsb-e.wtperf"
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
