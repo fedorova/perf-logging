@@ -2,7 +2,7 @@
 
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-YCSB-NORAMFS"
+EXP_KIND="OPENCAS-YCSB"
 MEMORY_LIMIT_GB=32
 NVRAM_CACHE_SIZE_GB=64
 EXP_TAG=${EXP_KIND}-${NVRAM_CACHE_SIZE_GB}GB-NVRAM.${MEMORY_LIMIT_GB}GB-DRAM
@@ -40,6 +40,8 @@ if [[ "$OSTYPE" == *"linux"* ]]; then
 fi
 
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
+    WIREDTIGER_BASE_CONFIG="statistics=(all)"
+elif [[ "$EXP_KIND" == *"OPENCAS"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10,checkpoint_write_bypass=false]"
@@ -142,7 +144,12 @@ update-grow-stress-large-20GB-long.wtperf${POSTFIX}
 500m-btree-50r50u-large.wtperf${POSTFIX}"
 
 TEST_WORKLOADS="
-ycsb-c.wtperf"
+ycsb-c.wtperf
+ycsb-a.wtperf
+ycsb-b.wtperf
+ycsb-d.wtperf
+ycsb-e.wtperf"
+
 
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
@@ -177,9 +184,10 @@ do
     fi
 done
 
+SCRIPT_HOME=$(pwd)
+
 env > ${OUTPUT_BASE}/${dest}/env.out
 
-SCRIPT_HOME=$(pwd)
 
 # Run the workloads
 #
@@ -248,6 +256,9 @@ do
 		./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/multi-btree-zipfian-populate.wtperf${POSTFIX}
 	    fi
 
+	    if [[ "$EXP_KIND" == *"OPENCAS"* ]]; then
+		casadm -Z -i 1 -j 1
+	    fi
 	    #
 	    # Run the workload
 	    #
@@ -255,6 +266,11 @@ do
 	    pid="$!"
 	    echo "Waiting for pid $pid"
 	    wait $pid
+
+	    # Copy OPENCAS stats, if any
+	    if [[ "$EXP_KIND" == *"OPENCAS"* ]]; then
+		casadm --stats --cache-id 1 > ${OUTPUT_BASE}/${branch}/${workload}.opencas.${iter}
+	    fi
 
 	    # Save the configuration
 	    echo $pid > ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}
