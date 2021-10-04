@@ -1,7 +1,7 @@
 #!/bin/bash
 ulimit -c unlimited
 
-EXP_KIND="NVRAM-YCSB-NORAMFS"
+EXP_KIND="NVRAM-YCSB-NORAMFS-NOOBP"
 MEMORY_LIMIT_GB=32
 NVRAM_CACHE_SIZE_GB=180
 EXP_TAG=${EXP_KIND}-${NVRAM_CACHE_SIZE_GB}GB-NVRAM.${MEMORY_LIMIT_GB}GB-DRAM
@@ -27,6 +27,7 @@ sysctl vm.swappiness=100
 echo "Set swappiness to..."
 cat /proc/sys/vm/swappiness
 
+swapoff /dev/sda2
 echo "Checking the swap: "
 swapon
 
