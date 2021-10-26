@@ -38,11 +38,6 @@ def processFile(fname):
                      usecols=['workload', 'operation', 'throughput']
     );
 
-    if (verbose):
-        print(color.BLUE + color.BOLD +
-              "Original " + fname + " data:" + color.END);
-        print(df);
-
     # This computes the mean throughput for each operation type
     # in the workload.
     #
@@ -71,9 +66,6 @@ def processFile(fname):
 def normalizeBy(baselineDFName):
 
     global dataFrames;
-
-    print(color.RED + color.BOLD +
-          "Normalizing by throughput in " + baselineDFName + color.END);
 
     baselineThroughput = dataFrames[baselineDFName]['throughput'].copy();
 
@@ -104,6 +96,36 @@ def example():
     ax = df.plot.bar(x='label', y=[grp1+'_int',grp2+'_int',grp3+'_int'], yerr=df[[grp1+'_SD', grp2+'_SD', grp3+'_SD']].values)
     plt.show();
 
+def generateChart(baseline, chartName):
+
+    global dataFrames;
+
+    df = pd.DataFrame();
+
+    baseDF = dataFrames[baseline];
+    flattenedDF = pd.DataFrame(baseDF.to_records());
+    flattenedDF['workload'] = flattenedDF['workload'].str.upper();
+    print(flattenedDF);
+
+
+    df[chartName] = flattenedDF['workload'].map(str) + "." + \
+                  flattenedDF['operation'].map(str);
+
+    yNames = [];
+    errNames = [];
+    for name, data in dataFrames.items():
+        df[name] = data['throughput'].tolist();
+        df[name+'_SDR'] = data['stdRelative'].tolist();
+        yNames.append(name);
+        errNames.append(name+'_SDR');
+
+    print(df);
+
+    ax = df.plot.bar(x=chartName, y=yNames, yerr=df[errNames].T.values)
+    ax.set_ylabel('Normalized throughput');
+    plt.tight_layout();
+    plt.savefig(chartName + ".png");
+
 def main():
 
     parser = argparse.ArgumentParser(description=
@@ -111,6 +133,7 @@ def main():
 
     parser.add_argument('files', type=str, nargs='*', help='input data files');
     parser.add_argument('-n', '--normalizeBy', dest='normalizeBy', type=str);
+    parser.add_argument('-N', '--name', dest='name', type=str);
     args = parser.parse_args();
 
     if (len(args.files) == 0):
@@ -120,6 +143,8 @@ def main():
     for fname in args.files:
         processFile(fname);
 
+    print(color.BLUE + color.BOLD + "Original data:" + color.END);
+
     for name, df in dataFrames.items():
         print(name);
         print("----------------");
@@ -127,10 +152,10 @@ def main():
         print("================\n");
 
     if (args.normalizeBy is not None):
+        print(color.RED + color.BOLD +
+              "Normalizing by throughput in " + args.normalizeBy + color.END);
         normalizeBy(args.normalizeBy);
-
-    print(color.RED + color.BOLD +
-          "Done " + color.END);
+        print(color.RED + color.BOLD + "Done " + color.END);
 
     for name, df in dataFrames.items():
         print(name);
@@ -138,6 +163,7 @@ def main():
         print(df);
         print("================\n");
 
+    generateChart(args.normalizeBy, args.name);
 
 if __name__ == '__main__':
     main()
