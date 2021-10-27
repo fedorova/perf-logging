@@ -87,8 +87,7 @@ def buildChartsFromColormaps(df, yNames, errNames, chartName, colormaps, reverse
         print(cmapName);
         plt.rc('axes', prop_cycle=cycler('color', colors));
 
-        ax = df.plot.bar(x=chartName, y=yNames, yerr=df[errNames].T.values);
-        #ax.set_prop_cycle(cycler('color', colors));
+        ax = df.plot.bar(x=chartName, y=yNames, yerr=df[errNames].T.values, edgecolor = "gray");
         ax.set_ylabel('Normalized throughput');
 
         # Place a legend above this subplot, expanding itself to
