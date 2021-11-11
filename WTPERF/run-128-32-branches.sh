@@ -30,7 +30,8 @@ cat /proc/sys/vm/swappiness
 echo "Checking the swap: "
 swapon
 
-TEST_BRANCH=wt-6022-merged
+ORIG_BRANCH=wt-dev-prev
+TEST_BRANCH=wt-dev
 
 # For situation when I want to run as root, but
 # have the output land in my home directory, set HOME explicitly
@@ -140,11 +141,9 @@ update-grow-stress-large-20GB-long.wtperf${POSTFIX}
 500m-btree-50r50u-large.wtperf${POSTFIX}"
 
 TEST_WORKLOADS="
-ycsb-a.wtperf
-ycsb-b.wtperf
-ycsb-c.wtperf
 ycsb-d.wtperf
-ycsb-e.wtperf"
+ycsb-a.wtperf"
+
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
@@ -170,8 +169,8 @@ if [ ! -d ${OUTPUT_BASE} ]; then
     mkdir ${OUTPUT_BASE}
 fi
 
-#for dest in ${TEST_BRANCH} ${ORIG_BRANCH};
-for dest in ${TEST_BRANCH};
+for dest in ${TEST_BRANCH} ${ORIG_BRANCH};
+#for dest in ${TEST_BRANCH};
 do
     if [ ! -d ${OUTPUT_BASE}/${dest} ]; then
         mkdir ${OUTPUT_BASE}/${dest}
@@ -187,93 +186,92 @@ env > ${OUTPUT_BASE}/${dest}/env.out
 #
 for workload in ${TEST_WORKLOADS};
 do
-    #for branch in ${TEST_BRANCH} ${ORIG_BRANCH};
-    for branch in ${TEST_BRANCH};
+    for branch in ${ORIG_BRANCH} ${TEST_BRANCH};
+    #for branch in ${TEST_BRANCH};
     do
         # Run the test workload
         DB_HOME=${TEST_BASE}/WT_TEST
 
         echo ${workload} ${branch}
 
-        cd /mnt/ssd/sasha/${branch}/build_posix/bench/wtperf
+        cd /altroot/sasha/${branch}/build_posix/bench/wtperf
 
-    # Save the commit version
-    git show HEAD > ${OUTPUT_BASE}/${branch}/git.version
+        # Save the commit version
+        git show HEAD > ${OUTPUT_BASE}/${branch}/git.version
 
-    unset WIREDTIGER_CONFIG
-    export WIREDTIGER_CONFIG=${WIREDTIGER_BASE_CONFIG}
+        unset WIREDTIGER_CONFIG
+        export WIREDTIGER_CONFIG=${WIREDTIGER_BASE_CONFIG}
 
-    # If we are memory-limiting, adjust the cache size to
-    # correspond to the memory limit
-    #
-    ${SCRIPT_HOME}/extract-cache-size.py ../../../bench/wtperf/runners/${workload}
-    cache_size=$?
-
-    echo Original cache size: $cache_size GB
-    if [ "$cache_size" -gt "${CACHE_SIZE_LIMIT_GB}" ]; then
-        echo Changing to ${CACHE_SIZE_LIMIT_GB} GB
-        export WIREDTIGER_CONFIG=${WIREDTIGER_CONFIG},"cache_size=${CACHE_SIZE_LIMIT_GB}G"
-    else
-        echo "Leaving cache size unchanged..."
-    fi
-    echo $WIREDTIGER_CONFIG
-
-    for iter in {1..2};
-#   for iter in {1};
-        do
-        # Drop caches
+        # If we are memory-limiting, adjust the cache size to
+        # correspond to the memory limit
         #
-        echo 3 > /proc/sys/vm/drop_caches
-        free -h
+        ${SCRIPT_HOME}/extract-cache-size.py ../../../bench/wtperf/runners/${workload}
+        cache_size=$?
 
-        rm -rf ${DB_HOME}
-        mkdir ${DB_HOME}
-            echo Iteration ${iter}
-        #
-        # Populate the new database every time for 500m-btree workloads. Otherwise we
-        # get unpredictable results.
-        #
-        if [[ "$workload" == 500m-btree* ]]; then
-        if [[ "$workload" == *large* ]]; then
-            echo "running 500m-btree-populate-large.wtperf"
-            ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate-large.wtperf${POSTFIX}
-            cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.populate.config.${iter}
-            cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.populate.test.${iter}
+        echo Original cache size: $cache_size GB
+        if [ "$cache_size" -gt "${CACHE_SIZE_LIMIT_GB}" ]; then
+            echo Changing to ${CACHE_SIZE_LIMIT_GB} GB
+            export WIREDTIGER_CONFIG=${WIREDTIGER_CONFIG},"cache_size=${CACHE_SIZE_LIMIT_GB}G"
         else
-            ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+            echo "Leaving cache size unchanged..."
         fi
-        fi
-        #
-        # For the zipfian workload, run 'populate' before it executes
-        #
-        if [[ "$workload" == multi-btree-zipfian-workload.wtperf* ]]; then
-        ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/multi-btree-zipfian-populate.wtperf${POSTFIX}
-        fi
+        echo $WIREDTIGER_CONFIG
 
-        #
-        # Run the workload
-        #
+        for iter in {1..2};
+        do
+            # Drop caches
+            #
+            echo 3 > /proc/sys/vm/drop_caches
+            free -h
+
+            rm -rf ${DB_HOME}
+            mkdir ${DB_HOME}
+            echo Iteration ${iter}
+            #
+            # Populate the new database every time for 500m-btree workloads. Otherwise we
+            # get unpredictable results.
+            #
+            if [[ "$workload" == 500m-btree* ]]; then
+                if [[ "$workload" == *large* ]]; then
+                    echo "running 500m-btree-populate-large.wtperf"
+                    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate-large.wtperf${POSTFIX}
+                    cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.populate.config.${iter}
+                    cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.populate.test.${iter}
+                else
+                    ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/500m-btree-populate.wtperf${POSTFIX}
+                fi
+            fi
+            #
+            # For the zipfian workload, run 'populate' before it executes
+            #
+            if [[ "$workload" == multi-btree-zipfian-workload.wtperf* ]]; then
+                ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/multi-btree-zipfian-populate.wtperf${POSTFIX}
+            fi
+
+            #
+            # Run the workload
+            #
             ${COMMAND_PREFIX} ./wtperf -h ${DB_HOME} -O ../../../bench/wtperf/runners/${workload} &
-        pid="$!"
-        echo "Waiting for pid $pid"
-        wait $pid
+            pid="$!"
+            echo "Waiting for pid $pid"
+            wait $pid
 
-        # Save the configuration
-        echo $pid > ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}
-        mv core ${workload}.${pid}.${iter}.core
+            # Save the configuration
+            echo $pid > ${OUTPUT_BASE}/${branch}/${workload}.${pid}.${iter}
+            mv core ${workload}.${pid}.${iter}.core
 
-        cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
-        cat ${DB_HOME}/WiredTiger.basecfg >> ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
-        # Save the amount of disk space used by the database
-        du -sh  ${DB_HOME} > ${OUTPUT_BASE}/${branch}/${workload}.disksize.${iter}
-        # Save the amount of page cache used by the benchmark
-        free -h > ${OUTPUT_BASE}/${branch}/${workload}.free-h.${iter}
+            cp ${DB_HOME}/CONFIG.wtperf ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
+            cat ${DB_HOME}/WiredTiger.basecfg >> ${OUTPUT_BASE}/${branch}/${workload}.config.${iter}
+            # Save the amount of disk space used by the database
+            du -sh  ${DB_HOME} > ${OUTPUT_BASE}/${branch}/${workload}.disksize.${iter}
+            # Save the amount of page cache used by the benchmark
+            free -h > ${OUTPUT_BASE}/${branch}/${workload}.free-h.${iter}
             # Save the test results
             cp ${DB_HOME}/test.stat ${OUTPUT_BASE}/${branch}/${workload}.test.stat.${iter}
-        # Save any profiling output
-        if [ -f perf.data ]; then
-        mv perf.data ${workload}.${pid}.${iter}.perf.data
-        fi
+            # Save any profiling output
+            if [ -f perf.data ]; then
+                mv perf.data ${workload}.${pid}.${iter}.perf.data
+            fi
             # Save the stats
             mkdir ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT
             cp ${DB_HOME}/WiredTigerStat* ${OUTPUT_BASE}/${branch}/${workload}.${iter}.STAT/.
