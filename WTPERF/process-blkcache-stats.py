@@ -10,6 +10,9 @@ from pathlib import Path
 
 outF = None;
 
+#
+# These are for the old branch, as of FAST'22 paper submission.
+#
 statsWeWant = ['\"blocks written\"',
                '\"blocks read\"',
                '\"block cache total bytes inserted on write path\"',

@@ -31,7 +31,7 @@ echo "Checking the swap: "
 swapon
 
 ORIG_BRANCH=wt-dev-prev
-TEST_BRANCH=wt-dev
+TEST_BRANCH=wt-dev-8432
 
 # For situation when I want to run as root, but
 # have the output land in my home directory, set HOME explicitly
@@ -142,7 +142,7 @@ update-grow-stress-large-20GB-long.wtperf${POSTFIX}
 
 TEST_WORKLOADS="
 ycsb-d.wtperf
-ycsb-a.wtperf"
+ycsb-c.wtperf"
 
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then
@@ -186,7 +186,8 @@ env > ${OUTPUT_BASE}/${dest}/env.out
 #
 for workload in ${TEST_WORKLOADS};
 do
-    for branch in ${ORIG_BRANCH} ${TEST_BRANCH};
+    for branch in ${ORIG_BRANCH}
+    #for branch in ${ORIG_BRANCH} ${TEST_BRANCH};
     #for branch in ${TEST_BRANCH};
     do
         # Run the test workload
