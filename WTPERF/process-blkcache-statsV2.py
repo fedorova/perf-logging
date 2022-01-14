@@ -125,7 +125,7 @@ def parseDir(d, outF):
 
     # If we have not yet created the output file header, do this now.
     if (headerNotDone):
-        writeHeader(outF, lines, idx);
+        writeHeader(outF, lines, idx+1);
 
     # Extract the benchmark name from the directory name.
     # Each directory is for a different benchmark instance.
