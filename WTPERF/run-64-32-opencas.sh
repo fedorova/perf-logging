@@ -2,7 +2,7 @@
 
 ulimit -c unlimited
 
-EXP_KIND="OPENCAS-YCSB"
+EXP_KIND="OPENCAS-WTPERF"
 MEMORY_LIMIT_GB=32
 NVRAM_CACHE_SIZE_GB=64
 EXP_TAG=${EXP_KIND}-${NVRAM_CACHE_SIZE_GB}GB-NVRAM.${MEMORY_LIMIT_GB}GB-DRAM
@@ -28,9 +28,10 @@ echo "Set swappiness to..."
 cat /proc/sys/vm/swappiness
 
 echo "Checking the swap: "
+swapoff /dev/sda2
 swapon
 
-TEST_BRANCH=wt-6022
+TEST_BRANCH=wt-dev
 
 # For situation when I want to run as root, but
 # have the output land in my home directory, set HOME explicitly
@@ -43,6 +44,12 @@ if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"OPENCAS"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
+	umount /mnt/ssd
+    casadm -S -i 1 -d /dev/disk/by-id/dm-name-pmem0-pmem1p1
+    casadm -A -i 1 -d /dev/disk/by-id/nvme-nvme.8086-50484b453931333030304a4d37353042474e-535344504532314b37353047414c-00000001-part1
+    casadm --set-cache-mode --cache-mode wa --cache-id 1
+    mount /dev/cas1-1 /mnt/ssd
+    blockdev --getsize64 /dev/mapper/pmem0-pmem1p1
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,eviction_on=true,eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,path=/mnt/pmem,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10,checkpoint_write_bypass=false]"
 fi
@@ -144,12 +151,10 @@ update-grow-stress-large-20GB-long.wtperf${POSTFIX}
 500m-btree-50r50u-large.wtperf${POSTFIX}"
 
 TEST_WORKLOADS="
-ycsb-c.wtperf
-ycsb-a.wtperf
-ycsb-b.wtperf
-ycsb-d.wtperf
-ycsb-e.wtperf"
-
+evict-btree-large-32GB-long.wtperf${POSTFIX}
+evict-btree-scan.wtperf${POSTFIX}
+evict-btree-stress-multi-large-long.wtperf${POSTFIX}
+medium-btree-large-32GB-long.wtperf${POSTFIX}"
 
 
 if [[ "$OSTYPE" == *"darwin"* ]]; then

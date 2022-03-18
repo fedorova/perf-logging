@@ -157,8 +157,6 @@ evict-btree-scan.wtperf${POSTFIX}
 evict-btree-stress-multi-large-long.wtperf${POSTFIX}
 medium-btree-large-32GB-long.wtperf${POSTFIX}"
 
-
-
 if [[ "$OSTYPE" == *"darwin"* ]]; then
     TEST_BASE=${HOME}/Work/WiredTiger/WTPERF
 else

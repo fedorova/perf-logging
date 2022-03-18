@@ -2,9 +2,9 @@
 
 ulimit -c unlimited
 
-EXP_KIND="MMAP-ON-SWAPOFF"
+EXP_KIND="NVRAM-SSD-CACHE"
 MEMORY_LIMIT_GB=32
-NVRAM_CACHE_SIZE_GB=0
+NVRAM_CACHE_SIZE_GB=32
 EXP_TAG=${EXP_KIND}-${NVRAM_CACHE_SIZE_GB}GB-NVRAM.${MEMORY_LIMIT_GB}GB-DRAM
 CACHE_SIZE_LIMIT_GB=`expr ${MEMORY_LIMIT_GB} / 2`
 #COMMAND_PREFIX="perf record"
@@ -42,10 +42,8 @@ fi
 if [[ "$EXP_KIND" == *"DRAM"* ]]; then
     WIREDTIGER_BASE_CONFIG="statistics=(all)"
 elif [[ "$EXP_KIND" == *"NVRAM"* ]]; then
-    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,blkcache_eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,nvram_path=/mnt/pmem,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10,cache_on_checkpoint=true]"
+    WIREDTIGER_BASE_CONFIG="statistics=(all),block_cache=[enabled=true,blkcache_eviction_aggression=900,size=${NVRAM_CACHE_SIZE_GB}GB,type=nvram,nvram_path=/mnt/ssd-swap,hashsize=32768,system_ram=${MEMORY_LIMIT_GB}GB,percent_file_in_dram=75,max_percent_overhead=10,cache_on_checkpoint=true]"
 fi
-
-WIREDTIGER_BASE_CONFIG="statistics=(all),mmap_all=true"
 
 echo "Base config for $EXP_KIND experiment: $WIREDTIGER_BASE_CONFIG"
 
@@ -144,9 +142,6 @@ update-grow-stress-large-20GB-long.wtperf${POSTFIX}
 500m-btree-50r50u-large.wtperf${POSTFIX}"
 
 TEST_WORKLOADS="
-evict-btree-large-32GB-long.wtperf${POSTFIX}
-evict-btree-scan.wtperf${POSTFIX}
-evict-btree-stress-multi-large-long.wtperf${POSTFIX}
 medium-btree-large-32GB-long.wtperf${POSTFIX}"
 
 
@@ -185,9 +180,8 @@ done
 
 SCRIPT_HOME=$(pwd)
 
-env > ${OUTPUT_BASE}/env.out
-SCRIPT=$(readlink -f $0)
-cp $SCRIPT ${OUTPUT_BASE}/.
+env > ${OUTPUT_BASE}/${dest}/env.out
+
 
 # Run the workloads
 #
@@ -286,6 +280,10 @@ do
         done
     done
 done
+
+mv env.out ${OUTPUT_BASE}/${branch}/.
+SCRIPT=$(readlink -f $0)
+cp $SCRIPT ${OUTPUT_BASE}/${branch}/.
 
 chown -R sasha ${OUTPUT_BASE}
 
