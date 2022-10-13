@@ -4,9 +4,8 @@ import argparse
 import os
 import os.path
 import sys
+import traceback
 from argparse import RawTextHelpFormatter
-
-
 
 
 # Globals
@@ -16,6 +15,9 @@ from argparse import RawTextHelpFormatter
 # A per-file dictionary contains chunks, keyed by their offsets.
 #
 chunkCacheAllFiles = {};
+lastAllocatedChunkOffset = int(-1);
+lastAllocatedChunkSize = int(-1);
+lastMissedOffset = int(-1);
 
 # Codes for various colors for printing of informational and error messages.
 #
@@ -39,12 +41,73 @@ class cacheOps:
 
 def process_alloc(cache, offset, size):
 
-    return;
+    global lastAllocatedChunkOffset;
+    global lastAllocatedChunkSize;
+    global lastMissedOffset;
+
+    if (offset != lastMissedOffset):
+        print(color.BOLD + color.RED + "Mismatch: allocating for offset " + str(offset) + \
+                  ", but last missed offset was " + str(lastMissedOffset));
+
+    lastAllocatedChunkOffset = offset;
+    lastAllocatedChunkSize = size;
+    print(color.BOLD + color.PURPLE + "Allocated offset=" + str(offset) + ", size=" + str(size) + color.END);
 
 def process_check(cache, offset, size):
-    return;
 
-def process_insert(cache, offset, size):
+    global lastMissedOffset;
+
+    if offset in cache:
+        return;
+
+    for cachedOffset in sorted(cache.keys()):
+        cachedSize = cache[cachedOffset];
+        if (cachedOffset < offset and (cachedOffset + cachedSize) > offset):
+            return;
+
+    lastMissedOffset = offset;
+    print(color.BOLD + color.PURPLE + "Not found: offset=" + str(offset) + ", size=" + str(size) + color.END);
+
+
+#
+# This is a bit tricky. We are inserting lastAllocatedChunkOffset and lastAllocatedChunkSize.
+# The offset and size parameters passed to the function indicate the place where we are inserting
+# the last allocated chunk.
+#
+def process_insert(op, cache, offset, size):
+
+    global lastAllocatedChunkOffset;
+    global lastAllocatedChunkSize;
+
+    if lastAllocatedChunkOffset in cache:
+        print(color.BOLD + color.RED + "Offset " + str(lastAllocatedChunkOffset) + "already in cache.\n" + color.END);
+        return;
+
+    if (op == "insert" and len(cache) > 0):
+        print(color.BOLD + color.RED + "insert first into a non-empty cache" + color.END);
+        raise Exception("Index mismatch");
+
+    cache[lastAllocatedChunkOffset] = lastAllocatedChunkSize;
+
+    sortedKeys = sorted(cache.keys());
+    print("Index of " + str(lastAllocatedChunkOffset) + " is " + str(sortedKeys.index(lastAllocatedChunkOffset)));
+
+    insertedAtIndex = sortedKeys.index(lastAllocatedChunkOffset);
+
+    if (offset == 0 and size == 0 and insertedAtIndex != 0):
+        print(color.BOLD + color.RED + "insert-first: Mismatch between expected and allocated index. " + color.END);
+        raise Exception("Index mismatch");
+
+    if (op == "insert-before"):
+        nextOffset = sortedKeys[insertedAtIndex + 1];
+        if (lastAllocatedChunkOffset >= nextOffset):
+            print(color.BOLD + color.RED + "insert-before: Mismatch between expected and allocated index. " + color.END);
+            raise Exception("Index mismatch");
+    elif (op == "insert-after"):
+        previousOffset = sortedKeys[insertedAtIndex-1];
+        if (lastAllocatedChunkOffset <= previousOffset):
+            print(color.BOLD + color.RED + "insert-after: Mismatch between expected and allocated index. " + color.END);
+            raise Exception("Index mismatch");
     return;
 
 def get_tokens(line):
@@ -53,30 +116,34 @@ def get_tokens(line):
 
     if (len(opAndElse) < 2):
         print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
+        traceback.print_exc();
         raise Exception("Split 1");
 
     op = opAndElse[0];
 
     opParams = opAndElse[1].strip().split(",");
     if (len(opParams) < 3):
-        print(color.BOLD + color.GREEN + "Could not parse:\n" + line + color.END);
+        print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
+        traceback.print_exc();
         raise Exception("Split 2");
 
     fid = opParams[0].strip();
 
     offsetWords = opParams[1].strip().split("=");
     if (len(offsetWords) < 2 or not (offsetWords[0] == "offset")):
-        print(color.BOLD + color.PURPLE + "Could not parse:\n" + line + color.END);
+        print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
+        traceback.print_exc();
         raise Exception("Split 3");
     offset = offsetWords[1];
 
     sizeWords = opParams[2].strip().split("=");
     if (len(sizeWords) < 2 or not (sizeWords[0] == "size")):
-        print(color.BOLD + color.BLUE + "Could not parse:\n" + line + color.END);
+        print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
+        traceback.print_exc();
         raise Exception("Split 4");
     size = sizeWords[1];
 
-    return op, fid, offset, size;
+    return op, fid, int(offset), int(size);
 
 def process_cache_op(op, fid, offset, size):
 
@@ -92,7 +159,7 @@ def process_cache_op(op, fid, offset, size):
     elif (op == cacheOps.ALLOC):
         process_alloc(chunkCache, offset, size);
     elif (op.startswith(cacheOps.INSERT)):
-        process_insert(chunkCache, offset, size);
+        process_insert(op, chunkCache, offset, size);
 
 def process_line(line):
 
@@ -100,10 +167,11 @@ def process_line(line):
         line.startswith(cacheOps.INSERT):
         try:
             op, fid, offset, size = get_tokens(line);
-            print(op + " " + fid + " " + offset + " " + size);
-            #process_cache_op(op, fid, offset, size);
+            print(op + " " + fid + " " + str(offset) + " " + str(size));
+            process_cache_op(op, fid, offset, size);
         except:
             print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
+            traceback.print_exc();
             sys.exit(-1);
             return;
 
