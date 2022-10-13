@@ -37,18 +37,25 @@ class cacheOps:
     ALLOC = 'allocate'
     INSERT = 'insert'
 
+def process_alloc(cache, offset, size):
+
+    return;
+
+def process_check(cache, offset, size):
+    return;
+
+def process_insert(cache, offset, size):
+    return;
+
 def get_tokens(line):
 
     opAndElse = line.split(":");
-
-    print("Here");
 
     if (len(opAndElse) < 2):
         print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
         raise Exception("Split 1");
 
     op = opAndElse[0];
-    print("Here");
 
     opParams = opAndElse[1].strip().split(",");
     if (len(opParams) < 3):
@@ -56,16 +63,13 @@ def get_tokens(line):
         raise Exception("Split 2");
 
     fid = opParams[0].strip();
-    print("Here");
 
     offsetWords = opParams[1].strip().split("=");
-    print(offsetWords);
     if (len(offsetWords) < 2 or not (offsetWords[0] == "offset")):
         print(color.BOLD + color.PURPLE + "Could not parse:\n" + line + color.END);
         raise Exception("Split 3");
     offset = offsetWords[1];
 
-    print("Here");
     sizeWords = opParams[2].strip().split("=");
     if (len(sizeWords) < 2 or not (sizeWords[0] == "size")):
         print(color.BOLD + color.BLUE + "Could not parse:\n" + line + color.END);
