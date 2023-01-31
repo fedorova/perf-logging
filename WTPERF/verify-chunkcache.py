@@ -15,6 +15,7 @@ from argparse import RawTextHelpFormatter
 # A per-file dictionary contains chunks, keyed by their offsets.
 #
 chunkCacheAllFiles = {};
+allocatedChunks = {};
 lastAllocatedChunkOffset = int(-1);
 lastAllocatedChunkSize = int(-1);
 lastMissedOffset = int(-1);
@@ -35,80 +36,81 @@ class color:
 
 
 class cacheOps:
-    CHECK = 'check'
     ALLOC = 'allocate'
+    EVICT  = 'evict'
+    GET = 'get'
     INSERT = 'insert'
+    REMOVE = 'remove'
 
 def process_alloc(cache, offset, size):
 
-    global lastAllocatedChunkOffset;
-    global lastAllocatedChunkSize;
+    global allocatedChunks;
+
+    if offset in allocatedChunks:
+        print(color.BOLD + color.RED + "Double allocation for offset " + str(offset) + color.END);
+
+    allocatedChunks[offset] = size;
+
+def process_evict(cache, offset, size):
+
+    if offset not in cache:
+        print(color.BOLD + color.RED + "Evicted offset " + str(offset) + " not in cache " +\
+              color.END);
+
+
+def process_get(cache, offset, size):
+
     global lastMissedOffset;
+    already_read = 0;
+    left_to_read = size;
+    readable_in_chunk = 0;
 
-    if (offset != lastMissedOffset):
-        print(color.BOLD + color.RED + "Mismatch: allocating for offset " + str(offset) + \
-                  ", but last missed offset was " + str(lastMissedOffset));
-
-    lastAllocatedChunkOffset = offset;
-    lastAllocatedChunkSize = size;
-    print(color.BOLD + color.PURPLE + "Allocated offset=" + str(offset) + ", size=" + str(size) + color.END);
-
-def process_check(cache, offset, size):
-
-    global lastMissedOffset;
-
-    if offset in cache:
-        return;
-
-    for cachedOffset in sorted(cache.keys()):
-        cachedSize = cache[cachedOffset];
-        if (cachedOffset < offset and (cachedOffset + cachedSize) > offset):
+    for chunkOffset in sorted(cache.keys()):
+        chunkSize = cache[chunkOffset];
+        # Block is entirely in a chunk
+        if (chunkOffset <= offset and (chunkOffset+chunkSize >= offset+size)):
             return;
+        # Block begins in the chunk
+        if (chunkOffset <= offset and (offset+size > chunkOffset+chunkSize)):
+            offset += (offset+size) - (chunkOffset+chunkSize);
+            size -= (offset+size) - (chunkOffset+chunkSize);
+            print(color.BOLD + color.PURPLE + "BEGINS in CHUNK: " + \
+                  "offset=" + str(offset) + ", size=" + str(size) + \
+                  "chunk offset=" + str(chunkOffset) + ", chunk_size=" + str(chunkSize) +\
+                  color.END);
 
     lastMissedOffset = offset;
     print(color.BOLD + color.PURPLE + "Not found: offset=" + str(offset) + ", size=" + str(size) + color.END);
 
-
 #
-# This is a bit tricky. We are inserting lastAllocatedChunkOffset and lastAllocatedChunkSize.
-# The offset and size parameters passed to the function indicate the place where we are inserting
-# the last allocated chunk.
+# Check if the inserted chunk had been allocated and is not already cached.
 #
 def process_insert(op, cache, offset, size):
 
-    global lastAllocatedChunkOffset;
-    global lastAllocatedChunkSize;
+    global allocatedChunks;
 
     if lastAllocatedChunkOffset in cache:
         print(color.BOLD + color.RED + "Offset " + str(lastAllocatedChunkOffset) + "already in cache.\n" + color.END);
         return;
 
-    if (op == "insert" and len(cache) > 0):
-        print(color.BOLD + color.RED + "insert first into a non-empty cache" + color.END);
-        raise Exception("Index mismatch");
+    if offset not in allocatedChunks:
+         print(color.BOLD + color.RED + "Inserted chunk at offset " + str(offset) + \
+           " has NOT been allocated " + color.END);
 
-    cache[lastAllocatedChunkOffset] = lastAllocatedChunkSize;
+    del allocatedChunks[offset];
 
-    sortedKeys = sorted(cache.keys());
-    print("Index of " + str(lastAllocatedChunkOffset) + " is " + str(sortedKeys.index(lastAllocatedChunkOffset)));
+    if offset in cache:
+        print(color.BOLD + color.RED + "Inserted chunk at offset " + str(offset) + \
+           " is already cached " + color.END);
 
-    insertedAtIndex = sortedKeys.index(lastAllocatedChunkOffset);
+    cache[offset] = size;
 
-    if (offset == 0 and size == 0 and insertedAtIndex != 0):
-        print(color.BOLD + color.RED + "insert-first: Mismatch between expected and allocated index. " + color.END);
-        raise Exception("Index mismatch");
 
-    if (op == "insert-before"):
-        nextOffset = sortedKeys[insertedAtIndex + 1];
-        if (lastAllocatedChunkOffset >= nextOffset):
-            print(color.BOLD + color.RED + "insert-before: Mismatch between expected and allocated index. " + color.END);
-            raise Exception("Index mismatch");
-    elif (op == "insert-after"):
-        previousOffset = sortedKeys[insertedAtIndex-1];
-        if (lastAllocatedChunkOffset <= previousOffset):
-            print(color.BOLD + color.RED + "insert-after: Mismatch between expected and allocated index. " + color.END);
-            raise Exception("Index mismatch");
-    return;
+def process_remove(cache, offset, size):
+
+    if offset not in cache:
+        print(color.BOLD + color.RED + "Removed offset " + str(offset) + " not in cache " +\
+              color.END);
 
 def get_tokens(line):
 
@@ -154,11 +156,15 @@ def process_cache_op(op, fid, offset, size):
 
     chunkCache = chunkCacheAllFiles[fid];
 
-    if (op == cacheOps.CHECK):
-        process_check(chunkCache, offset, size);
-    elif (op == cacheOps.ALLOC):
+    if (op == cacheOps.ALLOC):
         process_alloc(chunkCache, offset, size);
-    elif (op.startswith(cacheOps.INSERT)):
+    elif (op == cacheOps.EVICT):
+        process_evict(chunkCache, offset, size);
+    elif (op == cacheOps.GET):
+        process_get(chunkCache, offset, size);
+    elif (op == cacheOps.INSERT):
+        process_insert(op, chunkCache, offset, size);
+    elif (op == cacheOps.REMOVE):
         process_insert(op, chunkCache, offset, size);
 
 def process_line(line):
