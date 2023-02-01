@@ -16,9 +16,6 @@ from argparse import RawTextHelpFormatter
 #
 chunkCacheAllFiles = {};
 allocatedChunks = {};
-lastAllocatedChunkOffset = int(-1);
-lastAllocatedChunkSize = int(-1);
-lastMissedOffset = int(-1);
 
 # Codes for various colors for printing of informational and error messages.
 #
@@ -48,6 +45,12 @@ def process_alloc(cache, offset, size):
 
     if offset in allocatedChunks:
         print(color.BOLD + color.RED + "Double allocation for offset " + str(offset) + color.END);
+        sys.exit(-1);
+
+    if offset in cache:
+        print(color.BOLD + color.RED + "Allocated offset " + str(offset) + " already cached" \
+              + color.END);
+        sys.exit(-1);
 
     allocatedChunks[offset] = size;
 
@@ -56,14 +59,15 @@ def process_evict(cache, offset, size):
     if offset not in cache:
         print(color.BOLD + color.RED + "Evicted offset " + str(offset) + " not in cache " +\
               color.END);
+        sys.exit(-1);
+
+    del cache[offset];
 
 
 def process_get(cache, offset, size):
 
-    global lastMissedOffset;
-    already_read = 0;
-    left_to_read = size;
-    readable_in_chunk = 0;
+    beginningFound = False;
+    bytesFound = 0;
 
     for chunkOffset in sorted(cache.keys()):
         chunkSize = cache[chunkOffset];
@@ -71,37 +75,47 @@ def process_get(cache, offset, size):
         if (chunkOffset <= offset and (chunkOffset+chunkSize >= offset+size)):
             return;
         # Block begins in the chunk
-        if (chunkOffset <= offset and (offset+size > chunkOffset+chunkSize)):
-            offset += (offset+size) - (chunkOffset+chunkSize);
-            size -= (offset+size) - (chunkOffset+chunkSize);
+        if (chunkOffset <= offset and (offset <  chunkOffset+chunkSize) and \
+            (offset+size > chunkOffset+chunkSize)):
             print(color.BOLD + color.PURPLE + "BEGINS in CHUNK: " + \
                   "offset=" + str(offset) + ", size=" + str(size) + \
-                  "chunk offset=" + str(chunkOffset) + ", chunk_size=" + str(chunkSize) +\
+                  ", chunk offset=" + str(chunkOffset) + ", chunk_size=" + str(chunkSize) +\
                   color.END);
+            bytesFound = (chunkOffset+chunkSize - offset);
+            offset += bytesFound;
+            size -= bytesFound;
+            beginningFound = True;
+        if (chunkOffset > offset and (chunkOffset+chunkSize >= offset+size) and \
+            chunkOffset < (offset + size)):
+            print(color.BOLD + color.PURPLE + "ENDS in CHUNK: " + \
+                  "offset=" + str(offset) + ", size=" + str(size) + \
+                  ", chunk offset=" + str(chunkOffset) + ", chunk_size=" + str(chunkSize) +\
+                  color.END);
+            if (not beginningFound):
+                break;
+        if (chunkOffset > offset + size):
+            break;
 
-    lastMissedOffset = offset;
     print(color.BOLD + color.PURPLE + "Not found: offset=" + str(offset) + ", size=" + str(size) + color.END);
 
 #
 # Check if the inserted chunk had been allocated and is not already cached.
 #
-def process_insert(op, cache, offset, size):
+def process_insert(cache, offset, size):
 
     global allocatedChunks;
-
-    if lastAllocatedChunkOffset in cache:
-        print(color.BOLD + color.RED + "Offset " + str(lastAllocatedChunkOffset) + "already in cache.\n" + color.END);
-        return;
 
     if offset not in allocatedChunks:
          print(color.BOLD + color.RED + "Inserted chunk at offset " + str(offset) + \
            " has NOT been allocated " + color.END);
+         sys.exit(-1);
 
     del allocatedChunks[offset];
 
     if offset in cache:
         print(color.BOLD + color.RED + "Inserted chunk at offset " + str(offset) + \
            " is already cached " + color.END);
+        sys.exit(-1);
 
     cache[offset] = size;
 
@@ -111,6 +125,8 @@ def process_remove(cache, offset, size):
     if offset not in cache:
         print(color.BOLD + color.RED + "Removed offset " + str(offset) + " not in cache " +\
               color.END);
+
+    del cache[offset];
 
 def get_tokens(line):
 
@@ -163,23 +179,32 @@ def process_cache_op(op, fid, offset, size):
     elif (op == cacheOps.GET):
         process_get(chunkCache, offset, size);
     elif (op == cacheOps.INSERT):
-        process_insert(op, chunkCache, offset, size);
+        process_insert(chunkCache, offset, size);
     elif (op == cacheOps.REMOVE):
-        process_insert(op, chunkCache, offset, size);
+        process_remove(chunkCache, offset, size);
 
 def process_line(line):
 
-    if line.startswith(cacheOps.CHECK) or line.startswith(cacheOps.ALLOC) or \
-        line.startswith(cacheOps.INSERT):
-        try:
-            op, fid, offset, size = get_tokens(line);
-            print(op + " " + fid + " " + str(offset) + " " + str(size));
-            process_cache_op(op, fid, offset, size);
-        except:
-            print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
-            traceback.print_exc();
-            sys.exit(-1);
-            return;
+    global allocatedChunks;
+    global chunkCacheAllFiles;
+
+    if ("configured cache" in line):
+        allocatedChunks.clear();
+        chunkCacheAllFiles.clear();
+        print("Clearing the caches...");
+
+    if line.startswith(cacheOps.ALLOC + ":") or line.startswith(cacheOps.EVICT + ":") or \
+      line.startswith(cacheOps.GET + ":") or line.startswith(cacheOps.INSERT + ":") or \
+      line.startswith(cacheOps.REMOVE + ":"):
+      try:
+          op, fid, offset, size = get_tokens(line);
+          print(op + " " + fid + " " + str(offset) + " " + str(size));
+          process_cache_op(op, fid, offset, size);
+      except:
+          print(color.BOLD + color.RED + "Could not parse:\n" + line + color.END);
+          traceback.print_exc();
+          sys.exit(-1);
+          return;
 
 def parse_file(fname):
 
