@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
+
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 
 # Read CSV file
-df = pd.read_csv('btree-tiny.csv')
+df = pd.read_csv('btree-vis-output.csv')
 
 # Create a directed graph
 G = nx.DiGraph()
