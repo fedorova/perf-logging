@@ -22,6 +22,13 @@ class color:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
+
+class op:
+    CACHE_ACCESS = 0
+    EVICT = 1
+    EVICT_ADD = 2
+    EVICT_LOOK = 3
+
 pagePtrToAddr = {};
 
 def parseAddr(addr):
@@ -81,9 +88,13 @@ def process_line(line, fileFilter):
     parent_page = "0";
     read_gen = "0";
     type = "2";
+    op_type = op.CACHE_ACCESS;
 
     # Split the line using space as the delimiter.
     fields = line.split(" ");
+
+    if ("WT_VERB_CACHE_TRACE" not in line):
+        return;
 
     for i in range(0, len(fields)):
         if (fields[i].startswith("file:")):
@@ -109,15 +120,21 @@ def process_line(line, fileFilter):
     for i in range(i, len(fields)):
         if (fields[i].startswith("cache-") or fields[i].startswith("init-root")):
             recordPageAddr(fields[i+1], offset);
-        if (fields[i] == "type"):
+            if (fields[i] == "cache-hit" and "evict pass" in line):
+                op_type = op.EVICT_LOOK;
+        elif (fields[i] == "evict-add"):
+            op_type = op.EVICT_ADD;
+        elif (fields[i] == "evict"):
+            op_type = op.EVICT;
+        elif (fields[i] == "type"):
             type = parseType(fields[i+1]);
-        if (fields[i] == "read_gen"):
+        elif (fields[i] == "read_gen"):
             read_gen = fields[i+1];
-        if (fields[i] == "parent_page"):
+        elif (fields[i] == "parent_page"):
             parent_addr = getParentAddr(fields[i+1].strip());
 
     print(str(time) + "," + str(offset) + "," + str(size) + "," + str(type) + ","
-          + str(read_gen) + "," + str(parent_addr));
+          + str(read_gen) + "," + str(parent_addr) + "," + str(op_type));
 
 def parse_file(fname, fileFilter):
 
@@ -138,7 +155,7 @@ def main():
     parser.add_argument('files', type=str, nargs='*',
                         help='Trace file to convert to libcachesim format.');
     parser.add_argument('-f', '--fileFilter', dest='fileFilter', type=str,
-                        default='');
+                        default='test.wt');
 
     args = parser.parse_args();
 
