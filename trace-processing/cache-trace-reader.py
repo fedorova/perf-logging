@@ -93,7 +93,11 @@ def process_line(line, fileFilter):
     # Split the line using space as the delimiter.
     fields = line.split(" ");
 
+    # Special cases to skip debug messages we don't need.
     if ("WT_VERB_CACHE_TRACE" not in line):
+        return;
+
+    if ("evict-queue" in line):
         return;
 
     for i in range(0, len(fields)):
