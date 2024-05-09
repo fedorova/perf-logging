@@ -81,7 +81,7 @@ def recordPageAddr(page_ptr, addr):
 # The addr structure contains object ID, the range of offsets spanned by the item, its
 # size and the checksum.
 #
-def process_line(line, fileFilter):
+def process_line(line, fileFilter, generic):
 
     i = 0;
     parent_addr = "0";
@@ -133,10 +133,19 @@ def process_line(line, fileFilter):
         elif (fields[i] == "parent_page"):
             parent_addr = getParentAddr(fields[i+1].strip());
 
-    print(str(time) + "," + str(offset) + "," + str(size) + "," + str(type) + ","
-          + str(read_gen) + "," + str(parent_addr) + "," + str(op_type));
+    # For a generic cache simulator, we only care about access operations and only the
+    # first three fields
+    #
+    if (generic):
+        if (op_type ==  op.CACHE_ACCESS):
+            print(str(time) + "," + str(offset) + "," + str(size));
+        else:
+            return;
+    else:
+        print(str(time) + "," + str(offset) + "," + str(size) + "," + str(type) + ","
+            + str(read_gen) + "," + str(parent_addr) + "," + str(op_type));
 
-def parse_file(fname, fileFilter):
+def parse_file(fname, fileFilter, generic):
 
     try:
         f = open(fname);
@@ -145,7 +154,7 @@ def parse_file(fname, fileFilter):
         sys.exit(1);
 
     for line in f.readlines():
-        process_line(line, fileFilter);
+        process_line(line, fileFilter, generic);
 
 def main():
 
@@ -156,6 +165,8 @@ def main():
                         help='Trace file to convert to libcachesim format.');
     parser.add_argument('-f', '--fileFilter', dest='fileFilter', type=str,
                         default='test.wt');
+    parser.add_argument('-g', '--generic', dest='generic', action='store_true',
+                        default=False);
 
     args = parser.parse_args();
 
@@ -164,7 +175,7 @@ def main():
         sys.exit(1);
 
     for f in args.files:
-        parse_file(f, args.fileFilter);
+        parse_file(f, args.fileFilter, args.generic);
 
 
 if __name__ == '__main__':
