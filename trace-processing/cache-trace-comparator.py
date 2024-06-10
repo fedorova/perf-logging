@@ -22,179 +22,119 @@ class color:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
-
-class op:
-    CACHE_ACCESS = 0
-    EVICT = 1
-    EVICT_ADD = 2
-    EVICT_LOOK = 3
-
 class Object:
-	def __init__(objectId, accessTime):
-		self.objectID = objectId;
+	def __init__(self, objectId, accessTime, objType):
 		self.accessTime = accessTime;
-		self.cached = False;
+		self.cached = True;
 		self.numTimesEvicted = 0;
 		self.numAccesses = 0;
-		self.objectId = 0;
+		self.objectId = objectId;
 		self.readGen = 0;
+		self.type = objType;
 
 cachedObjects = {};
+accessTime = 0;
 
-def parseAddr(addr):
+def ERROR(msg):
+	print(color.BOLD + color.RED + msg + color.END);
+	sys.exit(1);
 
-    addrComponents = addr.split(" ");
-    offset = addrComponents[1].split("-")[0];
-    size = addrComponents[2].strip(",");
+def dumpCachedObjects():
+	global cachedObjects;
 
-    return offset, size;
+	for key, value in cachedObjects.items():
+		print(f"Key: {key}, Value: {value}");
 
-def parseTime(time):
-    timeComponents = time.split(":");
-    return int(timeComponents[0]) * 1000000 + int(timeComponents[1]);
+def wtFind_getField(field, string):
 
-def parseType(type):
-    if (type == "intl"):
-        return "0";
-    else:
-        return "1";
+	fields = string.split("=");
 
-def getParentAddr(parent_page_ptr):
-    #
-    # Given a page pointer, return the on-disk address.
-    #
-    global pagePtrToAddr;
+	if (len(fields) < 2):
+		ERROR("WT_find line has no " + field + " expected in " + string);
 
-    if (parent_page_ptr in pagePtrToAddr):
-        return pagePtrToAddr[parent_page_ptr];
-    else:
-        return 0;
-
-def recordPageAddr(page_ptr, addr):
-    #
-    # We keep a mapping between the page pointer and the address,
-    # so that given a parent page pointer we can find the corresponding
-    # address.
-    #
-    global pagePtrToAddr;
-    pagePtrToAddr[page_ptr] = addr;
-
-#
-# Parse lines that look like this:
-#
-# [1695171718:241987][73439:0x1121b2e00], file:test.wt, WT_CONNECTION.close:
-#         [WT_VERB_CACHE_TRACE][DEBUG_1]: cache-hit 0x7fbdf8271800
-#         addr [0: 1200701440-1200730112, 28672, 2351440508] type leaf read_gen 19147
-#         parent_page 0x7fbdf8271800
-#
-# The first item in square brackets is time: seconds and microseconds.
-# The addr structure contains object ID, the range of offsets spanned by the item, its
-# size and the checksum.
-#
-def process_line(line, fileFilter, generic):
-
-    i = 0;
-    parent_addr = "0";
-    parent_page = "0";
-    read_gen = "0";
-    type = "2";
-    op_type = op.CACHE_ACCESS;
-
-    # Split the line using space as the delimiter.
-    fields = line.split(" ");
-
-    # Special cases to skip debug messages we don't need.
-    if ("WT_VERB_CACHE_TRACE" not in line):
-        return;
-
-    if ("evict-queue" in line):
-        return;
-
-    for i in range(0, len(fields)):
-        if (fields[i].startswith("file:")):
-            fileName = fields[i].split(":")[1].strip(",");
-            if (fileName != fileFilter):
-                return;
-            break;
-    #
-    # This matches various characters between square brackets
-    # and puts all the results in a list.
-    #
-    res = re.findall(r"\[([A-Za-z0-9_\-:, ]+)\]", line);
-
-    # Discard unwanted debug messages
-    if (res[2] != "WT_VERB_CACHE_TRACE"):
-        return;
-
-    # The time consists of seconds and microseconds. Convert to microseconds.
-    time = parseTime(res[0]);
-    offset, size = parseAddr(res[4]);
-
-    # Find the other interesting fields.
-    for i in range(i, len(fields)):
-        if (fields[i].startswith("cache-") or fields[i].startswith("init-root")):
-            recordPageAddr(fields[i+1], offset);
-            if (fields[i] == "cache-hit" and "evict pass" in line):
-                op_type = op.EVICT_LOOK;
-        elif (fields[i] == "evict-add"):
-            op_type = op.EVICT_ADD;
-        elif (fields[i] == "evict"):
-            op_type = op.EVICT;
-        elif (fields[i] == "type"):
-            type = parseType(fields[i+1]);
-        elif (fields[i] == "read_gen"):
-            read_gen = fields[i+1];
-        elif (fields[i] == "parent_page"):
-            parent_addr = getParentAddr(fields[i+1].strip());
-
-    # For a generic cache simulator, we only care about access operations and only the
-    # first three fields
-    #
-    if (generic):
-        if (op_type ==  op.CACHE_ACCESS):
-            print(str(time) + "," + str(offset) + "," + str(size));
-        else:
-            return;
-    else:
-        print(str(time) + "," + str(offset) + "," + str(size) + "," + str(type) + ","
-            + str(read_gen) + "," + str(parent_addr) + "," + str(op_type));
+	return fields[1].strip();
 
 def processWiredTigerLine(line):
 
 	global cachedObjects;
+	global accessTime;
+
+	fields = line.split(":");
 
 	if ("WT_find" in line):
-		
+		accessTime += 1;
+		objFields = fields[5].split(",");
+		objID = 0;
+		objType = 0;
+		read_gen = 0;
+
+		for f in objFields:
+			f = f.strip();
+			if ("parent_addr" in f):
+				continue;
+			elif ("addr =" in f):
+				objID = wtFind_getField("objID", f);
+			elif ("read_gen =" in f):
+				read_gen = wtFind_getField("read_gen", f);
+			elif ("type =" in f):
+				objType = wtFind_getField("objType", f);
+
+		if (objID in cachedObjects):
+			obj = cachedObjects[objID];
+			obj.accessTime = accessTime;
+			obj.numAccesses += 1;
+			obj.readGen = read_gen;
+		else:
+			newObj = Object(objID, accessTime, objType);
+			cachedObjects[objID] = newObj;
+
+	elif ("Removed" in line):
+		objID = -1;
+		for f in fields:
+			if ("Removed" in f): # This is the evict message
+				evictMsgFields = f.split(" ");
+				objID = evictMsgFields[3];
+		if (objID == -1):
+			ERROR("Invalid line in WiredTiger trace: " + line);
+		elif (objID not in cachedObjects):
+			ERROR("WiredTiger evicts uncached object: " + line);
+		else:
+			obj = cachedObjects[objID];
+			obj.cached = False;
+			obj.numTimesEvicted += 1;
+	else:
+		ERROR("Invalid line in WiredTiger trace: " + line);
 
 def parseWiredTigerTrace(fname):
 
-    try:
-        f = open(fname);
-    except:
-        print(color.BOLD + color.RED + "Could not open " + fname + color.END);
-        sys.exit(1);
+	try:
+		f = open(fname);
+	except:
+		ERROR("Could not open " + fname);
 
-    for line in f.readlines():
+	for line in f.readlines():
 		if ("WT_find" in line or "Removed" in line):
 			processWiredTigerLine(line);
 
 def main():
 
-    parser = argparse.ArgumentParser(
-		description= "Analyze WiredTiger cache trace in comparison with another algorithm");
-                                     formatter_class=RawTextHelpFormatter);
-    parser.add_argument('-w', dest='wtTrace', type=str, help='WiredTiger simulator output file');
-	parser.add_argument('-o', dest='otherTrace', type=str,
+	parser = argparse.ArgumentParser(
+		description= "Analyze WiredTiger cache trace in comparison with another algorithm",
+		formatter_class=RawTextHelpFormatter);
+	parser.add_argument('-w', '--wt', dest='wtTrace', type=str, help='WiredTiger simulator output file');
+	parser.add_argument('-o', '--other', dest='otherTrace', type=str,
 						help='Simulator output file for the other algorithm');
 
-    args = parser.parse_args();
+	args = parser.parse_args();
 
-    if (args.wtTrace is None or args.otherTrace is None):
-        parser.print_help();
-        sys.exit(1);
+	if (args.wtTrace is None and args.otherTrace is None):
+		parser.print_help();
+		sys.exit(1);
 
-	parseWiredTigerTrace(args.wtTrace);
-	parseOtherTrace(args.otherTrace);
+	if (args.wtTrace is not None):
+		parseWiredTigerTrace(args.wtTrace);
+	if (args.otherTrace is not None):
+		parseOtherTrace(args.otherTrace);
 
 if __name__ == '__main__':
-    main()
+	main()
