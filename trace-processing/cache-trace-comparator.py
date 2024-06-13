@@ -32,6 +32,11 @@ class Object:
 		self.readGen = 0;
 		self.type = objType;
 
+	def print(self):
+		print(color.BOLD + f"ObjectID {self.objectId}" + color.END + "\n");
+		for field, value in vars(self).items():
+			print(f"\t{field}: {value}\n");
+
 cachedObjects = {};
 accessTime = 0;
 
@@ -43,7 +48,7 @@ def dumpCachedObjects():
 	global cachedObjects;
 
 	for key, value in cachedObjects.items():
-		print(f"Key: {key}, Value: {value}");
+		value.print();
 
 def wtFind_getField(field, string):
 
@@ -79,11 +84,12 @@ def processWiredTigerLine(line):
 			elif ("type =" in f):
 				objType = wtFind_getField("objType", f);
 
+		objID = int(objID);
 		if (objID in cachedObjects):
 			obj = cachedObjects[objID];
-			obj.accessTime = accessTime;
+			obj.accessTime = int(accessTime);
 			obj.numAccesses += 1;
-			obj.readGen = read_gen;
+			obj.readGen = int(read_gen);
 		else:
 			newObj = Object(objID, accessTime, objType);
 			cachedObjects[objID] = newObj;
@@ -93,7 +99,7 @@ def processWiredTigerLine(line):
 		for f in fields:
 			if ("Removed" in f): # This is the evict message
 				evictMsgFields = f.split(" ");
-				objID = evictMsgFields[3];
+				objID = int(evictMsgFields[3]);
 		if (objID == -1):
 			ERROR("Invalid line in WiredTiger trace: " + line);
 		elif (objID not in cachedObjects):
@@ -115,6 +121,8 @@ def parseWiredTigerTrace(fname):
 	for line in f.readlines():
 		if ("WT_find" in line or "Removed" in line):
 			processWiredTigerLine(line);
+
+	dumpCachedObjects();
 
 def main():
 
