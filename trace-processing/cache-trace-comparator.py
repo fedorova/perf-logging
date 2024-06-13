@@ -153,9 +153,9 @@ def processOtherTraceLine(line):
             newObj = Object(objID, accessTime, 0);
             otherCachedObjects[objID] = newObj;
     elif(words[0] == "evict"):
-        objID = int(words[2]);
+        objID = int(words[1]);
         if (objID not in otherCachedObjects):
-            ERROR("Evicted object " + objID + " is not in cache.\n" + line);
+            ERROR(f"Evicted object {objID} is not in cache.\n" + line);
         else:
             obj =  otherCachedObjects[objID];
             obj.cached = False;
