@@ -137,29 +137,29 @@ def parseWiredTigerTrace(fname):
 # In the "evict" record, the second field is the object ID.
 #
 def processOtherTraceLine(line):
+	global otherCachedObjects;
 
-    global otherCachedObjects;
+	words = line.split(" ");
 
-    words = line.split(" ");
-
-    if (words[0] == "find" and len(words) == 3):
-        objID = int(words[2]);
-        accessTime = int(words[1]);
-        if (objID in otherCachedObjects):
-            obj = otherCachedObjects[objID];
-            obj.numAccesses += 1;
-            obj.accessTime = accessTime;
-        else:
-            newObj = Object(objID, accessTime, 0);
-            otherCachedObjects[objID] = newObj;
-    elif(words[0] == "evict"):
-        objID = int(words[1]);
-        if (objID not in otherCachedObjects):
-            ERROR(f"Evicted object {objID} is not in cache.\n" + line);
-        else:
-            obj =  otherCachedObjects[objID];
-            obj.cached = False;
-            obj.numTimesEvicted += 1;
+	if (words[0] == "find" and len(words) == 3):
+		objID = int(words[2]);
+		accessTime = int(words[1]);
+		if (objID in otherCachedObjects):
+			obj = otherCachedObjects[objID];
+			obj.numAccesses += 1;
+			obj.accessTime = accessTime;
+		else:
+			newObj = Object(objID, accessTime, 0);
+			otherCachedObjects[objID] = newObj;
+	elif(words[0] == "evict"):
+		objID = int(words[1]);
+		if (objID not in otherCachedObjects):
+			dumpCachedObjects();
+			ERROR(f"Evicted object {objID} is not in cache.\n" + line);
+		else:
+			obj =  otherCachedObjects[objID];
+			obj.cached = False;
+			obj.numTimesEvicted += 1;
 
 def parseOtherTrace(fname):
 
@@ -171,6 +171,8 @@ def parseOtherTrace(fname):
 	for line in f.readlines():
 		if ("find" in line or "evict" in line):
 			processOtherTraceLine(line);
+
+	dumpCachedObjects();
 
 def main():
 
