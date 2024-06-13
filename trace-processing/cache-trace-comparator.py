@@ -45,10 +45,9 @@ def ERROR(msg):
 	print(color.BOLD + color.RED + msg + color.END);
 	sys.exit(1);
 
-def dumpCachedObjects():
-	global WTcachedObjects;
+def dumpCachedObjects(cachedObjects):
 
-	for key, value in WTcachedObjects.items():
+	for key, value in cachedObjects.items():
 		value.print();
 
 def wtFind_getField(field, string):
@@ -123,7 +122,7 @@ def parseWiredTigerTrace(fname):
 		if ("WT_find" in line or "Removed" in line):
 			processWiredTigerLine(line);
 
-	dumpCachedObjects();
+	dumpCachedObjects(WTcachedObjects);
 
 #
 # Valid lines can look like this:
@@ -141,7 +140,7 @@ def processOtherTraceLine(line):
 
 	words = line.split(" ");
 
-	if (words[0] == "find" and len(words) == 3):
+	if (words[0].endswith("find") and len(words) == 3):
 		objID = int(words[2]);
 		accessTime = int(words[1]);
 		if (objID in otherCachedObjects):
@@ -154,7 +153,7 @@ def processOtherTraceLine(line):
 	elif(words[0] == "evict"):
 		objID = int(words[1]);
 		if (objID not in otherCachedObjects):
-			dumpCachedObjects();
+			dumpCachedObjects(otherCachedObjects);
 			ERROR(f"Evicted object {objID} is not in cache.\n" + line);
 		else:
 			obj =  otherCachedObjects[objID];
@@ -162,6 +161,8 @@ def processOtherTraceLine(line):
 			obj.numTimesEvicted += 1;
 
 def parseOtherTrace(fname):
+
+	global otherCachedObjects;
 
 	try:
 		f = open(fname);
@@ -172,7 +173,7 @@ def parseOtherTrace(fname):
 		if ("find" in line or "evict" in line):
 			processOtherTraceLine(line);
 
-	dumpCachedObjects();
+	dumpCachedObjects(otherCachedObjects);
 
 def main():
 
