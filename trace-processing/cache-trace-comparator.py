@@ -37,7 +37,8 @@ class Object:
 		for field, value in vars(self).items():
 			print(f"\t{field}: {value}\n");
 
-cachedObjects = {};
+WTcachedObjects = {};
+otherCachedObjects = {};
 accessTime = 0;
 
 def ERROR(msg):
@@ -45,9 +46,9 @@ def ERROR(msg):
 	sys.exit(1);
 
 def dumpCachedObjects():
-	global cachedObjects;
+	global WTcachedObjects;
 
-	for key, value in cachedObjects.items():
+	for key, value in WTcachedObjects.items():
 		value.print();
 
 def wtFind_getField(field, string):
@@ -61,7 +62,7 @@ def wtFind_getField(field, string):
 
 def processWiredTigerLine(line):
 
-	global cachedObjects;
+	global WTcachedObjects;
 	global accessTime;
 
 	fields = line.split(":");
@@ -85,14 +86,14 @@ def processWiredTigerLine(line):
 				objType = wtFind_getField("objType", f);
 
 		objID = int(objID);
-		if (objID in cachedObjects):
-			obj = cachedObjects[objID];
+		if (objID in WTcachedObjects):
+			obj = WTcachedObjects[objID];
 			obj.accessTime = int(accessTime);
 			obj.numAccesses += 1;
 			obj.readGen = int(read_gen);
 		else:
 			newObj = Object(objID, accessTime, objType);
-			cachedObjects[objID] = newObj;
+			WTcachedObjects[objID] = newObj;
 
 	elif ("Removed" in line):
 		objID = -1;
@@ -102,10 +103,10 @@ def processWiredTigerLine(line):
 				objID = int(evictMsgFields[3]);
 		if (objID == -1):
 			ERROR("Invalid line in WiredTiger trace: " + line);
-		elif (objID not in cachedObjects):
+		elif (objID not in WTcachedObjects):
 			ERROR("WiredTiger evicts uncached object: " + line);
 		else:
-			obj = cachedObjects[objID];
+			obj = WTcachedObjects[objID];
 			obj.cached = False;
 			obj.numTimesEvicted += 1;
 	else:
@@ -123,6 +124,53 @@ def parseWiredTigerTrace(fname):
 			processWiredTigerLine(line);
 
 	dumpCachedObjects();
+
+#
+# Valid lines can look like this:
+#
+# find 2048020 3308544000
+# evict 2994114560
+#
+# In the "find" record, the second field is virtual clock, incremented on each cache lookup.
+# The third field is the object ID.
+#
+# In the "evict" record, the second field is the object ID.
+#
+def processOtherTraceLine(line):
+
+    global otherCachedObjects;
+
+    words = line.split(" ");
+
+    if (words[0] == "find" and len(words) == 3):
+        objID = int(words[2]);
+        accessTime = int(words[1]);
+        if (objID in otherCachedObjects):
+            obj = otherCachedObjects[objID];
+            obj.numAccesses += 1;
+            obj.accessTime = accessTime;
+        else:
+            newObj = Object(objID, accessTime, 0);
+            otherCachedObjects[objID] = newObj;
+    elif(words[0] == "evict"):
+        objID = int(words[2]);
+        if (objID not in otherCachedObjects):
+            ERROR("Evicted object " + objID + " is not in cache.\n" + line);
+        else:
+            obj =  otherCachedObjects[objID];
+            obj.cached = False;
+            obj.numTimesEvicted += 1;
+
+def parseOtherTrace(fname):
+
+	try:
+		f = open(fname);
+	except:
+		ERROR("Could not open " + fname);
+
+	for line in f.readlines():
+		if ("find" in line or "evict" in line):
+			processOtherTraceLine(line);
 
 def main():
 
