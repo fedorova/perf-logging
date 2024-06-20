@@ -22,14 +22,20 @@ class color:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
-
 class op:
     CACHE_ACCESS = 0
     EVICT = 1
     EVICT_ADD = 2
     EVICT_LOOK = 3
 
+bytesCached = {};
+maxBytesCached = 0;
 pagePtrToAddr = {};
+totalBytesCached = 0;
+
+def ERROR(msg):
+    print(color.BOLD + color.RED + msg + color.END);
+    sys.exit(1);
 
 def parseAddr(addr):
 
@@ -82,6 +88,10 @@ def recordPageAddr(page_ptr, addr):
 # size and the checksum.
 #
 def process_line(line, fileFilter, generic):
+
+    global bytesCached;
+    global totalBytesCached;
+    global maxBytesCached;
 
     i = 0;
     parent_addr = "0";
@@ -137,6 +147,20 @@ def process_line(line, fileFilter, generic):
         elif (fields[i] == "parent_page"):
             parent_addr = getParentAddr(fields[i+1].strip());
 
+    # Update the total and max bytes cached.
+    if (op_type == op.CACHE_ACCESS):
+        if (int(offset) not in bytesCached):
+            bytesCached[int(offset)] = int(size);
+            totalBytesCached += int(size);
+            if (totalBytesCached > maxBytesCached):
+                maxBytesCached = totalBytesCached;
+    elif (op_type == op.EVICT):
+        if (int(offset) not in bytesCached):
+            ERROR(f"evicted {offset} not in cache");
+        else:
+            totalBytesCached -= bytesCached[int(offset)];
+            del bytesCached[int(offset)];
+
     # For a generic cache simulator, we only care about access operations and only the
     # first three fields
     #
@@ -161,6 +185,8 @@ def parse_file(fname, fileFilter, generic):
         process_line(line, fileFilter, generic);
 
 def main():
+    global maxBytesCached;
+    global totalBytesCached;
 
     parser = argparse.ArgumentParser(description=
                                      "Convert the WiredTiger cache trace to CSV for libcachesim.",
@@ -181,6 +207,7 @@ def main():
     for f in args.files:
         parse_file(f, args.fileFilter, args.generic);
 
+    print(f"Max bytes cached {maxBytesCached}", file=sys.stderr)
 
 if __name__ == '__main__':
     main()
