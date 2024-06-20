@@ -3,6 +3,7 @@
 import argparse
 import os
 import os.path
+import pickle
 import re
 import sys
 import traceback
@@ -45,10 +46,50 @@ def ERROR(msg):
 	print(color.BOLD + color.RED + msg + color.END);
 	sys.exit(1);
 
+def BOLD(msg):
+	print(color.BOLD + msg + color.END);
+
 def dumpCachedObjects(cachedObjects):
 
 	for key, value in cachedObjects.items():
 		value.print();
+
+def analyze(wtDictFile, otherDictFile):
+
+	global WTcachedObjects;
+	global otherCachedObjects;
+
+	wtEvictedNonLeaf = 0;
+	otherEvictedNonLeaf = 0;
+	wtTotalEvictions = 0;
+	otherTotalEvictions = 0;
+
+	with open(wtDictFile, 'rb') as f:
+		WTcachedObjects = pickle.load(f);
+	with open(otherDictFile, 'rb') as f:
+		otherCachedObjects = pickle.load(f);
+
+	#dumpCachedObjects(WTcachedObjects);
+	#dumpCachedObjects(otherCachedObjects);
+
+	# How many non-leaf pages were evicted?
+	for key, obj in WTcachedObjects.items():
+		wtTotalEvictions += obj.numTimesEvicted;
+		if (obj.numTimesEvicted != 0 and obj.type == "0"):
+			wtEvictedNonLeaf += 1;
+	BOLD(f"WiredTiger evicted {wtEvictedNonLeaf} internal pages "
+		 f"in {wtTotalEvictions} evictions.\n");
+
+	for key, obj in otherCachedObjects.items():
+		WTObj = WTcachedObjects[key];
+		if (WTObj is None):
+			ERROR(f"Object {key} in Other, but not in WT");
+		otherTotalEvictions += obj.numTimesEvicted;
+		if (obj.numTimesEvicted != 0 and WTObj.type == "0"):
+			 otherEvictedNonLeaf += 1;
+	BOLD(f"Other evicted {otherEvictedNonLeaf} internal pages "
+		 f"in {otherTotalEvictions} evictions.\n");
+
 
 def wtFind_getField(field, string):
 
@@ -78,11 +119,11 @@ def processWiredTigerLine(line):
 			if ("parent_addr" in f):
 				continue;
 			elif ("addr =" in f):
-				objID = wtFind_getField("objID", f);
+				objID = int(wtFind_getField("objID", f));
 			elif ("read_gen =" in f):
-				read_gen = wtFind_getField("read_gen", f);
+				read_gen = int(wtFind_getField("read_gen", f));
 			elif ("type =" in f):
-				objType = wtFind_getField("objType", f);
+				objType = int(wtFind_getField("objType", f));
 
 		objID = int(objID);
 		if (objID in WTcachedObjects):
@@ -123,6 +164,9 @@ def parseWiredTigerTrace(fname):
 			processWiredTigerLine(line);
 
 	dumpCachedObjects(WTcachedObjects);
+
+	with open(fname + '.pkl', 'wb') as outputFile:
+		pickle.dump(WTcachedObjects, outputFile);
 
 #
 # Valid lines can look like this:
@@ -175,6 +219,9 @@ def parseOtherTrace(fname):
 
 	dumpCachedObjects(otherCachedObjects);
 
+	with open(fname + '.pkl', 'wb') as outputFile:
+		pickle.dump(otherCachedObjects, outputFile);
+
 def main():
 
 	parser = argparse.ArgumentParser(
@@ -184,16 +231,30 @@ def main():
 	parser.add_argument('-o', '--other', dest='otherTrace', type=str,
 						help='Simulator output file for the other algorithm');
 
+	parser.add_argument('-a', '--analysis', dest='analysis', action='store_true',
+						default = False,
+						help='Only perform analysis on existing dumps of dictionaries.'
+						'If this option is present the -w and -o options will be used to '
+						'supply the names of the serialized dictionary files.');
+
 	args = parser.parse_args();
 
 	if (args.wtTrace is None and args.otherTrace is None):
 		parser.print_help();
 		sys.exit(1);
 
-	if (args.wtTrace is not None):
-		parseWiredTigerTrace(args.wtTrace);
-	if (args.otherTrace is not None):
-		parseOtherTrace(args.otherTrace);
+	if (args.analysis):
+		if (args.wtTrace is None or args.otherTrace is None):
+			ERROR("-a option requires serialized dictionaries of traces used for comparison");
+		elif (not args.wtTrace.endswith("pkl") or not args.otherTrace.endswith("pkl")):
+			ERROR("The supplied files must be serialized  dictionary files with .pkl extenion");
+		else:
+			analyze(args.wtTrace, args.otherTrace);
+	else:
+		if (args.wtTrace is not None):
+			parseWiredTigerTrace(args.wtTrace);
+		if (args.otherTrace is not None):
+			parseOtherTrace(args.otherTrace);
 
 if __name__ == '__main__':
 	main()
