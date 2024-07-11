@@ -32,23 +32,46 @@ def ERROR(msg):
     print(color.BOLD + color.RED + msg + color.END);
     sys.exit(1);
 
-def process_cachesim_trace():
+
+#
+# The lines in the trace file look like this:
+# 1720042798022668,13840396288,4096,0,0,13840461824,0
+#
+def process_cachesim_trace(fname):
 
     blocksCached = {};
     maxBytesCached = 0;
     totalBytesCached = 0;
+    totalEvictions = 0;
 
     address = 0;
+    readgen = 0;
     size = 0;
     opr = 0;
 
-    for line in sys.stdin:
+    try:
+        f = open(fname);
+    except:
+        print(color.BOLD + color.RED + "Could not open " + fname + color.END);
+        sys.exit(1);
+
+    fname_parts = fname.split(".");
+    readgenFname = fname_parts[0] + ".wt-native-readgens";
+
+    try:
+        readgenFile = open(readgenFname, "w");
+    except:
+        print(color.BOLD + color.RED + "Could not open " + readgenFname + color.END);
+        sys.exit(1);
+
+    for line in f.readlines():
         fields = line.strip().split(',')
         if len(fields) < 2:  # Ensure there are at least two fields
-            ERROR("Fewer than two fields");
+            ERROR("Fewer than two fields in line: \n" + line);
 
         address = int(fields[1]);
         size = int(fields[2]);
+        readgen = int(fields[4]); 
         opr = int(fields[-1]);
 
         if (opr == op.CACHE_ACCESS):
@@ -60,13 +83,29 @@ def process_cachesim_trace():
                 maxBytesCached = totalBytesCached;
         elif (opr == op.EVICT):
             totalBytesCached -= blocksCached[address];
+            totalEvictions += 1;
             del blocksCached[address];
+            readgenFile.write(f"{readgen}\n");
 
     print(f"Max bytes cached {maxBytesCached}");
+    print(f"Total evictions {totalEvictions}");
 
 def main():
 
-    process_cachesim_trace();
+    parser = argparse.ArgumentParser(description=
+                                     "Compute stats of the cachesim trace",
+                                     formatter_class=RawTextHelpFormatter);
+    parser.add_argument('files', type=str, nargs='*',
+                        help='WiredTiger libcachesim trace file.');
+
+    args = parser.parse_args();
+
+    if (len(args.files) == 0):
+        parser.print_help();
+        sys.exit(1);
+
+    for f in args.files:
+        process_cachesim_trace(f);
 
 if __name__ == '__main__':
     main()

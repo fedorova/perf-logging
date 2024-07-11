@@ -88,74 +88,73 @@ def recordPageAddr(page_ptr, addr):
 # size and the checksum.
 #
 def process_line(line, fileFilter, generic):
+	global bytesCached;
+	global totalBytesCached;
+	global maxBytesCached;
 
-    global bytesCached;
-    global totalBytesCached;
-    global maxBytesCached;
-
-    i = 0;
-    parent_addr = "0";
-    parent_page = "0";
-    read_gen = "0";
-    type = "2";
-    op_type = op.CACHE_ACCESS;
+	i = 0;
+	parent_addr = "0";
+	parent_page = "0";
+	read_gen = "0";
+	type = "2";
+	op_type = op.CACHE_ACCESS;
 
     # Split the line using space as the delimiter.
-    fields = line.split(" ");
+	fields = line.split(" ");
 
     # Special cases to skip debug messages we don't need.
-    if ("WT_VERB_CACHE_TRACE" not in line):
-        return;
+	if ("WT_VERB_CACHE_TRACE" not in line):
+		return;
 
-    if ("evict-queue" in line):
-        return;
+	if ("evict-queue" in line):
+		return;
 
-    for i in range(0, len(fields)):
-        if (fields[i].startswith("file:")):
-            fileName = fields[i].split(":")[1].strip(",");
-            if (fileName != fileFilter):
-                return;
-            break;
+	for i in range(0, len(fields)):
+		if (fields[i].startswith("file:")):
+			fileName = fields[i].split(":")[1].strip(",");
+			if (fileName != fileFilter):
+				return;
+			break;
     #
     # This matches various characters between square brackets
     # and puts all the results in a list.
     #
-    res = re.findall(r"\[([A-Za-z0-9_\-:, ]+)\]", line);
+	res = re.findall(r"\[([A-Za-z0-9_\-:, ]+)\]", line);
 
     # Discard unwanted debug messages
-    if (res[2] != "WT_VERB_CACHE_TRACE"):
-        return;
+	if (res[2] != "WT_VERB_CACHE_TRACE"):
+		return;
 
     # The time consists of seconds and microseconds. Convert to microseconds.
-    time = parseTime(res[0]);
-    offset, size = parseAddr(res[4]);
+	time = parseTime(res[0]);
+	offset, size = parseAddr(res[4]);
 
     # Find the other interesting fields.
-    for i in range(i, len(fields)):
-        if (fields[i].startswith("cache-") or fields[i].startswith("init-root")):
-            recordPageAddr(fields[i+1], offset);
-            if (fields[i] == "cache-hit" and "evict pass" in line):
-                op_type = op.EVICT_LOOK;
-        elif (fields[i] == "evict-add"):
-            op_type = op.EVICT_ADD;
-        elif (fields[i] == "evict"):
-            op_type = op.EVICT;
-        elif (fields[i] == "type"):
-            type = parseType(fields[i+1]);
-        elif (fields[i] == "read_gen"):
-            read_gen = fields[i+1];
-        elif (fields[i] == "parent_page"):
-            parent_addr = getParentAddr(fields[i+1].strip());
+	for i in range(i, len(fields)):
+		if (fields[i].startswith("cache-") or fields[i].startswith("init-root")):
+			recordPageAddr(fields[i+1], offset);
+			if (fields[i] == "cache-hit" and "evict pass" in line):
+				op_type = op.EVICT_LOOK;
+		elif (fields[i] == "evict-add"):
+			op_type = op.EVICT_ADD;
+		elif (fields[i] == "evict"):
+			op_type = op.EVICT;
+		elif (fields[i] == "type"):
+			type = parseType(fields[i+1]);
+		elif (fields[i] == "read_gen"):
+			read_gen = fields[i+1];
+		elif (fields[i] == "parent_page"):
+			parent_addr = getParentAddr(fields[i+1].strip());
 
     # Update the total and max bytes cached.
-    if (op_type == op.CACHE_ACCESS):
-        if (int(offset) not in bytesCached):
-            bytesCached[int(offset)] = int(size);
-            totalBytesCached += int(size);
-            if (totalBytesCached > maxBytesCached):
-                maxBytesCached = totalBytesCached;
-    elif (op_type == op.EVICT):
-        if (int(offset) not in bytesCached):
+	if (op_type == op.CACHE_ACCESS):
+		if (int(offset) not in bytesCached):
+			bytesCached[int(offset)] = int(size);
+			totalBytesCached += int(size);
+			if (totalBytesCached > maxBytesCached):
+				maxBytesCached = totalBytesCached;
+	elif (op_type == op.EVICT):
+		if (int(offset) not in bytesCached):
 			#
 			# As we process the trace we could run into a situation
 			# when the page previously evicted is evicted again.
@@ -165,22 +164,22 @@ def process_line(line, fileFilter, generic):
 			# case another thread might pick up the same page and try to
 			# evict it.
 			#
-            print(f"evicted {offset} not in cache", file=sys.stderr);
+			print(f"evicted {offset} not in cache", file=sys.stderr);
 			return;
-        else:
-            totalBytesCached -= bytesCached[int(offset)];
-            del bytesCached[int(offset)];
+		else:
+			totalBytesCached -= bytesCached[int(offset)];
+			del bytesCached[int(offset)];
 
     # For a generic cache simulator, we only care about access operations and only the
     # first three fields
     #
-    if (generic):
-        if (op_type ==  op.CACHE_ACCESS):
-            print(str(time) + "," + str(offset) + "," + str(size));
-        else:
-            return;
-    else:
-        print(str(time) + "," + str(offset) + "," + str(size) + "," + str(type) + ","
+	if (generic):
+		if (op_type ==  op.CACHE_ACCESS):
+			print(str(time) + "," + str(offset) + "," + str(size));
+		else:
+			return;
+	else:
+		print(str(time) + "," + str(offset) + "," + str(size) + "," + str(type) + ","
             + str(read_gen) + "," + str(parent_addr) + "," + str(op_type));
 
 def parse_file(fname, fileFilter, generic):
