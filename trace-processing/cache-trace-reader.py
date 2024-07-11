@@ -156,7 +156,17 @@ def process_line(line, fileFilter, generic):
                 maxBytesCached = totalBytesCached;
     elif (op_type == op.EVICT):
         if (int(offset) not in bytesCached):
-            ERROR(f"evicted {offset} not in cache");
+			#
+			# As we process the trace we could run into a situation
+			# when the page previously evicted is evicted again.
+			# That could be the case, because we trace the page before
+			# the eviction actually occurs (so we can get an accurate
+			# read generation, but the eviction may actually fail. In that
+			# case another thread might pick up the same page and try to
+			# evict it.
+			#
+            print(f"evicted {offset} not in cache", file=sys.stderr);
+			return;
         else:
             totalBytesCached -= bytesCached[int(offset)];
             del bytesCached[int(offset)];
