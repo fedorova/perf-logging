@@ -32,42 +32,60 @@ def ERROR(msg):
 #
 def plot(nativeFname, simulatedFname):
 
-    # Read the y-values
-    with open(nativeFname, 'r') as nativeF:
-        native = [int(line.strip()) for line in nativeF];
-    with open(simulatedFname, 'r') as simulatedF:
-        simulated = [int(line.strip()) for line in simulatedF];
+	plotName = None;
+	x_native = None;
+	x_simulated = None;
 
-    # Generate the x-values (sequential indices) for both datasets
-    x_native = list(range(len(native)));
-    x_simulated = list(range(len(simulated)));
+	# Read the y-values
+	try:
+		nativeF = open(nativeFname, 'r');
+		native = [int(line.strip()) for line in nativeF];
+		x_native = list(range(len(native)));
+	except:
+		print("No native trace provided. File name is " + nativeFname);
+	try:
+		simulatedF = open(simulatedFname, 'r');
+		simulated = [int(line.strip()) for line in simulatedF];
+		x_simulated = list(range(len(simulated)));
+	except:
+		print(f"No simulated trace provided. File name is {simulatedFname}");
 
-    plt.figure(figsize=(10, 6))
+	plt.figure(figsize=(10, 6))
 
-    # Plot the numbers from the first file
-    plt.scatter(x_native, native, c='blue', marker='o', label=nativeFname)
+	if (x_native is not None):
+		print(f"{len(x_native)} native events.");
+		plt.scatter(x_native, native, c='blue', marker='o', label=nativeFname)
+	if (x_simulated is not None):
+		print(f"{len(x_simulated)} simulated events.");
+		plt.scatter(x_simulated, simulated, c='red', marker='x', label=simulatedFname)
 
-    # Plot the numbers from the second file
-    plt.scatter(x_simulated, simulated, c='red', marker='x', label=simulatedFname)
+	# Customize the plot
+	plt.title("Read generations over time for eviction in WiredTiger");
+	plt.xlabel("Eviction event number");
+	plt.ylabel("Read generation of evicted page")
+	plt.grid(True);
+	plt.legend();
 
-    # Customize the plot
-    plt.title("Read generations over time for native and simulated eviction in WiredTiger");
-    plt.xlabel("Eviction event number");
-    plt.ylabel("Read generation of evicted page")
-    plt.grid(True);
-    plt.legend();
+	# Show the plot
+	if (simulatedFname is not None):
+		plotName = simulatedFname.strip().split(".")[0] + "-simulated";
+	if(nativeFname is not None):
+		if (plotName is None):
+			plotName = nativeFname.strip().split(".")[0];
+		plotName = plotName + "-native";
+	else:
+		print("No data provided");
+		return;
 
-    # Show the plot
-    plt.savefig(simulatedFname.strip().split(".")[0] + ".png"); 
-    plt.show();
-    
+	plt.savefig(plotName + ".png");
+	plt.show();
 
 def main():
     parser = argparse.ArgumentParser(description=
                                      "Plot read generations for native and simulated WiredTiger eviction algorithm",
                                      formatter_class=RawTextHelpFormatter);
-    parser.add_argument('-n', '--native', dest='native', type=str, required=True);
-    parser.add_argument('-s', '--simulated', dest='simulated', type=str, required=True);
+    parser.add_argument('-n', '--native', dest='native', type=str);
+    parser.add_argument('-s', '--simulated', dest='simulated', type=str);
 
     args = parser.parse_args();
     plot(args.native, args.simulated);
