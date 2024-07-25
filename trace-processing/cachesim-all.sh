@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 # List of algorithms
-algorithms=("2Q" "ARC" "ARCv0" "Belady" "Cacheus" "Clock" "FIFO" "FIFOMERGE" "FIFO-REINSERTION" "GDSH" "Hyperbolic" "LECAR" "LECARv0" "LIRS" "LRU" "LFU" "LHD" "SIZE" "SLRU" "SLRUv0" "TinyFLU"}
+algorithms=("2Q" "ARC" "ARCv0" "Belady" "Cacheus" "Clock" "FIFO" "FIFOMERGE" "FIFO-REINSERTION" "GDSH" "Hyperbolic" "LECAR" "LECARv0" "LIRS" "LRU" "LFU" "LHD" "SIZE" "SLRU" "SLRUv0" "TinyFLU")
 
 for algorithm in "${algorithms[@]}"
 do
