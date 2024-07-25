@@ -42,7 +42,8 @@ def plot(nativeFname, simulatedFname):
 		native = [int(line.strip()) for line in nativeF];
 		x_native = list(range(len(native)));
 	except:
-		print("No native trace provided. File name is " + nativeFname);
+		print(f"No native trace provided. File name is {nativeFname}");
+
 	try:
 		simulatedF = open(simulatedFname, 'r');
 		simulated = [int(line.strip()) for line in simulatedF];
@@ -73,7 +74,7 @@ def plot(nativeFname, simulatedFname):
 		if (plotName is None):
 			plotName = nativeFname.strip().split(".")[0];
 		plotName = plotName + "-native";
-	else:
+	if (simulatedFname is None and nativeFname is None):
 		print("No data provided");
 		return;
 
